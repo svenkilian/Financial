@@ -110,7 +110,7 @@ def list_tables(db, library, show_n_rows=False):
 
 
 def get_constituency_table(load_from_file=False):
-    file_name = 'data_constituents.json'
+    file_name = 'data_constituents.csv'
     # Establish database connection
     if not load_from_file:
         print('Opening DB connection ...')
@@ -124,34 +124,39 @@ def get_constituency_table(load_from_file=False):
 
     else:
         # Load constituency table from file
-        const_data = pd.read_json(os.path.join('data', file_name))
+        const_data = pd.read_csv(os.path.join('data', file_name))
         const_data['gvkey'] = const_data['gvkey'].astype('str')
 
-    # Convert columns to datetime
-    for col in ['from', 'thru']:
-        const_data[col] = pd.to_datetime(const_data[col])
-        const_data[col] = const_data[col].dt.date
+        # Convert columns to datetime
+        for col in ['from', 'thru']:
+            const_data[col] = pd.to_datetime(const_data[col], format='%Y%m%d')
+            const_data[col] = const_data[col].dt.date
 
-    # Set index
-    const_data.set_index(['gvkey'], inplace=True)
-
-
+        # Set index
+        const_data.set_index(['gvkey'], inplace=True)
 
     # Create empty constituency table
-    constituency_table = pd.DataFrame(0, index=pd.date_range('01-01-1950', '01-01-2021', freq='D'),
+    constituency_table = pd.DataFrame(0, index=pd.date_range('1970-01-01', '2021-01-01', freq='D'),
                                       columns=const_data.index.drop_duplicates())
-    # print(const_data)
 
     # JOB: Iterate through all companies ever listed
     for company in constituency_table.columns:
         for row in const_data[const_data.index == company].iterrows():
-            print(row[1])
-            print()
+            if pd.isnull(row[1]['thru']):
+                constituency_table.loc[pd.date_range(start=row[1]['from'], end='2021-01-01'), company] = 1
+            else:
+                constituency_table.loc[pd.date_range(start=row[1]['from'], end=row[1]['thru']), company] = 1
 
-    const_data.to_csv('data/data_constituents.csv')
-    # Export data to json file
-    const_data.reset_index(inplace=True)
-    const_data.to_json(os.path.join('data', file_name))
+    # print(constituency_table.loc['2001-01-01':'2005-08-01'])
+
+    # Save constituency table
+    constituency_table.to_csv(os.path.join('data', 'constituency_table.csv'))
+
+    lookup_table = const_data[~const_data.duplicated()]['co_conm'].to_dict()
+
+    l = [lookup_table.get(key) for key in constituency_table.loc['2019-12-07'].loc[lambda x: x != 0].index.tolist()]
+
+    pretty_print(pd.DataFrame(constituency_table['243774']))
 
     if not load_from_file:
         db.close()
@@ -293,7 +298,7 @@ def main():
 # Main method
 if __name__ == '__main__':
     # main()
-    get_constituency_table(load_from_file=False)
+    get_constituency_table(load_from_file=True)
 
 # -------------------------------
 # Plotting multiple measures for a single security
