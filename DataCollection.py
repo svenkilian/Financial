@@ -272,7 +272,8 @@ def create_constituency_matrix(load_from_file=False, index_id='150095') -> tuple
     return const_data.index.get_level_values('gvkey').drop_duplicates().to_list(), relevant_date_range
 
 
-def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame, period_range: tuple) -> pd.DataFrame:
+def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
+                          period_range: tuple, columns: list) -> pd.DataFrame:
     """
     Generate a time-period sample for a study period
 
@@ -305,7 +306,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     full_data.set_index('datadate', inplace=True)
 
     # Select data from study period
-    print('Retrieving data from %s to %s' % (unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
+    print(
+        'Retrieving data from %s to %s' % (unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
     study_data = full_data.loc[unique_dates[period_range[0]:period_range[1]]]
 
     # Add standardized daily returns
@@ -316,8 +318,13 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 
     study_data['stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
 
-    return study_data
+    if columns is None:
+        columns = study_data.columns
 
+    study_data['above_cs_med'] = study_data['daily_return'].ge(study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
+    study_data['cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
+
+    return study_data
 
 
 def main():
@@ -328,14 +335,20 @@ def main():
     # Load full data
     full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
 
+    data_length = full_data['datadate'].drop_duplicates().size
+    print('Length of the data: %d' % data_length)
+
     start_index = -50
     end_index = -1
     period_range = (start_index, end_index)
 
     study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
-                                              period_range=period_range)
+                                              period_range=period_range, columns=['gvkey', 'iid', 'stand_d_return'])
 
-    print(study_period_data)
+    study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
+
+    for stock in study_period_data.index.unique():
+        print(study_period_data.loc[stock])
 
     sys.exit(0)
 
@@ -474,83 +487,4 @@ def main():
 if __name__ == '__main__':
     main()
     # create_constituency_matrix(load_from_file=True)
-    # download_index_history(index_id='150095', from_file=False, last_n=100)
-
-# -------------------------------
-# Plotting multiple measures for a single security
-# -------------------------------
-
-# # JOB: Melt measures into long form
-# data.reset_index(inplace=True)
-# data = pd.melt(data, id_vars=['datadate', 'conm'], value_vars=['cshtrd', 'prccd', 'cshoc'], var_name='measure')
-#
-# # JOB: Create pivot table
-# data_pivot = data.pivot_table(values='value', index=['datadate', 'measure'], columns=['conm'])
-# # data_pivot.index = pd.to_datetime(data_pivot.index)
-# print(data_pivot)
-#
-# # print(data_pivot.loc[(slice(None), 'cshtrd'), :])
-#
-# plot_data(data_pivot.loc[(slice('2019-01-01', '2019-11-01'), 'cshtrd'), :], columns=data_pivot.columns,
-#           title='Trading Volume')
-# plt.show()
-
-
-# ---------------------------------
-# JOB: Example queries
-# ---------------------------------
-
-# JOB: Get DAX constituents for specific period
-# data = get_data_table(db, sql_query=True,
-#                       query_string="select b.gvkeyx, a.gvkey, a.isin, b.from, b.thru, a.datadate, a.conm, a.cshtrd, a.prccd, a.divd, a.curcdd, a.exchg, a.fic, a.gind, a.iid, a.secstat, a.trfd "
-#                                    "from comp.g_secd a join comp.g_idxcst_his b on a.gvkey = b.gvkey "
-#                                    "where b.gvkeyx = '150007' and b.thru is null and a.isin is not null and a.datadate between '2017-01-01' and '2019-11-26' "
-#                                    "order by a.datadate asc",
-#                       index_col=['datadate', 'gvkey'], table_info=2)
-
-# JOB: Get select current DAX members and return various key figures
-# company_codes = ['015575', '015576', '015677']
-# parameters = {'company_codes': tuple(company_codes)}
-# data = get_data_table(db, sql_query=True,
-#                       query_string="select b.gvkeyx, a.gvkey, a.isin, b.from, b.thru, a.datadate, a.conm, a.cshtrd, a.prccd, a.divd, a.cshoc "
-#                                    "from comp.g_secd a join comp.g_idxcst_his b on a.gvkey = b.gvkey "
-#                                    "where b.gvkeyx = '150007' and a.gvkey in %(company_codes)s and b.thru IS NULL and a.cshoc IS NOT NULL and a.isin IS NOT NULL and a.datadate between '2010-11-01' and '2019-11-01' "
-#                                    "order by a.datadate asc",
-#                       index_col=['datadate', 'gvkey'], params=parameters, table_info=1)
-
-# JOB: [Non-SQL] Get Dow Jones daily index data
-# dow_data = get_data_table(db=db, library='djones', table='djdaily', columns=['date', 'dji'], obs=-1,
-#                           index_col='date', sql_query=False, recent=True, n_recent=10)
-
-# JOB: [SQL] Get Dow Jones daily index data
-# dow_data_sql = get_data_table(db, sql_query=True, query_string='select date,dji from djones.djdaily LIMIT 10;',
-#                               date_cols='date', recent=True, n_recent=100)
-
-# data = get_data_table(db, sql_query=True,
-#                       query_string="select cusip, permno, date, bidlo, askhi "
-#                                    "from crsp.dsf "
-#                                    "where permno in (14593, 90319, 12490, 17778) and "
-#                                    "date between '2010-01-01' and '2013-12-31' and "
-#                                    "askhi > 2000",
-#                       date_cols='date')
-
-
-# JOB: Query data for IBM from joining fundamenal table with monthly data
-# db.raw_sql("select a.gvkey, a.datadate, a.tic, a.conm, a.at, a.lt, b.prccm, b.cshoq "
-#            "from comp.funda a join comp.secm b on a.gvkey = b.gvkey and a.datadate = b.datadate "
-#            "where a.tic = 'IBM' and a.datafmt = 'STD' and a.consol = 'C' and a.indfmt = 'INDL'")
-
-
-# JOB: Query company data in certain time frame
-# values = ','.join(['datadate', 'conm', 'gvkey', 'prcod', 'prcld', 'prchd'])
-# company_keys = ('001491')
-# # parm = {'values': values, 'company_keys': tuple(company_keys)}
-# data = get_data_table(db, sql_query=True,
-#                       query_string="select %(values)s "
-#                                    "from comp.g_secd "
-#                                    "where datadate between '2019-01-01' and '2019-03-01' "
-#                                    # "and gvkey in %(company_keys)s "
-#                                    "and gvkey = '001491' "
-#                                    "order by datadate "
-#                                    "asc " % {'values': values, 'company_keys': company_keys},
-#                       index_col=['datadate', 'gvkey'], table_info=1)
+    # download_index_history(index_id='150095', from_file=False, last_n=None)
