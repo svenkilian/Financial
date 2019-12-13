@@ -63,6 +63,7 @@ def plot_data(data: pd.DataFrame, columns=None, index_name=None, title='', col_m
         data = data.reset_index().set_index(index_name)
         if len(list(index_name)) == 1:
             data.index = pd.to_datetime(data.index)
+            print(data.index)
 
     # Plot columns
     ax.plot(data.index, data[columns], '-', linewidth=1.2, markersize=2)

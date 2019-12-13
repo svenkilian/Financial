@@ -3,6 +3,7 @@ This module implements methods to collect financial data from Wharton Research S
 """
 
 # Imports
+import json
 import os
 import sys
 import time
@@ -10,6 +11,8 @@ import wrds
 import re
 import pandas as pd
 import pandas_datareader as data_reader
+import datetime
+import numpy as np
 
 from core import data_processor
 from utils import plot_data, pretty_print
@@ -28,8 +31,10 @@ pd.set_option('display.width', 800)
 pd.set_option('display.html.table_schema', False)
 
 
-def get_data_table(db, sql_query=False, query_string='', library=None, table=None, columns=None, obs=-1,
-                   index_col=None, date_cols=None, recent=False, n_recent=100, params=None, table_info=1):
+def get_data_table(db: wrds.Connection, sql_query=False, query_string='', library=None, table=None, columns=None,
+                   obs=-1,
+                   index_col=None, date_cols=None, recent=False, n_recent=100, params=None,
+                   table_info=1) -> pd.DataFrame:
     """
     Get pandas DataFrame containing the queries data from the specified library and table.
 
@@ -109,63 +114,184 @@ def list_tables(db, library, show_n_rows=False):
             print(table)
 
 
-def get_constituency_table(load_from_file=False):
+def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date) -> list:
+    """
+    Return company name list of index constituents for given date
+
+    :param lookup_dict: Dictionary mapping gvkey to company name
+    :param constituency_matrix: Constituency table providing constituency information
+    :param date: Date for which to return constituency list
+
+    :return: List of company names for given date
+    :rtype: list
+    """
+
+    lookup_dict = pd.read_json(os.path.join('data', 'gvkey_name_dict.json'), typ='series').to_dict().get('conm')
+    # print(lookup_dict)
+    # print(len(constituency_matrix.loc[date].loc[lambda x: x == 1]))
+    # print(constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values('gvkey').tolist())
+    constituent_list_names = [lookup_dict.get(key) for key in
+                              constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values(
+                                  'gvkey').tolist()]
+
+    return constituency_matrix.loc[date].loc[lambda x: x == 1].index
+
+
+def download_index_history(index_id: str, from_file=False):
+    """
+    Download complete daily index history
+
+    :return:
+    :rtype:
+    """
+
+    if not from_file:
+        gvkeyx_lookup = pd.read_csv(os.path.join('data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
+        gvkeyx_lookup.index = gvkeyx_lookup.index.astype(str)
+        gvkeyx_lookup = gvkeyx_lookup['index_name'].to_dict()
+
+        # Establish database connection
+        print('Opening DB connection ...')
+        db = wrds.Connection(wrds_username='afecker')
+        print('Done')
+
+        gvkey_list, relevant_date_range = create_constituency_matrix(load_from_file=True)
+        start_date = str(relevant_date_range[0].date())
+        end_date = str(relevant_date_range[-1].date())
+
+        # Specify list of companies and start and end date of query
+        parameters = {'company_codes': tuple(gvkey_list), 'start_date': start_date, 'end_date': end_date}
+
+        print('Querying full index history for index %s ...' % gvkeyx_lookup.get(index_id))
+        start_time = time.time()
+        data = get_data_table(db, sql_query=True,
+                              query_string="select datadate, gvkey, iid, trfd, ajexdi, cshtrd, prccd, divd, conm, curcdd, sedol, exchg "
+                                           "from comp.g_secd "
+                                           "where gvkey in %(company_codes)s and datadate between %(start_date)s and %(end_date)s "
+                                           "order by datadate asc",
+                              index_col=['datadate', 'gvkey', 'iid'], table_info=1, params=parameters)
+
+        end_time = time.time()
+
+        print('Query duration: %g seconds' % (round(end_time - start_time, 2)))
+
+        # JOB: Calculate Return Index Column
+        data['return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
+
+        # JOB: Calculate Daily Return
+        data['daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(lambda x: x.pct_change(periods=1))
+
+        # Save to file
+        data.to_csv(os.path.join('data', 'index_data_constituents.csv'))
+
+    else:
+        data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
+        print(data.index.drop_duplicates)
+        data.set_index('gvkey', inplace=True)
+
+    # JOB: Create company name dictionary and save to file
+    company_name_lookup = data.reset_index()
+    company_name_lookup = company_name_lookup.loc[
+        ~company_name_lookup.duplicated(subset='gvkey', keep='first'), ['gvkey', 'conm']].set_index('gvkey')
+    company_name_lookup.to_json(os.path.join('data', 'gvkey_name_dict.json'))
+
+
+def create_constituency_matrix(load_from_file=False, index_id='150095') -> tuple:
+    """
+    Generate constituency matrix for stock market index components
+
+    :param index_id: Index to create constituency matrix for
+    :param load_from_file: Flag indicating whether to load constituency information from file
+
+    :return: Tuple containing [0] list of historical constituent gvkeys and [1] relevant date range
+    """
+
+    # File name with constituents and corresponding time frames
     file_name = 'data_constituents.csv'
-    # Establish database connection
+    db = None
+    parameters = {'index_id': (index_id,)}
+
+    # JOB: In case constituents have to be downloaded from database
     if not load_from_file:
+        # Establish database connection
         print('Opening DB connection ...')
         db = wrds.Connection(wrds_username='afecker')
         print('Done')
         const_data = get_data_table(db, sql_query=True,
                                     query_string="select * "
                                                  "from comp.g_idxcst_his "
-                                                 "where gvkeyx = '150095' ",
-                                    index_col=['gvkey'], table_info=1)
+                                                 "where gvkeyx in %(index_id)s ",
+                                    index_col=['gvkey', 'iid'], table_info=1, params=parameters)
 
+        # Save to file
+        const_data.to_csv(os.path.join('data', 'data_constituents.csv'))
+
+    # JOB: Load table from local file
     else:
-        # Load constituency table from file
-        const_data = pd.read_csv(os.path.join('data', file_name))
-        const_data['gvkey'] = const_data['gvkey'].astype('str')
+        # Load constituency table from file and transform key to string
+        const_data = pd.read_csv(os.path.join('data', file_name), dtype={'gvkey': str})
+        # const_data['gvkey'] = const_data['gvkey'].astype('str')
 
-        # Convert columns to datetime
+        # Convert date columns to datetime format
         for col in ['from', 'thru']:
-            const_data[col] = pd.to_datetime(const_data[col], format='%Y%m%d')
+            const_data[col] = pd.to_datetime(const_data[col], format='%Y-%m-%d')
             const_data[col] = const_data[col].dt.date
 
-        # Set index
-        const_data.set_index(['gvkey'], inplace=True)
+        # Set gvkey and iid as MultiIndex
+        const_data.set_index(['gvkey', 'iid'], inplace=True)
 
-    # Create empty constituency table
-    constituency_table = pd.DataFrame(0, index=pd.date_range('1970-01-01', '2021-01-01', freq='D'),
-                                      columns=const_data.index.drop_duplicates())
+    # Query relevant date range
+    index_starting_date = const_data['from'].min()
+    relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
 
-    # JOB: Iterate through all companies ever listed
-    for company in constituency_table.columns:
-        for row in const_data[const_data.index == company].iterrows():
+    # Create empty constituency matrix
+    constituency_matrix = pd.DataFrame(0, index=relevant_date_range,
+                                       columns=const_data.index.drop_duplicates())
+
+    # JOB: Iterate through all company stocks ever listed in index and set adjacency to 0 or 1
+    for stock_index in const_data.index:
+        for row in const_data.loc[stock_index].iterrows():
             if pd.isnull(row[1]['thru']):
-                constituency_table.loc[pd.date_range(start=row[1]['from'], end='2021-01-01'), company] = 1
+                constituency_matrix.loc[pd.date_range(start=row[1]['from'], end=datetime.date.today()), stock_index] = 1
             else:
-                constituency_table.loc[pd.date_range(start=row[1]['from'], end=row[1]['thru']), company] = 1
+                constituency_matrix.loc[pd.date_range(start=row[1]['from'], end=row[1]['thru']), stock_index] = 1
 
-    # print(constituency_table.loc['2001-01-01':'2005-08-01'])
-
-    # Save constituency table
-    constituency_table.to_csv(os.path.join('data', 'constituency_table.csv'))
-
-    lookup_table = const_data[~const_data.duplicated()]['co_conm'].to_dict()
-
-    l = [lookup_table.get(key) for key in constituency_table.loc['2019-12-07'].loc[lambda x: x != 0].index.tolist()]
-
-    pretty_print(pd.DataFrame(constituency_table['243774']))
+    # Save constituency table to file
+    constituency_matrix.to_csv(os.path.join('data', 'constituency_matrix.csv'))
 
     if not load_from_file:
         db.close()
         print('DB connection closed.')
 
+    # Return historical constituents as list
+    return const_data.index.get_level_values('gvkey').drop_duplicates().to_list(), relevant_date_range
+
 
 def main():
+    # Load constituency matrix
+    constituency_matrix = pd.read_csv(os.path.join('data', 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+                                      parse_dates=True)
+
+    # Load full data
+    full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
+    full_data['datadate'] = pd.to_datetime(full_data['datadate'], infer_datetime_format=True)
+
+    study_period_end = datetime.date.today() - datetime.timedelta(days=2)
+    # Get list of constituents for specified date
+    constituent_indices = get_index_constituents(constituency_matrix, study_period_end)
+
+    # Select period-end constituents and specified date range
+    selected_data = full_data.set_index(['gvkey', 'iid']).loc[constituent_indices]
+    selected_data = selected_data.set_index('datadate')
+    print(selected_data.index)
+    selected_data = selected_data.loc['2019-12-10':'2019-12-10']
+
+    print(selected_data)
+
+    sys.exit(0)
+
     # JOB: Run settings:
-    download_data = False
+    download_data = True
     pivot_transform = False
     data = None
 
@@ -297,8 +423,9 @@ def main():
 
 # Main method
 if __name__ == '__main__':
-    # main()
-    get_constituency_table(load_from_file=True)
+    main()
+    # create_constituency_matrix(load_from_file=False)
+    # download_index_history(index_id='150095', from_file=False)
 
 # -------------------------------
 # Plotting multiple measures for a single security
