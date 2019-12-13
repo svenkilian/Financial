@@ -137,7 +137,7 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
     return constituency_matrix.loc[date].loc[lambda x: x == 1].index
 
 
-def download_index_history(index_id: str, from_file=False):
+def download_index_history(index_id: str, from_file=False, last_n=None):
     """
     Download complete daily index history
 
@@ -156,13 +156,18 @@ def download_index_history(index_id: str, from_file=False):
         print('Done')
 
         gvkey_list, relevant_date_range = create_constituency_matrix(load_from_file=True)
-        start_date = str(relevant_date_range[0].date())
+        if last_n:
+            start_date = str(relevant_date_range[-1].date() - datetime.timedelta(days=last_n - 1))
+        else:
+            start_date = str(relevant_date_range[0].date())
+
         end_date = str(relevant_date_range[-1].date())
 
         # Specify list of companies and start and end date of query
         parameters = {'company_codes': tuple(gvkey_list), 'start_date': start_date, 'end_date': end_date}
 
-        print('Querying full index history for index %s ...' % gvkeyx_lookup.get(index_id))
+        print('Querying full index history for index %s \n'
+              'between %s and %s ...' % (gvkeyx_lookup.get(index_id), start_date, end_date))
         start_time = time.time()
         data = get_data_table(db, sql_query=True,
                               query_string="select datadate, gvkey, iid, trfd, ajexdi, cshtrd, prccd, divd, conm, curcdd, sedol, exchg "
@@ -179,7 +184,8 @@ def download_index_history(index_id: str, from_file=False):
         data['return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
 
         # JOB: Calculate Daily Return
-        data['daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(lambda x: x.pct_change(periods=1))
+        data['daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+            lambda x: x.pct_change(periods=1))
 
         # Save to file
         data.to_csv(os.path.join('data', 'index_data_constituents.csv'))
@@ -267,6 +273,52 @@ def create_constituency_matrix(load_from_file=False, index_id='150095') -> tuple
     return const_data.index.get_level_values('gvkey').drop_duplicates().to_list(), relevant_date_range
 
 
+def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
+                          period_range: pd.DatetimeIndex) -> pd.DataFrame:
+    """
+    Generate a time-period sample for a study period
+
+    :param period_range: Date range of study period
+    :type period_range: pd.DatetimeIndex
+    :param full_data: Full stock data
+    :type full_data: pd.DataFrame
+    :param constituency_matrix: Constituency matrix
+    :type constituency_matrix: pd.DataFrame
+
+    :return: Study period sample
+    :rtype: pd.DataFrame
+    """
+
+    # Reset index and convert time column to DateTime format
+
+    full_data = full_data.set_index('datadate')
+    full_data.index = pd.to_datetime(full_data.index)
+    full_data = full_data.reset_index()
+
+    # Get list of constituents for specified date
+    constituent_indices = get_index_constituents(constituency_matrix, period_range[-1])
+
+    # Select relevant data
+    study_data = full_data.set_index(['gvkey', 'iid'])
+    study_data = study_data.loc[constituent_indices, :]
+    study_data = study_data.reset_index()
+    study_data = study_data.set_index('datadate')
+
+    study_data = study_data.loc['2019-12-04':'2019-12-04']
+
+    print(study_data.index)
+
+    # Add standardized daily returns
+    mean_daily_return = study_data.loc[period_range[1:], 'daily_return'].mean()
+    std_daily_return = study_data.loc[period_range[1:], 'daily_return'].std()
+    print('Mean daily return: %g' % mean_daily_return)
+    print('Std. daily return: %g' % std_daily_return)
+
+    study_data['stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
+
+    return study_data
+
+
 def main():
     # Load constituency matrix
     constituency_matrix = pd.read_csv(os.path.join('data', 'constituency_matrix.csv'), index_col=0, header=[0, 1],
@@ -274,19 +326,11 @@ def main():
 
     # Load full data
     full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
-    full_data['datadate'] = pd.to_datetime(full_data['datadate'], infer_datetime_format=True)
 
-    study_period_end = datetime.date.today() - datetime.timedelta(days=2)
-    # Get list of constituents for specified date
-    constituent_indices = get_index_constituents(constituency_matrix, study_period_end)
+    period_range = pd.date_range(start='2019-05-14', end='2019-12-04', freq='D')
 
-    # Select period-end constituents and specified date range
-    selected_data = full_data.set_index(['gvkey', 'iid']).loc[constituent_indices]
-    selected_data = selected_data.set_index('datadate')
-    print(selected_data.index)
-    selected_data = selected_data.loc['2019-12-10':'2019-12-10']
+    study_period_data = generate_study_period(constituency_matrix, full_data, period_range=period_range)
 
-    print(selected_data)
 
     sys.exit(0)
 
@@ -370,7 +414,7 @@ def main():
     # Import data file
     print('Loading data from csv file ...')
     data = pd.read_csv(os.path.join('data', 'data.csv'))
-    data['datadate'] = pd.to_datetime(data['datadate'])
+    data['datadate'] = pd.to_datetime(data['datadate'], format='%Y-%m-%d')
 
     # Set Multiindex
     data.set_index(keys=['datadate', 'gvkey'], inplace=True)
@@ -424,8 +468,8 @@ def main():
 # Main method
 if __name__ == '__main__':
     main()
-    # create_constituency_matrix(load_from_file=False)
-    # download_index_history(index_id='150095', from_file=False)
+    # create_constituency_matrix(load_from_file=True)
+    # download_index_history(index_id='150095', from_file=False, last_n=100)
 
 # -------------------------------
 # Plotting multiple measures for a single security
