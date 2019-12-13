@@ -10,7 +10,6 @@ import time
 import wrds
 import re
 import pandas as pd
-import pandas_datareader as data_reader
 import datetime
 import numpy as np
 
