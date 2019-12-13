@@ -272,8 +272,7 @@ def create_constituency_matrix(load_from_file=False, index_id='150095') -> tuple
     return const_data.index.get_level_values('gvkey').drop_duplicates().to_list(), relevant_date_range
 
 
-def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
-                          period_range: pd.DatetimeIndex) -> pd.DataFrame:
+def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame, period_range: tuple) -> pd.DataFrame:
     """
     Generate a time-period sample for a study period
 
@@ -288,34 +287,37 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     :rtype: pd.DataFrame
     """
 
-    # Reset index and convert time column to DateTime format
-
-    full_data = full_data.set_index('datadate')
-    full_data.index = pd.to_datetime(full_data.index)
-    full_data = full_data.reset_index()
+    # Convert date columns to DatetimeIndex
+    full_data['datadate'] = pd.to_datetime(full_data['datadate'])
 
     # Get list of constituents for specified date
-    constituent_indices = get_index_constituents(constituency_matrix, period_range[-1])
+    full_data.set_index('datadate', inplace=True)
+    unique_dates = full_data.index.drop_duplicates()
+    constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]])
+    full_data.reset_index(inplace=True)
+
+    print('Retrieving index constituency for %s' % unique_dates[period_range[1]])
 
     # Select relevant data
-    study_data = full_data.set_index(['gvkey', 'iid'])
-    study_data = study_data.loc[constituent_indices, :]
-    study_data = study_data.reset_index()
-    study_data = study_data.set_index('datadate')
+    full_data = full_data.set_index(['gvkey', 'iid'])
+    full_data = full_data.loc[constituent_indices, :]
+    full_data = full_data.reset_index()
+    full_data.set_index('datadate', inplace=True)
 
-    study_data = study_data.loc['2019-12-04':'2019-12-04']
-
-    print(study_data.index)
+    # Select data from study period
+    print('Retrieving data from %s to %s' % (unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
+    study_data = full_data.loc[unique_dates[period_range[0]:period_range[1]]]
 
     # Add standardized daily returns
-    mean_daily_return = study_data.loc[period_range[1:], 'daily_return'].mean()
-    std_daily_return = study_data.loc[period_range[1:], 'daily_return'].std()
+    mean_daily_return = study_data.loc[unique_dates[period_range[0]:period_range[1]], 'daily_return'].mean()
+    std_daily_return = study_data.loc[unique_dates[period_range[0]:period_range[1]], 'daily_return'].std()
     print('Mean daily return: %g' % mean_daily_return)
     print('Std. daily return: %g' % std_daily_return)
 
     study_data['stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
 
     return study_data
+
 
 
 def main():
@@ -326,10 +328,14 @@ def main():
     # Load full data
     full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
 
-    period_range = pd.date_range(start='2019-05-14', end='2019-12-04', freq='D')
+    start_index = -50
+    end_index = -1
+    period_range = (start_index, end_index)
 
-    study_period_data = generate_study_period(constituency_matrix, full_data, period_range=period_range)
+    study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
+                                              period_range=period_range)
 
+    print(study_period_data)
 
     sys.exit(0)
 
