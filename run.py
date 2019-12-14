@@ -5,6 +5,8 @@ __license__ = "MIT"
 
 import os
 import json
+import sys
+
 import numpy as np
 import time
 import math
@@ -111,5 +113,89 @@ def main(load_latest_model=False):
     print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
 
 
+def test(period_data, full_date_range):
+    configs = json.load(open('config.json', 'r'))
+    if not os.path.exists(configs['model']['save_dir']):
+        os.makedirs(configs['model']['save_dir'])
+
+    unique_indices = period_data.index.unique()
+
+    x_train = None
+    y_train = None
+
+    x_test = None
+    y_test = None
+
+    for id in unique_indices:
+        id_data = period_data.loc[id].set_index('datadate', drop=True).sort_index()
+        # print(id)
+
+        # JOB: Initialize DataLoader
+        data = DataLoader(
+            id_data,
+            configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return'], from_csv=False,
+            seq_len=configs['data']['sequence_length'], full_date_range=full_date_range
+        )
+
+        # print('Length of data for ID %s: %d' % (id, len(id_data)))
+
+        # JOB: Generate training data
+        x, y = data.get_train_data(
+            seq_len=configs['data']['sequence_length'],
+            normalize=False
+        )
+
+        # JOB: Generate test data
+        x_t, y_t = data.get_test_data(
+            seq_len=configs['data']['sequence_length'],
+            normalize=False
+        )
+
+        if x_train is None:
+            x_train = x
+            x_test = x_t
+            y_train = y
+            y_test = y_t
+        else:
+            if len(x) > 0:
+                x_train = np.append(x_train, x, axis=0)
+            if len(x_t) > 0:
+                x_test = np.append(x_test, x_t, axis=0)
+            if len(y) > 0:
+                y_train = np.append(y_train, y, axis=0)
+            if len(y_t) > 0:
+                y_test = np.append(y_test, y_t, axis=0)
+
+    print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
+    print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
+
+    if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
+        raise AssertionError('Data length does not conform.')
+
+    # JOB: Build model
+    model = LSTMModel()
+    model.build_model(configs)
+
+    # JOB: In-memory training
+    history = model.train(
+        x_train,
+        y_train,
+        epochs=configs['training']['epochs'],
+        batch_size=configs['training']['batch_size'],
+        save_dir=configs['model']['save_dir']
+    )
+
+    # # JOB: Make point prediction
+    # predictions = model.predict_point_by_point(x_test)
+
+    # JOB: Plot training and validation metrics
+    utils.plot_train_val(history)
+
+    test_scores = model.model.evaluate(x_test, y_test, verbose=0)
+
+    print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
+
+
 if __name__ == '__main__':
-    main(load_latest_model=True)
+    # main(load_latest_model=True)
+    test()

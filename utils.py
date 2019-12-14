@@ -111,12 +111,12 @@ def pretty_print(df, headers='keys', tablefmt='fancy_grid'):
 
 
 def plot_train_val(history):
-    # Summarize history for MAE
+    # Summarize history for Accuracy
     epoch_axis = range(1, len(history.history['loss']) + 1)
-    plt.plot(epoch_axis, history.history['mean_absolute_error'])
-    plt.plot(epoch_axis, history.history['val_mean_absolute_error'])
-    plt.title('Mean Absolute Error')
-    plt.ylabel('MAE')
+    plt.plot(epoch_axis, history.history['acc'])
+    plt.plot(epoch_axis, history.history['val_acc'])
+    plt.title('Accuracy')
+    plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
     plt.legend(['Training', 'Validation'], loc='upper left')
     plt.show()

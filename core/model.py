@@ -58,6 +58,8 @@ class LSTMModel:
         self.model.compile(loss=configs['model']['loss'], optimizer=configs['model']['optimizer'],
                            metrics=configs['model']['metrics'])
 
+        print()
+
         print('[Model] Model Compiled')
         timer.stop()
 
@@ -70,9 +72,9 @@ class LSTMModel:
         save_fname = os.path.join(save_dir, '%s-e%s-b%s.h5' % (
         dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs), str(batch_size)))
         callbacks = [
-            EarlyStopping(monitor='val_loss', patience=2, restore_best_weights=True),
+            EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
             ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True),
-            TensorBoard(log_dir='./logs', histogram_freq=0, batch_size=32, write_graph=True, write_grads=False,
+            TensorBoard(log_dir='./logs', histogram_freq=1, batch_size=32, write_graph=True, write_grads=False,
                         write_images=False, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None,
                         embeddings_data=None, update_freq='epoch')
         ]

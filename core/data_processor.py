@@ -6,7 +6,7 @@ import pandas as pd
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
 
-    def __init__(self, filename, split, cols, from_csv=False):
+    def __init__(self, filename, split, cols, from_csv=False, seq_len=None, full_date_range=None):
         """
         Constructor for DataLoader class
         :param filename: Filename of csv file or existing DataFrame name
@@ -21,12 +21,20 @@ class DataLoader:
         else:
             dataframe = filename
 
-        i_split = int(len(dataframe) * split)  # Determine split index
-        self.data_train = dataframe.get(cols).values[:i_split]  # Get training array
-        self.data_test = dataframe.get(cols).values[i_split:]  # Get test array
+        i_split = int(len(full_date_range) * split)  # Determine split index
+        split_date = full_date_range[i_split]
+        # print('Split index: %d' % i_split)
+        # print('Split date: %s' % split_date)
+        self.data_train = dataframe.get(cols).loc[:split_date].values  # Get training array
+        self.data_test = dataframe.get(cols).loc[full_date_range[i_split - seq_len]:].values  # Get test array
         self.len_train = len(self.data_train)  # Length of training data
         self.len_test = len(self.data_test)  # Length of test data
         self.len_train_windows = None
+
+        # print('Split index: %s' % i_split)
+        # print('Number of data points: %d' % len(dataframe))
+        # print('Number of training data: %d' % self.len_train)
+        # print('Number of test data: %d' % self.len_test)
 
     def get_train_data(self, seq_len, normalize=False):
         """
@@ -47,7 +55,7 @@ class DataLoader:
             data_x.append(x)
             data_y.append(y)
 
-        print('Training data length: %s' % len(data_x))
+        # print('Training data length: %s' % len(data_x))
 
         return np.array(data_x), np.array(data_y)
 
@@ -64,7 +72,7 @@ class DataLoader:
         """
 
         data_windows = []
-        for i in range(self.len_test - seq_len):
+        for i in range(self.len_test - seq_len + 1):
             data_windows.append(self.data_test[i:i + seq_len])
 
         data_windows = np.array(data_windows).astype(float)
@@ -73,7 +81,8 @@ class DataLoader:
         x = data_windows[:, :-1]
         y = data_windows[:, -1, [0]]
 
-        print('Test data length: %s' % len(x))
+        # print('Test data length: %s' % len(x))
+        # print()
 
         return x, y
 
