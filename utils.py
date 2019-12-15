@@ -4,13 +4,13 @@ This utilities module implements helper functions for displaying data frames and
 
 import matplotlib.pyplot as plt
 import matplotlib
+from matplotlib.ticker import MaxNLocator
 from tabulate import tabulate
 import matplotlib.dates as mdates
 import pandas as pd
 from matplotlib import ticker
 from pandas.plotting import register_matplotlib_converters
 
-import numpy as np
 
 # Update matplotlib setting
 plt.rcParams.update({'legend.fontsize': 8,
@@ -113,19 +113,24 @@ def pretty_print(df, headers='keys', tablefmt='fancy_grid'):
 def plot_train_val(history):
     # Summarize history for Accuracy
     epoch_axis = range(1, len(history.history['loss']) + 1)
-    plt.plot(epoch_axis, history.history['acc'])
-    plt.plot(epoch_axis, history.history['val_acc'])
+    plt.plot(epoch_axis, history.history['accuracy'])
+    plt.plot(epoch_axis, history.history['val_accuracy'])
     plt.title('Accuracy')
     plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
+    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.legend(['Training', 'Validation'], loc='upper left')
     plt.show()
 
     # Summarize history for loss
     plt.plot(epoch_axis, history.history['loss'])
     plt.plot(epoch_axis, history.history['val_loss'])
-    plt.title('model loss')
-    plt.ylabel('loss')
+    plt.title('Model Loss')
+    plt.ylabel('Loss')
     plt.xlabel('Epoch')
+    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.legend(['Training', 'Validation'], loc='upper left')
     plt.show()
+
+
+

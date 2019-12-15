@@ -13,9 +13,6 @@ import pandas as pd
 import datetime
 import numpy as np
 
-from core import data_processor
-from run import test
-from utils import plot_data, pretty_print
 
 # Configurations for displaying DataFrames
 pd.set_option('precision', 3)
@@ -322,44 +319,15 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     if columns is None:
         columns = study_data.columns
 
-    study_data['above_cs_med'] = study_data['daily_return'].ge(
+    study_data['above_cs_med'] = study_data['daily_return'].gt(
         study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
     study_data['cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
+
 
     return study_data
 
 
 def main():
-    # Load constituency matrix
-    constituency_matrix = pd.read_csv(os.path.join('data', 'constituency_matrix.csv'), index_col=0, header=[0, 1],
-                                      parse_dates=True)
-
-    # Load full data
-    full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
-
-    data_length = full_data['datadate'].drop_duplicates().size
-    print('Length of the data: %d' % data_length)
-
-    start_index = -1000
-    end_index = -1
-    period_range = (start_index, end_index)
-
-    study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
-                                              period_range=period_range, columns=['gvkey', 'iid', 'stand_d_return'])
-
-    full_date_range = study_period_data.index.unique()
-
-    study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
-
-    data = study_period_data[['datadate', 'above_cs_med', 'stand_d_return']]
-
-    test(data, full_date_range)
-
-    # for date in study_period_data.index.unique():
-    #     print(study_period_data.loc[date])
-
-    sys.exit(0)
-
     # JOB: Run settings:
     download_data = True
     pivot_transform = False
@@ -493,6 +461,7 @@ def main():
 
 # Main method
 if __name__ == '__main__':
-    main()
+    pass
+    # main()
     # create_constituency_matrix(load_from_file=False)
     # download_index_history(index_id='150095', from_file=False, last_n=None)

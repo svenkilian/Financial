@@ -78,7 +78,7 @@ class DataLoader:
         data_windows = np.array(data_windows).astype(float)
         data_windows = self.normalize_windows(data_windows, single_window=False) if normalize else data_windows
 
-        x = data_windows[:, :-1]
+        x = data_windows[:, :-1, 1:]
         y = data_windows[:, -1, [0]]
 
         # print('Test data length: %s' % len(x))
@@ -122,7 +122,7 @@ class DataLoader:
 
         window = self.data_train[i:i + seq_len]
         window = self.normalize_windows(window, single_window=True)[0] if normalize else window
-        x = window[:-1]
+        x = window[:-1, 1:]
         y = window[-1, [0]]
 
         return x, y

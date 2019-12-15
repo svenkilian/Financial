@@ -3,10 +3,12 @@ import math
 import numpy as np
 import datetime as dt
 from numpy import newaxis
+from tensorflow.keras import optimizers
+
 from core.utils import Timer
-from keras.layers import Dense, Activation, Dropout, LSTM
-from keras.models import Sequential, load_model
-from keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
+from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 
 
 class LSTMModel:
@@ -51,15 +53,20 @@ class LSTMModel:
             if layer['type'] == 'dense':
                 self.model.add(Dense(neurons, activation=activation))
             if layer['type'] == 'lstm':
-                self.model.add(LSTM(neurons, input_shape=(input_timesteps, input_dim), dropout=dropout, return_sequences=return_seq))
+                self.model.add(LSTM(neurons, input_shape=(input_timesteps, input_dim), dropout=dropout,
+                                    return_sequences=return_seq))
             if layer['type'] == 'dropout':
                 self.model.add(Dropout(dropout_rate))
 
-        self.model.compile(loss=configs['model']['loss'], optimizer=configs['model']['optimizer'],
+        self.model.compile(loss=configs['model']['loss'],
+                           optimizer=get_optimizer(configs['model']['optimizer'], parameters=
+                           configs['model']['optimizer_params']),
                            metrics=configs['model']['metrics'])
 
-        print()
+        print(self.model.optimizer.get_config())
 
+        self.model.summary()
+        print()
         print('[Model] Model Compiled')
         timer.stop()
 
@@ -70,13 +77,13 @@ class LSTMModel:
         print('[Model] %s epochs, %s batch size' % (epochs, batch_size))
 
         save_fname = os.path.join(save_dir, '%s-e%s-b%s.h5' % (
-        dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs), str(batch_size)))
+            dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs), str(batch_size)))
         callbacks = [
             EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True),
             ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True),
-            TensorBoard(log_dir='./logs', histogram_freq=1, batch_size=32, write_graph=True, write_grads=False,
-                        write_images=False, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None,
-                        embeddings_data=None, update_freq='epoch')
+            # TensorBoard(log_dir=os.path.join('./logs'), histogram_freq=1, batch_size=32, write_graph=True, write_grads=False,
+            #             write_images=False, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None,
+            #             embeddings_data=None, update_freq='epoch')
         ]
         history = self.model.fit(
             x,
@@ -166,3 +173,15 @@ class LSTMModel:
             curr_frame = curr_frame[1:]
             curr_frame = np.insert(curr_frame, [window_size - 2], predicted[-1], axis=0)
         return predicted
+
+
+def get_optimizer(optimizer_name, parameters=None):
+    try:
+        optimizer = optimizers.get(optimizer_name).from_config(parameters)
+
+    except ValueError:
+        print('Specified optimizer name is unknown.')
+        print('Resorting to RMSprop as default.')
+        optimizer = optimizers.RMSprop()
+
+    return optimizer

@@ -1,6 +1,6 @@
-__author__ = "Jakob Aungiers"
-__copyright__ = "Jakob Aungiers 2018"
-__version__ = "2.0.0"
+__author__ = "Sven Köpke"
+__copyright__ = "Sven Köpke 2019"
+__version__ = "0.0.1"
 __license__ = "MIT"
 
 import os
@@ -8,13 +8,12 @@ import json
 import sys
 
 import numpy as np
-import time
-import math
 import pandas as pd
 import matplotlib.pyplot as plt
+
+from DataCollection import generate_study_period
 from core.data_processor import DataLoader
 from core.model import LSTMModel
-from keras import metrics
 import utils
 
 
@@ -113,22 +112,58 @@ def main(load_latest_model=False):
     print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
 
 
-def test(period_data, full_date_range):
+def test():
+    """
+    Run data preparation and model training
+
+    :return:
+    :rtype:
+    """
+
+    # JOB: Load configurations
     configs = json.load(open('config.json', 'r'))
     if not os.path.exists(configs['model']['save_dir']):
         os.makedirs(configs['model']['save_dir'])
 
-    unique_indices = period_data.index.unique()
+    # Load constituency matrix
+    constituency_matrix = pd.read_csv(os.path.join('data', 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+                                      parse_dates=True)
 
+    # Load full data
+    full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
+
+    data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
+    print('Length of the data: %d' % data_length)
+
+    # JOB: Specify study period interval
+    start_index = -1000
+    end_index = -1
+    period_range = (start_index, end_index)
+
+    # Get study period data
+    study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
+                                              period_range=period_range, columns=['gvkey', 'iid', 'stand_d_return'])
+
+    # Get all dates in study period
+    full_date_range = study_period_data.index.unique()
+
+    # Set MultiIndex to stock identifier and select relevant columns
+    study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])[
+        ['datadate', 'above_cs_med', 'stand_d_return']]
+
+    # Get unique stock indices in study period
+    unique_indices = study_period_data.index.unique()
+
+    # Instantiate training and test data
     x_train = None
     y_train = None
-
     x_test = None
     y_test = None
 
-    for id in unique_indices:
-        id_data = period_data.loc[id].set_index('datadate', drop=True).sort_index()
-        # print(id)
+    # JOB: Iterate through individual stocks and generate training and test data
+    for stock_id in unique_indices:
+        id_data = study_period_data.loc[stock_id].set_index('datadate', drop=True).sort_index()
+        # print(stock_id)
 
         # JOB: Initialize DataLoader
         data = DataLoader(
@@ -137,7 +172,7 @@ def test(period_data, full_date_range):
             seq_len=configs['data']['sequence_length'], full_date_range=full_date_range
         )
 
-        # print('Length of data for ID %s: %d' % (id, len(id_data)))
+        # print('Length of data for ID %s: %d' % (stock_id, len(id_data)))
 
         # JOB: Generate training data
         x, y = data.get_train_data(
@@ -151,6 +186,7 @@ def test(period_data, full_date_range):
             normalize=False
         )
 
+        # In case training set is empty, set to first batch, otherwise append data
         if x_train is None:
             x_train = x
             x_test = x_t
@@ -159,11 +195,9 @@ def test(period_data, full_date_range):
         else:
             if len(x) > 0:
                 x_train = np.append(x_train, x, axis=0)
+                y_train = np.append(y_train, y, axis=0)
             if len(x_t) > 0:
                 x_test = np.append(x_test, x_t, axis=0)
-            if len(y) > 0:
-                y_train = np.append(y_train, y, axis=0)
-            if len(y_t) > 0:
                 y_test = np.append(y_test, y_t, axis=0)
 
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
@@ -171,6 +205,9 @@ def test(period_data, full_date_range):
 
     if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
         raise AssertionError('Data length does not conform.')
+
+    print('Average target label (training): %g' % np.mean(y_train))
+    print('Average target label (test): %g' % np.mean(y_test))
 
     # JOB: Build model
     model = LSTMModel()
@@ -186,12 +223,14 @@ def test(period_data, full_date_range):
     )
 
     # # JOB: Make point prediction
-    # predictions = model.predict_point_by_point(x_test)
+    predictions = model.predict_point_by_point(x_test)
+
+    print(predictions[:10])
 
     # JOB: Plot training and validation metrics
     utils.plot_train_val(history)
 
-    test_scores = model.model.evaluate(x_test, y_test, verbose=0)
+    test_scores = model.model.evaluate(x_test, y_test, verbose=1)
 
     print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
 
