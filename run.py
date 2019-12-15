@@ -149,7 +149,7 @@ def test():
 
     # Set MultiIndex to stock identifier and select relevant columns
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])[
-        ['datadate', 'above_cs_med', 'stand_d_return']]
+        ['datadate', 'above_cs_med', 'stand_d_return', 'cshtrd']]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
@@ -168,7 +168,7 @@ def test():
         # JOB: Initialize DataLoader
         data = DataLoader(
             id_data,
-            configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return'], from_csv=False,
+            configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return', 'cshtrd'], from_csv=False,
             seq_len=configs['data']['sequence_length'], full_date_range=full_date_range
         )
 

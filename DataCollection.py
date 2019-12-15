@@ -13,7 +13,6 @@ import pandas as pd
 import datetime
 import numpy as np
 
-
 # Configurations for displaying DataFrames
 pd.set_option('precision', 3)
 pd.set_option('display.max_rows', 2000)
@@ -314,6 +313,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     print('Mean daily return: %g' % mean_daily_return)
     print('Std. daily return: %g' % std_daily_return)
 
+    study_data['cshtrd'] = study_data['cshtrd'].fillna(value=0)
+
     study_data['stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
 
     if columns is None:
@@ -322,7 +323,6 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     study_data['above_cs_med'] = study_data['daily_return'].gt(
         study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
     study_data['cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
-
 
     return study_data
 

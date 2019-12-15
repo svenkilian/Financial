@@ -10,23 +10,29 @@
 		"normalize": true
 	},
 	"training": {
-		"epochs": 20,
-		"batch_size": 1
+		"epochs": 10,
+		"batch_size": 32
 	},
 	"model": {
 		"loss": "binary_crossentropy",
-		"optimizer": "adam",
+		"optimizer": "rmsprop",
 		"optimizer_params": {
-			"learning_rate": 0.0005
+
 		},
 		"metrics": ["accuracy"],
 		"save_dir": "saved_models",
 		"layers": [
 			{
 				"type": "lstm",
-				"neurons": 25,
+				"neurons": 50,
 				"input_timesteps": 240,
-				"input_dim": 1,
+				"input_dim": 2,
+				"dropout": 0.1,
+				"return_seq": true
+			},
+			{
+				"type": "lstm",
+				"neurons": 50,
 				"dropout": 0.1,
 				"return_seq": false
 			},
