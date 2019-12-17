@@ -5,6 +5,7 @@ __license__ = "MIT"
 
 import os
 import json
+import string
 import sys
 
 import numpy as np
@@ -38,7 +39,7 @@ def plot_results_multiple(predicted_data, true_data, prediction_len):
     plt.show()
 
 
-def main(load_latest_model=False):
+def main_old(load_latest_model=False):
     configs = json.load(open('config.json', 'r'))
     if not os.path.exists(configs['model']['save_dir']):
         os.makedirs(configs['model']['save_dir'])
@@ -112,7 +113,7 @@ def main(load_latest_model=False):
     print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
 
 
-def test():
+def main(index_id='150095', force_download=False, data_only=False):
     """
     Run data preparation and model training
 
@@ -120,23 +121,47 @@ def test():
     :rtype:
     """
 
+    gvkeyx_lookup_dict = json.load(open(os.path.join('data', 'gvkeyx_name_dict.json'), 'r'))
+    index_name = gvkeyx_lookup_dict.get(index_id)
+    folder_path = os.path.join('data', index_name.lower().replace(' ', '_'))
+
+    # Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
+
+    if os.path.exists(folder_path):
+        if not force_download:
+            load_from_file = True
+            print('Loading data from folder: %s' % folder_path)
+        else:
+            load_from_file = False
+            print('Downloading data into existing folder: %s' % folder_path)
+    else:
+        print('Creating folder for index data: %s' % folder_path)
+        os.mkdir(folder_path)
+        load_from_file = False
+
     # JOB: Load configurations
     configs = json.load(open('config.json', 'r'))
+
+    # Check if saved model folder exists and create one if not
     if not os.path.exists(configs['model']['save_dir']):
         os.makedirs(configs['model']['save_dir'])
 
-    create_constituency_matrix(load_from_file=True, index_id='150940')
+    create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, folder_path=folder_path)
 
     # Load constituency matrix
-    constituency_matrix = pd.read_csv(os.path.join('data', 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+    constituency_matrix = pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
                                       parse_dates=True)
 
     # Load full data
-    full_data = retrieve_index_history(index_id='150940', from_file=True, last_n=None)
+    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=None,
+                                       folder_path=folder_path, generate_dict=True)
     # full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
 
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
-    print('Length of the data: %d' % data_length)
+
+    if data_only:
+        print('Finished downloading data for %s' % index_name)
+        return None
 
     # JOB: Specify study period interval
     start_index = -3000
@@ -244,4 +269,7 @@ def test():
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    test()
+    index_list = ['150927']
+
+    for index_id in index_list:
+        main(index_id=index_id, force_download=True, data_only=True)

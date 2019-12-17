@@ -9,6 +9,7 @@ import sys
 import time
 import wrds
 import re
+import math
 import pandas as pd
 import datetime
 import numpy as np
@@ -133,7 +134,8 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
     return constituency_matrix.loc[date].loc[lambda x: x == 1].index
 
 
-def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = None) -> pd.DataFrame:
+def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = None,
+                           folder_path: str = '', generate_dict=False) -> pd.DataFrame:
     """
     Download complete daily index history
 
@@ -153,7 +155,8 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
 
         # Retrieve list of all stocks (gvkeys) for specified index including full date range of historic index data
         gvkey_list, relevant_date_range = get_all_constituents(
-            constituency_matrix=pd.read_csv(os.path.join('data', 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+            constituency_matrix=pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0,
+                                            header=[0, 1],
                                             parse_dates=True))
 
         # Set start and end date
@@ -193,18 +196,23 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         data = data.reset_index()
 
         # Save to file
-        data.to_csv(os.path.join('data', 'index_data_constituents.csv'))
+        data.to_csv(os.path.join(folder_path, 'index_data_constituents.csv'))
 
     else:
-        data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
+        data = pd.read_csv(os.path.join(folder_path, 'index_data_constituents.csv'), dtype={'gvkey': str})
+
+    if generate_dict:
+        generate_company_lookup_dict(folder_path=folder_path, data=data)
 
     return data
 
 
-def create_constituency_matrix(load_from_file=False, index_id='150095') -> None:
+def create_constituency_matrix(load_from_file=False, index_id='150095', folder_path: str = None) -> None:
     """
     Generate constituency matrix for stock market index components
 
+    :param folder_path:
+    :type folder_path:
     :param index_id: Index to create constituency matrix for
     :param load_from_file: Flag indicating whether to load constituency information from file
 
@@ -213,6 +221,11 @@ def create_constituency_matrix(load_from_file=False, index_id='150095') -> None:
 
     # File name with constituents and corresponding time frames
     file_name = 'data_constituents.csv'
+    if folder_path:
+        folder = folder_path
+    else:
+        folder = ''
+
     db = None
     parameters = {'index_id': (index_id,)}
 
@@ -229,24 +242,31 @@ def create_constituency_matrix(load_from_file=False, index_id='150095') -> None:
                                     index_col=['gvkey', 'iid'], table_info=1, params=parameters)
 
         # Save to file
-        const_data.to_csv(os.path.join('data', 'data_constituents.csv'))
+        const_data.to_csv(os.path.join(folder, 'data_constituents.csv'))
 
     # JOB: Load table from local file
     else:
         # Load constituency table from file and transform key to string
-        const_data = pd.read_csv(os.path.join('data', file_name), dtype={'gvkey': str})
+        const_data = pd.read_csv(os.path.join(folder, file_name), dtype={'gvkey': str})
         # const_data['gvkey'] = const_data['gvkey'].astype('str')
-
-        # Convert date columns to datetime format
-        for col in ['from', 'thru']:
-            const_data[col] = pd.to_datetime(const_data[col], format='%Y-%m-%d')
-            const_data[col] = const_data[col].dt.date
 
         # Set gvkey and iid as MultiIndex
         const_data.set_index(['gvkey', 'iid'], inplace=True)
 
+    # Convert date columns to datetime format
+    for col in ['from', 'thru']:
+        const_data[col] = pd.to_datetime(const_data[col], format='%Y-%m-%d')
+        const_data[col] = const_data[col].dt.date
+
     # Query relevant date range
+    # if math.isnan(const_data['from'].min()):
+    #     print('shoot')
+    #     print(type(const_data['from'].min()))
+    #     index_starting_date = datetime.date.today()
+    # else:
     index_starting_date = const_data['from'].min()
+
+    print(index_starting_date)
     relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
 
     # Create empty constituency matrix
@@ -262,7 +282,7 @@ def create_constituency_matrix(load_from_file=False, index_id='150095') -> None:
                 constituency_matrix.loc[pd.date_range(start=row[1]['from'], end=row[1]['thru']), stock_index] = 1
 
     # Save constituency table to file
-    constituency_matrix.to_csv(os.path.join('data', 'constituency_matrix.csv'))
+    constituency_matrix.to_csv(os.path.join(folder, 'constituency_matrix.csv'))
 
     if not load_from_file:
         db.close()
@@ -283,7 +303,7 @@ def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
     constituent_list = constituency_matrix.columns.get_level_values('gvkey').drop_duplicates().to_list()
 
     # Query relevant date range
-    index_starting_date = constituency_matrix.index.min()
+    index_starting_date = constituency_matrix.index.sort_values()[0]
     relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
 
     return constituent_list, relevant_date_range
@@ -365,20 +385,19 @@ def generate_index_lookup_dict() -> None:
         json.dump(gvkeyx_lookup, fp)
 
 
-def generate_company_lookup_dict() -> None:
+def generate_company_lookup_dict(folder_path, data) -> None:
     """
     Generate dictionary mapping GVKEY (stock identifier) to stock name
     :return:
     """
 
-    data = retrieve_index_history(from_file=True)
     # JOB: Create company name dictionary and save to file
     company_name_lookup = data.reset_index()
     company_name_lookup = company_name_lookup.loc[
         ~company_name_lookup.duplicated(subset='gvkey', keep='first'), ['gvkey', 'conm']].set_index('gvkey')
 
     # JOB: Save dict to json file
-    company_name_lookup.to_json(os.path.join('data', 'gvkey_name_dict.json'))
+    company_name_lookup.to_json(os.path.join(folder_path, 'gvkey_name_dict.json'))
 
 
 def main():
