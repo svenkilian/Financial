@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from DataCollection import generate_study_period
+from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
 from core.model import LSTMModel
 import utils
@@ -58,7 +58,7 @@ def main(load_latest_model=False):
     # JOB: Generate training data
     x, y = data.get_train_data(
         seq_len=configs['data']['sequence_length'],
-        normalize=configs['data']['normalize']
+        normalize=configs['data']['normalize'],
     )
 
     # JOB: In-memory training
@@ -125,19 +125,22 @@ def test():
     if not os.path.exists(configs['model']['save_dir']):
         os.makedirs(configs['model']['save_dir'])
 
+    create_constituency_matrix(load_from_file=True, index_id='150940')
+
     # Load constituency matrix
     constituency_matrix = pd.read_csv(os.path.join('data', 'constituency_matrix.csv'), index_col=0, header=[0, 1],
                                       parse_dates=True)
 
     # Load full data
-    full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
+    full_data = retrieve_index_history(index_id='150940', from_file=True, last_n=None)
+    # full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
 
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
     print('Length of the data: %d' % data_length)
 
     # JOB: Specify study period interval
-    start_index = -1000
-    end_index = -1
+    start_index = -3000
+    end_index = -2000
     period_range = (start_index, end_index)
 
     # Get study period data
@@ -219,16 +222,20 @@ def test():
         y_train,
         epochs=configs['training']['epochs'],
         batch_size=configs['training']['batch_size'],
-        save_dir=configs['model']['save_dir']
+        save_dir=configs['model']['save_dir'], configs=configs
     )
 
     # # JOB: Make point prediction
     predictions = model.predict_point_by_point(x_test)
 
-    print(predictions[:10])
+    # print(predictions[:10])
 
     # JOB: Plot training and validation metrics
-    utils.plot_train_val(history)
+    try:
+        utils.plot_train_val(history, configs['model']['metrics'])
+    except AttributeError as ae:
+        print('Plotting failed.')
+        print(ae)
 
     test_scores = model.model.evaluate(x_test, y_test, verbose=1)
 

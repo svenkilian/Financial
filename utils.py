@@ -110,13 +110,14 @@ def pretty_print(df, headers='keys', tablefmt='fancy_grid'):
     print(tabulate(df, headers, tablefmt=tablefmt, showindex=True))
 
 
-def plot_train_val(history):
+def plot_train_val(history, metrics):
     # Summarize history for Accuracy
     epoch_axis = range(1, len(history.history['loss']) + 1)
-    plt.plot(epoch_axis, history.history['accuracy'])
-    plt.plot(epoch_axis, history.history['val_accuracy'])
-    plt.title('Accuracy')
-    plt.ylabel('Accuracy')
+    for metric in metrics:
+        plt.plot(epoch_axis, history.history[metric])
+        plt.plot(epoch_axis, history.history['val_' + metric])
+    plt.title(metrics[0].capitalize())
+    plt.ylabel(metrics[0].capitalize())
     plt.xlabel('Epoch')
     plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.legend(['Training', 'Validation'], loc='upper left')

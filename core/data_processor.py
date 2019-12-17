@@ -26,7 +26,9 @@ class DataLoader:
         # print('Split index: %d' % i_split)
         # print('Split date: %s' % split_date)
         self.data_train = dataframe.get(cols).loc[:split_date].values  # Get training array
+        # TODO: Handle error of non-existent data access
         self.data_test = dataframe.get(cols).loc[full_date_range[i_split - seq_len]:].values  # Get test array
+        # TODO: ----
         self.len_train = len(self.data_train)  # Length of training data
         self.len_test = len(self.data_test)  # Length of test data
         self.len_train_windows = None

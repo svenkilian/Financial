@@ -133,25 +133,30 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
     return constituency_matrix.loc[date].loc[lambda x: x == 1].index
 
 
-def download_index_history(index_id: str, from_file=False, last_n=None):
+def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = None) -> pd.DataFrame:
     """
     Download complete daily index history
 
-    :return:
-    :rtype:
+    :return: DataFrame containing full index constituent data over full index history
+    :rtype: pd.DataFrame
     """
 
     if not from_file:
-        gvkeyx_lookup = pd.read_csv(os.path.join('data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
-        gvkeyx_lookup.index = gvkeyx_lookup.index.astype(str)
-        gvkeyx_lookup = gvkeyx_lookup['index_name'].to_dict()
+        # Load GVKEYX lookup dict
+        with open(os.path.join('data', 'gvkeyx_name_dict.json'), 'r') as fp:
+            gvkeyx_lookup = json.load(fp)
 
         # Establish database connection
         print('Opening DB connection ...')
         db = wrds.Connection(wrds_username='afecker')
         print('Done')
 
-        gvkey_list, relevant_date_range = create_constituency_matrix(load_from_file=True)
+        # Retrieve list of all stocks (gvkeys) for specified index including full date range of historic index data
+        gvkey_list, relevant_date_range = get_all_constituents(
+            constituency_matrix=pd.read_csv(os.path.join('data', 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+                                            parse_dates=True))
+
+        # Set start and end date
         if last_n:
             start_date = str(relevant_date_range[-1].date() - datetime.timedelta(days=last_n - 1))
         else:
@@ -175,6 +180,7 @@ def download_index_history(index_id: str, from_file=False, last_n=None):
         end_time = time.time()
 
         print('Query duration: %g seconds' % (round(end_time - start_time, 2)))
+        print('Number of observations: %s' % len(data))
 
         # JOB: Calculate Return Index Column
         data['return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
@@ -183,22 +189,19 @@ def download_index_history(index_id: str, from_file=False, last_n=None):
         data['daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
             lambda x: x.pct_change(periods=1))
 
+        # Reset index to date
+        data = data.reset_index()
+
         # Save to file
         data.to_csv(os.path.join('data', 'index_data_constituents.csv'))
 
     else:
         data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
-        print(data.index.drop_duplicates)
-        data.set_index('gvkey', inplace=True)
 
-    # JOB: Create company name dictionary and save to file
-    company_name_lookup = data.reset_index()
-    company_name_lookup = company_name_lookup.loc[
-        ~company_name_lookup.duplicated(subset='gvkey', keep='first'), ['gvkey', 'conm']].set_index('gvkey')
-    company_name_lookup.to_json(os.path.join('data', 'gvkey_name_dict.json'))
+    return data
 
 
-def create_constituency_matrix(load_from_file=False, index_id='150095') -> tuple:
+def create_constituency_matrix(load_from_file=False, index_id='150095') -> None:
     """
     Generate constituency matrix for stock market index components
 
@@ -265,8 +268,25 @@ def create_constituency_matrix(load_from_file=False, index_id='150095') -> tuple
         db.close()
         print('DB connection closed.')
 
-    # Return historical constituents as list
-    return const_data.index.get_level_values('gvkey').drop_duplicates().to_list(), relevant_date_range
+    return None
+
+
+def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
+    """
+    Return all historical constituents' gvkeys and full date range from constituency matrix
+
+    :param constituency_matrix: Matrix to extract constituents and time frame from
+    :return: Tuple containing [0] list of historical constituent gvkeys and [1] relevant date range
+    """
+
+    # Query complete list of historic index constituents' gvkeys
+    constituent_list = constituency_matrix.columns.get_level_values('gvkey').drop_duplicates().to_list()
+
+    # Query relevant date range
+    index_starting_date = constituency_matrix.index.min()
+    relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
+
+    return constituent_list, relevant_date_range
 
 
 def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
@@ -301,30 +321,64 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     full_data = full_data.loc[constituent_indices, :]
     full_data = full_data.reset_index()
     full_data.set_index('datadate', inplace=True)
+    full_data.sort_index(inplace=True)
 
     # Select data from study period
+    print(unique_dates[period_range[0]])
+    print(unique_dates[period_range[1]])
     print(
         'Retrieving data from %s to %s' % (unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
-    study_data = full_data.loc[unique_dates[period_range[0]:period_range[1]]]
+    study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
     # Add standardized daily returns
-    mean_daily_return = study_data.loc[unique_dates[period_range[0]:period_range[1]], 'daily_return'].mean()
-    std_daily_return = study_data.loc[unique_dates[period_range[0]:period_range[1]], 'daily_return'].std()
+    mean_daily_return = study_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]],
+                        'daily_return'].mean()
+    std_daily_return = study_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]], 'daily_return'].std()
     print('Mean daily return: %g' % mean_daily_return)
     print('Std. daily return: %g' % std_daily_return)
 
-    study_data['cshtrd'] = study_data['cshtrd'].fillna(value=0)
+    study_data.loc[:, 'cshtrd'] = study_data.loc[:, 'cshtrd'].fillna(value=0)
 
-    study_data['stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
+    study_data.loc[:, 'stand_d_return'] = (study_data.loc[:, 'daily_return'] - mean_daily_return) / std_daily_return
 
     if columns is None:
         columns = study_data.columns
 
-    study_data['above_cs_med'] = study_data['daily_return'].gt(
+    study_data.loc[:, 'above_cs_med'] = study_data.loc[:, 'daily_return'].gt(
         study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
-    study_data['cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
+    study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
 
     return study_data
+
+
+def generate_index_lookup_dict() -> None:
+    """
+    Generate dictionary mapping GVKEYX (index identifier) to index name
+    :return:
+    """
+
+    gvkeyx_lookup = pd.read_csv(os.path.join('data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
+    gvkeyx_lookup.index = gvkeyx_lookup.index.astype(str)
+    gvkeyx_lookup = gvkeyx_lookup['index_name'].to_dict()
+
+    with open(os.path.join('data', 'gvkeyx_name_dict.json'), 'w') as fp:
+        json.dump(gvkeyx_lookup, fp)
+
+
+def generate_company_lookup_dict() -> None:
+    """
+    Generate dictionary mapping GVKEY (stock identifier) to stock name
+    :return:
+    """
+
+    data = retrieve_index_history(from_file=True)
+    # JOB: Create company name dictionary and save to file
+    company_name_lookup = data.reset_index()
+    company_name_lookup = company_name_lookup.loc[
+        ~company_name_lookup.duplicated(subset='gvkey', keep='first'), ['gvkey', 'conm']].set_index('gvkey')
+
+    # JOB: Save dict to json file
+    company_name_lookup.to_json(os.path.join('data', 'gvkey_name_dict.json'))
 
 
 def main():
@@ -461,7 +515,8 @@ def main():
 
 # Main method
 if __name__ == '__main__':
+    generate_index_lookup_dict()
     pass
     # main()
     # create_constituency_matrix(load_from_file=False)
-    # download_index_history(index_id='150095', from_file=False, last_n=None)
+    # retrieve_index_history(index_id='150095', from_file=False, last_n=None)

@@ -6,12 +6,13 @@
 			"Close", "Volume"
 		],
 		"sequence_length": 241,
-		"train_test_split": 0.65,
+		"train_test_split": 0.75,
 		"normalize": true
 	},
 	"training": {
-		"epochs": 10,
-		"batch_size": 32
+		"epochs": 1000,
+		"batch_size": 32,
+		"early_stopping_patience": 5
 	},
 	"model": {
 		"loss": "binary_crossentropy",
@@ -24,15 +25,9 @@
 		"layers": [
 			{
 				"type": "lstm",
-				"neurons": 50,
+				"neurons": 25,
 				"input_timesteps": 240,
 				"input_dim": 2,
-				"dropout": 0.1,
-				"return_seq": true
-			},
-			{
-				"type": "lstm",
-				"neurons": 50,
 				"dropout": 0.1,
 				"return_seq": false
 			},

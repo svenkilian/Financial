@@ -4,6 +4,7 @@ import numpy as np
 import datetime as dt
 from numpy import newaxis
 from tensorflow.keras import optimizers
+from tensorflow_core.python.keras.callbacks import TensorBoard
 
 from core.utils import Timer
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
@@ -70,30 +71,37 @@ class LSTMModel:
         print('[Model] Model Compiled')
         timer.stop()
 
-    def train(self, x, y, epochs, batch_size, save_dir):
+    def train(self, x, y, epochs, batch_size, save_dir, configs):
         timer = Timer()
         timer.start()
         print('[Model] Training Started')
         print('[Model] %s epochs, %s batch size' % (epochs, batch_size))
+        early_stopping_patience = configs['training']['early_stopping_patience']
 
         save_fname = os.path.join(save_dir, '%s-e%s-b%s.h5' % (
             dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs), str(batch_size)))
         callbacks = [
-            EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True),
+            EarlyStopping(monitor='val_loss', patience=early_stopping_patience, restore_best_weights=True),
             ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True),
-            # TensorBoard(log_dir=os.path.join('./logs'), histogram_freq=1, batch_size=32, write_graph=True, write_grads=False,
-            #             write_images=False, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None,
-            #             embeddings_data=None, update_freq='epoch')
+            TensorBoard(log_dir=os.path.dirname('logs/'), histogram_freq=1, write_graph=True, write_grads=False,
+                        write_images=True, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None,
+                        embeddings_data=None, update_freq='epoch')
         ]
-        history = self.model.fit(
-            x,
-            y,
-            epochs=epochs,
-            batch_size=batch_size,
-            callbacks=callbacks,
-            validation_split=0.2,
-            shuffle=True
-        )
+        try:
+            history = self.model.fit(
+                x,
+                y,
+                epochs=epochs,
+                batch_size=batch_size,
+                callbacks=callbacks,
+                validation_split=0.20,
+                shuffle=True,
+                verbose=2
+            )
+        except TypeError as te:
+            print(te)
+            history = None
+
         self.model.save(save_fname)
 
         print('[Model] Training Completed. Model saved as %s' % save_fname)
