@@ -161,7 +161,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
 
         # Set start and end date
         if last_n:
-            start_date = str(relevant_date_range[-1].date() - datetime.timedelta(days=last_n - 1))
+            start_date = str(relevant_date_range[-last_n].date())
         else:
             start_date = str(relevant_date_range[0].date())
 
@@ -183,8 +183,10 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         end_time = time.time()
 
         print('Query duration: %g seconds' % (round(end_time - start_time, 2)))
-        print('Number of observations: %s' % len(data))
+        print('Number of observations: %s' % data.shape[0])
+        print('Number of individual dates: %d' % data.index.get_level_values('datadate').drop_duplicates().size)
 
+        # JOB: Calculate Return Index Column
         # JOB: Calculate Return Index Column
         data['return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
 
@@ -211,8 +213,7 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', folder_p
     """
     Generate constituency matrix for stock market index components
 
-    :param folder_path:
-    :type folder_path:
+    :param folder_path: Path to data folder
     :param index_id: Index to create constituency matrix for
     :param load_from_file: Flag indicating whether to load constituency information from file
 
@@ -258,15 +259,8 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', folder_p
         const_data[col] = pd.to_datetime(const_data[col], format='%Y-%m-%d')
         const_data[col] = const_data[col].dt.date
 
-    # Query relevant date range
-    # if math.isnan(const_data['from'].min()):
-    #     print('shoot')
-    #     print(type(const_data['from'].min()))
-    #     index_starting_date = datetime.date.today()
-    # else:
+    # Determine period starting date and relevant date range
     index_starting_date = const_data['from'].min()
-
-    print(index_starting_date)
     relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
 
     # Create empty constituency matrix
@@ -310,16 +304,20 @@ def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
 
 
 def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
-                          period_range: tuple, columns: list) -> pd.DataFrame:
+                          period_range: tuple, columns: list, index_name: str) -> pd.DataFrame:
     """
     Generate a time-period sample for a study period
 
     :param period_range: Date range of study period
-    :type period_range: pd.DatetimeIndex
+    :type period_range: tuple
     :param full_data: Full stock data
     :type full_data: pd.DataFrame
     :param constituency_matrix: Constituency matrix
     :type constituency_matrix: pd.DataFrame
+    :param columns: Columns to return in DataFrame
+    :type columns: list
+    :param index_name: Name of index
+    :type index_name: str
 
     :return: Study period sample
     :rtype: pd.DataFrame
@@ -334,7 +332,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]])
     full_data.reset_index(inplace=True)
 
-    print('Retrieving index constituency for %s' % unique_dates[period_range[1]])
+    print('Retrieving index constituency for %s as of %s' % (index_name, unique_dates[period_range[1]]))
 
     # Select relevant data
     full_data = full_data.set_index(['gvkey', 'iid'])
@@ -374,6 +372,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 def generate_index_lookup_dict() -> None:
     """
     Generate dictionary mapping GVKEYX (index identifier) to index name
+
     :return:
     """
 
@@ -385,9 +384,10 @@ def generate_index_lookup_dict() -> None:
         json.dump(gvkeyx_lookup, fp)
 
 
-def generate_company_lookup_dict(folder_path, data) -> None:
+def generate_company_lookup_dict(folder_path: str, data: pd.DataFrame) -> None:
     """
     Generate dictionary mapping GVKEY (stock identifier) to stock name
+
     :return:
     """
 
@@ -410,49 +410,6 @@ def main():
     print('Opening DB connection ...')
     db = wrds.Connection(wrds_username='afecker')
     print('Done')
-
-    # print(db.describe_table('crspa', 'dsf'))
-    # print(db.describe_table('comp', 'g_idxcst_his'))
-    #
-    # sys.exit(0)
-
-    # print(list_tables(db, 'comp'))
-
-    # indices = {'150007': 'DAX', '150008': 'FTSE 100', '150069': 'Nikkei 225 Index',
-    #            '150940': 'Dow Jones Euro STOXX 50 Index', '150919': 'S&P Global 100 Index'}
-
-    # JOB: Download data
-    if download_data:
-        # parameters = {'indices': tuple(indices.keys())}
-        # data = get_data_table(db, sql_query=True,
-        #                       query_string="select datadate, gvkeyx, prccm "
-        #                                    "from comp.g_idx_mth "
-        #                                    "where gvkeyx in %(indices)s and datadate between '1990-01-01' and '2019-11-01' "
-        #                                    "order by datadate asc",
-        #                       index_col=['datadate', 'gvkeyx'], table_info=1, params=parameters)
-
-        data = get_data_table(db, sql_query=True,
-                              query_string="select b.gvkeyx, a.gvkey, a.isin, b.from, b.thru, a.datadate, a.conm, a.cshtrd, a.prccd, a.divd, a.curcdd, a.exchg, a.fic, a.gind, a.iid, a.secstat, a.trfd "
-                                           "from comp.g_secd a join comp.g_idxcst_his b on a.gvkey = b.gvkey "
-                                           "where b.gvkeyx = '150095' and b.thru is null and a.isin is not null and a.datadate between '2018-01-01' and '2019-11-26' "
-                                           "order by a.datadate asc",
-                              index_col=['datadate', 'gvkey'], table_info=1)
-
-        # parameters = {'indices': tuple(indices.keys())}
-        # data = get_data_table(db, sql_query=True,
-        #                       query_string="select date, djct "
-        #                                    "from djones.djdaily "
-        #                                    "where date between '1992-01-01' and '2019-11-01' "
-        #                                    "order by date asc",
-        #                       index_col=['date'], columns='djct', table_info=1)
-
-        # dow_data = get_data_table(db=db, library='djones', table='djdaily', columns=['date', 'dji'], obs=-1,
-        #                           index_col='date', sql_query=False, recent=True, n_recent=10)
-
-        data.to_csv('data/data.csv')
-        # Export data to json file
-        data.reset_index(inplace=True)
-        data.to_json(os.path.join('data', 'data_export.json'))
 
     if pivot_transform:
         # JOB: Load data
@@ -501,31 +458,6 @@ def main():
 
     print(len(data.loc['2019-11-18':'2019-11-18']))
     print(data.loc['2019-11-18':'2019-11-18'])
-
-    # JOB: Initialize DataLoader
-    # data_l = data_processor.DataLoader(data, split=0.75, cols=data.columns.tolist())
-    # Generate training data
-    # train_x, train_y = data_l.get_train_data(
-    #     seq_len=10, normalize=True)
-
-    # Generate test data
-    # test_x, test_y = data_l.get_test_data(seq_len=10, normalize=True)
-
-    # print('Training Data:')
-    # print('Features')
-    # print(train_x[0:5])
-    # print('\nLabels:')
-    # print(train_y[:5])
-    #
-    # print('\n\nTest Data:')
-    # print('Features')
-    # print(test_x[5:15])
-    # print('\nLabels:')
-    # print(test_y[5:15])
-
-    # plot_data(data.loc[:], columns=data.columns, index_name=None, title='Dow Jones Data',
-    #           col_multi_index=False,
-    #           label_mapping=None, export_as_png=True)
 
     # Close database connection
     db.close()

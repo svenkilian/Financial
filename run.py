@@ -5,38 +5,14 @@ __license__ = "MIT"
 
 import os
 import json
-import string
 import sys
-
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
 from core.model import LSTMModel
-import utils
-
-
-def plot_results(predicted_data, true_data):
-    fig = plt.figure(facecolor='white')
-    ax = fig.add_subplot(111)
-    ax.plot(true_data, label='True Data')
-    plt.plot(predicted_data, label='Prediction')
-    plt.legend()
-    plt.show()
-
-
-def plot_results_multiple(predicted_data, true_data, prediction_len):
-    fig = plt.figure(facecolor='white')
-    ax = fig.add_subplot(111)
-    ax.plot(true_data, label='True Data')
-    # Pad the list of predictions to shift it in the graph to it's correct start
-    for i, data in enumerate(predicted_data):
-        padding = [None for p in range(i * prediction_len)]
-        plt.plot(padding + data, label='Prediction')
-        plt.legend()
-    plt.show()
+from utils import plot_results, plot_train_val
 
 
 def main_old(load_latest_model=False):
@@ -106,14 +82,14 @@ def main_old(load_latest_model=False):
     plot_results(predictions, y_test)
 
     # JOB: Plot training and validation metrics
-    utils.plot_train_val(history)
+    plot_train_val(history)
 
     test_scores = model.model.evaluate(x_test, y_test, verbose=0)
 
     print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
 
 
-def main(index_id='150095', force_download=False, data_only=False):
+def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     """
     Run data preparation and model training
 
@@ -130,47 +106,56 @@ def main(index_id='150095', force_download=False, data_only=False):
     if os.path.exists(folder_path):
         if not force_download:
             load_from_file = True
-            print('Loading data from folder: %s' % folder_path)
+            print('Loading data from %s from folder: %s' % (index_name, folder_path))
         else:
             load_from_file = False
-            print('Downloading data into existing folder: %s' % folder_path)
+            print('Downloading data from %s into existing folder: %s' % (index_name, folder_path))
     else:
-        print('Creating folder for index data: %s' % folder_path)
+        print('Creating folder for %s: %s' % (index_name, folder_path))
         os.mkdir(folder_path)
         load_from_file = False
 
     # JOB: Load configurations
     configs = json.load(open('config.json', 'r'))
 
-    # Check if saved model folder exists and create one if not
+    # JOB: Check if saved model folder exists and create one if not
     if not os.path.exists(configs['model']['save_dir']):
         os.makedirs(configs['model']['save_dir'])
 
-    create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, folder_path=folder_path)
+    if not load_from_file:
+        # JOB: Create or load constituency matrix
+        print('Creating constituency matrix ...')
+        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, folder_path=folder_path)
+        print('Successfully created constituency matrix.')
 
-    # Load constituency matrix
+    print('Loading constituency matrix ...')
+    # JOB: Load constituency matrix
     constituency_matrix = pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
                                       parse_dates=True)
+    print('Successfully loaded constituency matrix.')
 
-    # Load full data
-    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=None,
+    # JOB: Load full data
+    print('Retrieving full index history ...')
+    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
                                        folder_path=folder_path, generate_dict=True)
-    # full_data = pd.read_csv(os.path.join('data', 'index_data_constituents.csv'), dtype={'gvkey': str})
+    print('Successfully loaded index history.')
 
+    # Query number of dates in full data set
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
 
     if data_only:
         print('Finished downloading data for %s' % index_name)
+        print('Data set contains %d individual dates' % data_length)
         return None
 
     # JOB: Specify study period interval
-    start_index = -3000
-    end_index = -2000
+    start_index = -2000
+    end_index = -1200
     period_range = (start_index, end_index)
 
     # Get study period data
     study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
-                                              period_range=period_range, columns=['gvkey', 'iid', 'stand_d_return'])
+                                              period_range=period_range, columns=['gvkey', 'iid', 'stand_d_return'], index_name=index_name)
 
     # Get all dates in study period
     full_date_range = study_period_data.index.unique()
@@ -247,7 +232,7 @@ def main(index_id='150095', force_download=False, data_only=False):
         y_train,
         epochs=configs['training']['epochs'],
         batch_size=configs['training']['batch_size'],
-        save_dir=configs['model']['save_dir'], configs=configs
+        save_dir=configs['model']['save_dir'], configs=configs, verbose=2
     )
 
     # # JOB: Make point prediction
@@ -257,7 +242,7 @@ def main(index_id='150095', force_download=False, data_only=False):
 
     # JOB: Plot training and validation metrics
     try:
-        utils.plot_train_val(history, configs['model']['metrics'])
+        plot_train_val(history, configs['model']['metrics'])
     except AttributeError as ae:
         print('Plotting failed.')
         print(ae)
@@ -269,7 +254,7 @@ def main(index_id='150095', force_download=False, data_only=False):
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150927']
+    index_list = ['150940']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=True, data_only=True)
+        main(index_id=index_id, force_download=False, data_only=False)

@@ -11,7 +11,6 @@ import pandas as pd
 from matplotlib import ticker
 from pandas.plotting import register_matplotlib_converters
 
-
 # Update matplotlib setting
 plt.rcParams.update({'legend.fontsize': 8,
                      'legend.loc': 'best',
@@ -28,10 +27,11 @@ matplotlib.style.use('ggplot')
 register_matplotlib_converters()
 
 
-def plot_data(data: pd.DataFrame, columns=None, index_name=None, title='', col_multi_index=False,
-              label_mapping=None, export_as_png=False):
+def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, title='', col_multi_index=False,
+              label_mapping=None, export_as_png=False) -> None:
     """
     Plot data
+
     :param data: DataFrame containing the data to plot
     :param columns: Columns to plot
     :param index_name: Name of the row index
@@ -39,7 +39,7 @@ def plot_data(data: pd.DataFrame, columns=None, index_name=None, title='', col_m
     :param col_multi_index: Flag indicating whether MultiIndex is used in columns
     :param label_mapping: Dict mapping label codes to descriptive text
     :param export_as_png: Flag indicating whether to export plot to png
-    :return:
+    :return: None
 
     Usage::
     Plotting all rows and columns:
@@ -95,9 +95,10 @@ def plot_data(data: pd.DataFrame, columns=None, index_name=None, title='', col_m
     plt.show()
 
 
-def pretty_print(df, headers='keys', tablefmt='fancy_grid'):
+def pretty_print(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     """
     Prints out DataFrame in tabular format
+
     :type headers: list or string
     :param df: DataFrame to print
     :param headers: Table headers
@@ -110,8 +111,17 @@ def pretty_print(df, headers='keys', tablefmt='fancy_grid'):
     print(tabulate(df, headers, tablefmt=tablefmt, showindex=True))
 
 
-def plot_train_val(history, metrics):
-    # Summarize history for Accuracy
+def plot_train_val(history, metrics: list) -> None:
+    """
+    Plot training and validation metrics over epochs
+
+    :param history: Training history
+    :param metrics: List of metrics to plot
+    :type metrics: list of strings
+    :return: None
+    """
+
+    # Plot history for all metrics
     epoch_axis = range(1, len(history.history['loss']) + 1)
     for metric in metrics:
         plt.plot(epoch_axis, history.history[metric])
@@ -123,7 +133,7 @@ def plot_train_val(history, metrics):
     plt.legend(['Training', 'Validation'], loc='upper left')
     plt.show()
 
-    # Summarize history for loss
+    # Plot history for loss
     plt.plot(epoch_axis, history.history['loss'])
     plt.plot(epoch_axis, history.history['val_loss'])
     plt.title('Model Loss')
@@ -134,4 +144,22 @@ def plot_train_val(history, metrics):
     plt.show()
 
 
+def plot_results(predicted_data, true_data):
+    fig = plt.figure(facecolor='white')
+    ax = fig.add_subplot(111)
+    ax.plot(true_data, label='True Data')
+    plt.plot(predicted_data, label='Prediction')
+    plt.legend()
+    plt.show()
 
+
+def plot_results_multiple(predicted_data, true_data, prediction_len):
+    fig = plt.figure(facecolor='white')
+    ax = fig.add_subplot(111)
+    ax.plot(true_data, label='True Data')
+    # Pad the list of predictions to shift it in the graph to it's correct start
+    for i, data in enumerate(predicted_data):
+        padding = [None for p in range(i * prediction_len)]
+        plt.plot(padding + data, label='Prediction')
+        plt.legend()
+    plt.show()

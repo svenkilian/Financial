@@ -71,7 +71,7 @@ class LSTMModel:
         print('[Model] Model Compiled')
         timer.stop()
 
-    def train(self, x, y, epochs, batch_size, save_dir, configs):
+    def train(self, x: np.array, y: np.array, epochs: int, batch_size: int, save_dir: str, configs: dict, verbose=1):
         timer = Timer()
         timer.start()
         print('[Model] Training Started')
@@ -96,7 +96,7 @@ class LSTMModel:
                 callbacks=callbacks,
                 validation_split=0.20,
                 shuffle=True,
-                verbose=2
+                verbose=verbose
             )
         except TypeError as te:
             print(te)

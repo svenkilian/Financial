@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import pandas as pd
+from typing import List, Tuple
 
 
 class DataLoader:
@@ -38,7 +39,7 @@ class DataLoader:
         # print('Number of training data: %d' % self.len_train)
         # print('Number of test data: %d' % self.len_test)
 
-    def get_train_data(self, seq_len, normalize=False):
+    def get_train_data(self, seq_len: int, normalize=False):
         """
         Create x, y training data windows
 
@@ -61,7 +62,7 @@ class DataLoader:
 
         return np.array(data_x), np.array(data_y)
 
-    def get_test_data(self, seq_len, normalize=False):
+    def get_test_data(self, seq_len: int, normalize=False):
         """
         Create x, y test data windows
 
@@ -88,7 +89,7 @@ class DataLoader:
 
         return x, y
 
-    def generate_train_batch(self, seq_len, batch_size, normalize):
+    def generate_train_batch(self, seq_len: int, batch_size: int, normalize: bool):
         """
         Yield a generator of training data from filename on given list of cols split for train/test
 
@@ -112,7 +113,7 @@ class DataLoader:
                 i += 1
             yield np.array(x_batch), np.array(y_batch)
 
-    def _next_window(self, i, seq_len, normalize):
+    def _next_window(self, i: int, seq_len: int, normalize: bool) -> Tuple[np.array, np.array]:
         """
         Generates the next data window from the given index location i
 
@@ -129,7 +130,7 @@ class DataLoader:
 
         return x, y
 
-    def normalize_windows(self, window_data, single_window=False):
+    def normalize_windows(self, window_data: np.array, single_window=False):
         """
         Normalize window with a base value of zero
 
