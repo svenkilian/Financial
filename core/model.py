@@ -7,11 +7,7 @@ import datetime as dt
 from numpy import newaxis
 from tensorflow.keras import optimizers
 
-if GPU_ENABLED:
-    from python.keras.callbacks import TensorBoard
-else:
-    from keras.callbacks import TensorBoard
-
+from keras.callbacks import TensorBoard
 from core.utils import Timer
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
 from tensorflow.keras.models import Sequential, load_model
