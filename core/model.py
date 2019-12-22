@@ -7,11 +7,11 @@ import datetime as dt
 from numpy import newaxis
 from tensorflow.keras import optimizers
 
-from keras.callbacks import TensorBoard
+
 from core.utils import Timer
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
 from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
 
 
 class LSTMModel:
