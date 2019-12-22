@@ -232,7 +232,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
         y_train,
         epochs=configs['training']['epochs'],
         batch_size=configs['training']['batch_size'],
-        save_dir=configs['model']['save_dir'], configs=configs, verbose=2
+        save_dir=configs['model']['save_dir'], configs=configs, verbose=1
     )
 
     # # JOB: Make point prediction
@@ -254,7 +254,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150940']
+    index_list = ['150095']
 
     for index_id in index_list:
         main(index_id=index_id, force_download=False, data_only=False)

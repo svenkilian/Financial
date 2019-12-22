@@ -1,10 +1,16 @@
+GPU_ENABLED = True
+
 import os
 import math
 import numpy as np
 import datetime as dt
 from numpy import newaxis
 from tensorflow.keras import optimizers
-from tensorflow_core.python.keras.callbacks import TensorBoard
+
+if GPU_ENABLED:
+    from tensorflow_core.python.keras.callbacks import TensorBoard
+else:
+    from keras.callbacks import TensorBoard
 
 from core.utils import Timer
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
@@ -82,11 +88,14 @@ class LSTMModel:
             dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs), str(batch_size)))
         callbacks = [
             EarlyStopping(monitor='val_loss', patience=early_stopping_patience, restore_best_weights=True),
-            ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True),
-            TensorBoard(log_dir=os.path.dirname('logs/'), histogram_freq=1, write_graph=True, write_grads=False,
-                        write_images=True, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None,
-                        embeddings_data=None, update_freq='epoch')
-        ]
+            ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True)]
+
+        if GPU_ENABLED:
+            callbacks.append(
+                TensorBoard(log_dir=os.path.dirname('logs/'), histogram_freq=1, write_graph=True, write_grads=False,
+                            write_images=True, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None,
+                            embeddings_data=None, update_freq='epoch'))
+
         try:
             history = self.model.fit(
                 x,
