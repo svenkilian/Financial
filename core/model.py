@@ -8,7 +8,7 @@ from numpy import newaxis
 from tensorflow.keras import optimizers
 
 if GPU_ENABLED:
-    from tensorflow_core.python.keras.callbacks import TensorBoard
+    from python.keras.callbacks import TensorBoard
 else:
     from keras.callbacks import TensorBoard
 
