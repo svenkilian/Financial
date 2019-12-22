@@ -12,7 +12,7 @@
 	"training": {
 		"epochs": 1000,
 		"batch_size": 16,
-		"early_stopping_patience": 5
+		"early_stopping_patience": 3
 	},
 	"model": {
 		"loss": "binary_crossentropy",
