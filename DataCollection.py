@@ -111,10 +111,11 @@ def list_tables(db, library, show_n_rows=False):
             print(table)
 
 
-def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date) -> list:
+def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date, folder_path: str) -> list:
     """
     Return company name list of index constituents for given date
 
+    :param folder_path: Path to file directory
     :param lookup_dict: Dictionary mapping gvkey to company name
     :param constituency_matrix: Constituency table providing constituency information
     :param date: Date for which to return constituency list
@@ -123,7 +124,7 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
     :rtype: list
     """
 
-    lookup_dict = pd.read_json(os.path.join('data', 'gvkey_name_dict.json'), typ='series').to_dict().get('conm')
+    lookup_dict = pd.read_json(os.path.join(folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get('conm')
     # print(lookup_dict)
     # print(len(constituency_matrix.loc[date].loc[lambda x: x == 1]))
     # print(constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values('gvkey').tolist())
@@ -304,7 +305,7 @@ def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
 
 
 def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
-                          period_range: tuple, columns: list, index_name: str) -> pd.DataFrame:
+                          period_range: tuple, columns: list, index_name: str, folder_path: str) -> pd.DataFrame:
     """
     Generate a time-period sample for a study period
 
@@ -329,7 +330,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # Get list of constituents for specified date
     full_data.set_index('datadate', inplace=True)
     unique_dates = full_data.index.drop_duplicates()
-    constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]])
+    constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]],
+                                                 folder_path=folder_path)
     full_data.reset_index(inplace=True)
 
     print('Retrieving index constituency for %s as of %s' % (index_name, unique_dates[period_range[1]]))

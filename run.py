@@ -155,7 +155,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     # Get study period data
     study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
-                                              period_range=period_range, columns=['gvkey', 'iid', 'stand_d_return'], index_name=index_name)
+                                              period_range=period_range, columns=['gvkey', 'iid', 'stand_d_return'],
+                                              index_name=index_name, folder_path=folder_path)
 
     # Get all dates in study period
     full_date_range = study_period_data.index.unique()
