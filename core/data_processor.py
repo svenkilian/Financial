@@ -7,7 +7,8 @@ from typing import List, Tuple
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
 
-    def __init__(self, filename, split, cols, from_csv=False, seq_len=None, full_date_range=None):
+    def __init__(self, filename='', split: int = 0, cols: list = [], from_csv=False, seq_len=None,
+                 full_date_range=None):
         """
         Constructor for DataLoader class
         :param filename: Filename of csv file or existing DataFrame name
@@ -97,7 +98,27 @@ class DataLoader:
         :param batch_size: Batch size
         :param normalize: Normalize data
         :return:
+
+        Usage::
+
+        # Out-of memory generative training
+        steps_per_epoch = math.ceil(
+                        (data.len_train - configs['data']['sequence_length']) / configs['training']['batch_size']
+                        )
+
+        model.train_generator(
+            data_gen=data.generate_train_batch(
+                seq_len=configs['data']['sequence_length'],
+                batch_size=configs['training']['batch_size'],
+                normalize=configs['data']['normalize']
+            ),
+            epochs=configs['training']['epochs'],
+            batch_size=configs['training']['batch_size'],
+            steps_per_epoch=steps_per_epoch,
+            save_dir=configs['model']['save_dir']
+        )
         """
+
         i = 0
         while i < (self.len_train - seq_len):
             x_batch = []
