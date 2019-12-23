@@ -73,6 +73,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     if data_only:
         print('Finished downloading data for %s' % index_name)
         print('Data set contains %d individual dates' % data_length)
+        print(full_data.head(100))
         return None
 
     # JOB: Specify study period interval
@@ -82,8 +83,12 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     # Get study period data
     study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
-                                              period_range=period_range, columns=['gvkey', 'iid', 'stand_d_return'],
+                                              period_range=period_range,
                                               index_name=index_name, folder_path=folder_path)
+
+    print(study_period_data.loc['2015-05-08'])
+
+    return
 
     # Get all dates in study period
     full_date_range = study_period_data.index.unique()

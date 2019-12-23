@@ -7,7 +7,7 @@ from typing import List, Tuple
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
 
-    def __init__(self, filename='', split: int = 0, cols: list = [], from_csv=False, seq_len=None,
+    def __init__(self, filename='', split: int = 0, cols: list = list, from_csv=False, seq_len=None,
                  full_date_range=None):
         """
         Constructor for DataLoader class

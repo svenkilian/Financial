@@ -305,18 +305,17 @@ def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
 
 
 def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
-                          period_range: tuple, columns: list, index_name: str, folder_path: str) -> pd.DataFrame:
+                          period_range: tuple, index_name: str, folder_path: str) -> pd.DataFrame:
     """
     Generate a time-period sample for a study period
 
+    :param folder_path: Path to data folder
     :param period_range: Date range of study period
     :type period_range: tuple
     :param full_data: Full stock data
     :type full_data: pd.DataFrame
     :param constituency_matrix: Constituency matrix
     :type constituency_matrix: pd.DataFrame
-    :param columns: Columns to return in DataFrame
-    :type columns: list
     :param index_name: Name of index
     :type index_name: str
 
@@ -350,23 +349,30 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
         'Retrieving data from %s to %s' % (unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
-    # Add standardized daily returns
+    # JOB: Add standardized daily returns
     mean_daily_return = study_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]],
                         'daily_return'].mean()
     std_daily_return = study_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]], 'daily_return'].std()
     print('Mean daily return: %g' % mean_daily_return)
     print('Std. daily return: %g' % std_daily_return)
 
+    # JOB: Fill n/a values for trading volume
     study_data.loc[:, 'cshtrd'] = study_data.loc[:, 'cshtrd'].fillna(value=0)
 
+    # JOB: Calculate standardized daily returns
     study_data.loc[:, 'stand_d_return'] = (study_data.loc[:, 'daily_return'] - mean_daily_return) / std_daily_return
 
-    if columns is None:
-        columns = study_data.columns
-
+    # JOB: Create target
     study_data.loc[:, 'above_cs_med'] = study_data.loc[:, 'daily_return'].gt(
         study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
     study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
+
+    # JOB: Create cross-sectional ranking
+    study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int8')
+    study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
+
+    # JOB: Number of securities in cross-section
+    study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
 
     return study_data
 
