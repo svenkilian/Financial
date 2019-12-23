@@ -116,12 +116,10 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
     Return company name list of index constituents for given date
 
     :param folder_path: Path to file directory
-    :param lookup_dict: Dictionary mapping gvkey to company name
     :param constituency_matrix: Constituency table providing constituency information
     :param date: Date for which to return constituency list
 
     :return: List of company names for given date
-    :rtype: list
     """
 
     lookup_dict = pd.read_json(os.path.join(folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get('conm')
@@ -187,7 +185,6 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         print('Number of observations: %s' % data.shape[0])
         print('Number of individual dates: %d' % data.index.get_level_values('datadate').drop_duplicates().size)
 
-        # JOB: Calculate Return Index Column
         # JOB: Calculate Return Index Column
         data['return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
 

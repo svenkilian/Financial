@@ -88,7 +88,6 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     print(study_period_data.loc['2015-05-08'])
 
-    return
 
     # Get all dates in study period
     full_date_range = study_period_data.index.unique()
@@ -100,21 +99,22 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
 
-    # Instantiate training and test data
+    # JOB: Instantiate training and test data
     x_train = None
     y_train = None
     x_test = None
     y_test = None
+    test_data_index = pd.Index([])
 
     # JOB: Iterate through individual stocks and generate training and test data
     for stock_id in unique_indices:
-        id_data = study_period_data.loc[stock_id].set_index('datadate', drop=True).sort_index()
+        id_data = study_period_data.loc[stock_id].set_index('datadate').sort_index()
         # print(stock_id)
 
         # JOB: Initialize DataLoader
         data = DataLoader(
             id_data,
-            configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return', 'cshtrd'], from_csv=False,
+            split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return', 'cshtrd'], from_csv=False,
             seq_len=configs['data']['sequence_length'], full_date_range=full_date_range
         )
 
@@ -145,6 +145,13 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
             if len(x_t) > 0:
                 x_test = np.append(x_test, x_t, axis=0)
                 y_test = np.append(y_test, y_t, axis=0)
+                print(len(y_t))
+
+        test_data_index = test_data_index.append(data.data_test_index)
+        # print(len(y_test))
+        # print(len(test_data_index))
+
+    return
 
     # Data size conformity checks
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))

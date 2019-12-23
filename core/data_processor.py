@@ -7,11 +7,11 @@ from typing import List, Tuple
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
 
-    def __init__(self, filename='', split: int = 0, cols: list = list, from_csv=False, seq_len=None,
+    def __init__(self, data: pd.DataFrame, split: float = 0.75, cols: list = list, from_csv=False, seq_len=None,
                  full_date_range=None):
         """
         Constructor for DataLoader class
-        :param filename: Filename of csv file or existing DataFrame name
+        :param data: DataFrame containing study period data
         :param split: Split value between 0 and 1 determining train/test split
         :param cols: Columns to use for the model
         :param from_csv: Load data from .csv file
@@ -19,9 +19,9 @@ class DataLoader:
 
         # Load data either from csv or pre-loaded DataFrame
         if from_csv:
-            dataframe = pd.read_csv(filename)
+            dataframe = pd.read_csv(data)
         else:
-            dataframe = filename
+            dataframe = data
 
         i_split = int(len(full_date_range) * split)  # Determine split index
         split_date = full_date_range[i_split]
@@ -30,11 +30,13 @@ class DataLoader:
         self.data_train = dataframe.get(cols).loc[:split_date].values  # Get training array
         # TODO: Handle error of non-existent data access
         self.data_test = dataframe.get(cols).loc[full_date_range[i_split - seq_len]:].values  # Get test array
-        # TODO: ----
+        # TODO: ----------------------------------------
+        self.data_test_index = dataframe.loc[full_date_range[i_split - seq_len]:].index
         self.len_train = len(self.data_train)  # Length of training data
         self.len_test = len(self.data_test)  # Length of test data
         self.len_train_windows = None
 
+        print(len(self.data_test_index))
         # print('Split index: %s' % i_split)
         # print('Number of data points: %d' % len(dataframe))
         # print('Number of training data: %d' % self.len_train)
