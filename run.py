@@ -78,15 +78,13 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     # JOB: Specify study period interval
     start_index = -2000
-    end_index = -1200
+    end_index = -1500
     period_range = (start_index, end_index)
 
     # Get study period data
     study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
                                               period_range=period_range,
                                               index_name=index_name, folder_path=folder_path)
-
-    print(study_period_data.loc['2015-05-08'])
 
 
     # Get all dates in study period
@@ -114,8 +112,9 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
         # JOB: Initialize DataLoader
         data = DataLoader(
             id_data,
-            split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return', 'cshtrd'], from_csv=False,
-            seq_len=configs['data']['sequence_length'], full_date_range=full_date_range
+            split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return', 'cshtrd'],
+            from_csv=False,
+            seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id
         )
 
         # print('Length of data for ID %s: %d' % (stock_id, len(id_data)))
@@ -145,13 +144,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
             if len(x_t) > 0:
                 x_test = np.append(x_test, x_t, axis=0)
                 y_test = np.append(y_test, y_t, axis=0)
-                print(len(y_t))
 
         test_data_index = test_data_index.append(data.data_test_index)
-        # print(len(y_test))
-        # print(len(test_data_index))
-
-    return
 
     # Data size conformity checks
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
@@ -163,6 +157,9 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     # JOB: Determine target label distribution in train and test sets
     print('Average target label (training): %g' % np.mean(y_train))
     print('Average target label (test): %g' % np.mean(y_test))
+
+    y_test_series = pd.Series(y_test.astype('int8').flatten(),
+                              index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
 
     # JOB: Build model
     model = LSTMModel()
@@ -179,7 +176,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     # JOB: Make point prediction
     predictions = model.predict_point_by_point(x_test)
-    print(predictions[:5])
+    predictions_series = pd.Series(predictions, index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
+    print(predictions_series[:50])
 
     # JOB: Plot training and validation metrics
     try:
