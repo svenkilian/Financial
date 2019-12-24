@@ -10,7 +10,7 @@
 		"normalize": true
 	},
 	"training": {
-		"epochs": 10,
+		"epochs": 1,
 		"batch_size": 16,
 		"early_stopping_patience": 2
 	},

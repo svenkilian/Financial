@@ -29,7 +29,7 @@ pd.set_option('colheader_justify', 'left')
 pd.set_option('display.width', 800)
 pd.set_option('display.html.table_schema', False)
 
-pd.set_option('mode.chained_assignment', 'raise')
+pd.set_option('mode.chained_assignment', None)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 
@@ -363,28 +363,19 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     study_data.loc[:, 'cshtrd'].fillna(value=0)
 
     # JOB: Calculate standardized daily returns
-    try:
-        study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
-    except pd.core.common.SettingWithCopyError as e:
-        pass
+    study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
 
     # JOB: Create target
-    try:
-        study_data.loc[:, 'above_cs_med'] = study_data['daily_return'].gt(
-            study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
-        study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
-    except pd.core.common.SettingWithCopyError as e:
-        pass
+    study_data.loc[:, 'above_cs_med'] = study_data['daily_return'].gt(
+        study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
+    study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
 
     # JOB: Create cross-sectional ranking
     # study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int8')
     # study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
 
     # JOB: Number of securities in cross-section
-    try:
-        study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
-    except pd.core.common.SettingWithCopyError as e:
-        pass
+    study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
 
     return study_data
 

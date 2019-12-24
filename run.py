@@ -201,6 +201,9 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
         pct=True)
 
+    cross_section_size = test_set_comparison.groupby('datadate').agg(['count'])
+    print(cross_section_size)
+
     filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= 20) | (
             test_set_comparison['prediction_rank'] >= 80)]
 
@@ -208,8 +211,6 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     accuracy = binary_accuracy(filtered['y_test'].values,
                                filtered['norm_prediction'].values).numpy()
-
-    print(type(accuracy))
 
     print('Accuracy: %g' % round(accuracy, 4))
 
@@ -221,7 +222,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
         print(ae)
 
     # JOB: Evaluate model on test data
-    test_scores = model.model.evaluate(x_test, y_test, verbose=1)
+    test_scores = model.model.evaluate(x_test, y_test, verbose=2)
 
     # JOB: Print test scores
     print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
@@ -229,7 +230,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150919']
+    index_list = ['150095']
 
     for index_id in index_list:
         main(index_id=index_id, force_download=False, data_only=False)
