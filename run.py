@@ -9,7 +9,8 @@ import json
 import sys
 import numpy as np
 import pandas as pd
-import tensorflow
+
+from tensorflow.keras.metrics import binary_accuracy
 
 from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
@@ -175,7 +176,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     # JOB: Make point prediction
     predictions = model.predict_point_by_point(x_test)
 
-    test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'predictions': predictions},
+    test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
                                        index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
 
     study_period_data.index = study_period_data.index.tolist()
@@ -186,13 +187,15 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
                                                     right_on=['datadate', 'stock_id'])
 
     # JOB: Create normalized predictions
-    test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'predictions'].gt(
-        test_set_comparison.groupby('datadate')['predictions'].transform('median')).astype(int)
+    test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'prediction'].gt(
+        test_set_comparison.groupby('datadate')['prediction'].transform('median')).astype(int)
 
-    print(test_set_comparison)
+    print(test_set_comparison.head(20))
 
-    accuracy = tensorflow.keras.metrics.binary_accuracy(test_set_comparison['y_test'],
-                                                        test_set_comparison['norm_prediction'])
+    accuracy = binary_accuracy(test_set_comparison['y_test'].values,
+                               test_set_comparison['norm_prediction'].values).numpy()
+
+    print(type(accuracy))
 
     print('Accuracy: %g' % round(accuracy, 4))
 
