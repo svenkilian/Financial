@@ -79,8 +79,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
         return None
 
     # JOB: Specify study period interval
-    start_index = -2000
-    end_index = -1200
+    start_index = -3000
+    end_index = -2000
     period_range = (start_index, end_index)
 
     # Get study period data
@@ -201,12 +201,10 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
         pct=True)
 
-    print(test_set_comparison.head(20))
-
-    filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= 20) or (
+    filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= 20) | (
             test_set_comparison['prediction_rank'] >= 80)]
 
-    print(filtered.head(20))
+    print(filtered.head(10))
 
     accuracy = binary_accuracy(filtered['y_test'].values,
                                filtered['norm_prediction'].values).numpy()
