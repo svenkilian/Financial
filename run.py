@@ -111,7 +111,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
         # JOB: Initialize DataLoader
         data = DataLoader(
             id_data,
-            split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return', 'cshtrd'],
+            split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return'],
             from_csv=False,
             seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id
         )
