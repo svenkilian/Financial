@@ -96,9 +96,11 @@ class DataLoader:
             x = data_windows[:, :-1, 1:]
             y = data_windows[:, -1, [0]]
         else:
-            print(self.stock_id)
-            print(self.len_test)
-            print(self.len_train)
+            # print(self.stock_id)
+            # print(self.len_test)
+            # print(self.len_train)
+            x = np.array([])
+            y = np.array([])
 
         # print('Test data length: %s' % len(x))
         # print()

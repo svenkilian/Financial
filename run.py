@@ -133,25 +133,30 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
         )
 
         # In case training set is empty, set to first batch, otherwise append data
-        if x_train is None:
-            x_train = x
-            x_test = x_t
-            y_train = y
-            y_test = y_t
-        else:
-            if len(x) > 0:
+        if (len(x) > 0) and (len(y) > 0):
+            if x_train is None:
+                x_train = x
+                y_train = y
+            else:
                 x_train = np.append(x_train, x, axis=0)
                 y_train = np.append(y_train, y, axis=0)
-            if x_t is not None:
+
+        if (len(x_t) > 0) and (len(y_t) > 0):
+            if x_test is None:
+                x_test = x_t
+                y_test = y_t
+            else:
                 x_test = np.append(x_test, x_t, axis=0)
                 y_test = np.append(y_test, y_t, axis=0)
 
-                # Append to index
-                test_data_index = test_data_index.append(data.data_test_index)
+            # Append to index
+            test_data_index = test_data_index.append(data.data_test_index)
 
     # Data size conformity checks
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
     print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
+    print('Test data length: %d' % len(y_test))
+    print('Test data index length: %d' % len(test_data_index))
 
     if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
         raise AssertionError('Data length does not conform.')
