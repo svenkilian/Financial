@@ -195,10 +195,19 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'prediction'].gt(
         test_set_comparison.groupby('datadate')['prediction'].transform('median')).astype(int)
 
+    # JOB: Create cross-sectional ranking
+    test_set_comparison.loc[:, 'prediction_rank'] = test_set_comparison.groupby('datadate')['prediction'].rank(
+        method='first').astype('int8')
+    test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
+        pct=True)
+
     print(test_set_comparison.head(20))
 
-    accuracy = binary_accuracy(test_set_comparison['y_test'].values,
-                               test_set_comparison['norm_prediction'].values).numpy()
+    filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= 20) or (
+            test_set_comparison['prediction_rank'] >= 80)]
+
+    accuracy = binary_accuracy(filtered['y_test'].values,
+                               filtered['norm_prediction'].values).numpy()
 
     print(type(accuracy))
 
