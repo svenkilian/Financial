@@ -6,12 +6,15 @@ import numpy as np
 import datetime as dt
 from numpy import newaxis
 from tensorflow.keras import optimizers
+import tensorflow as tf
 
 
 from core.utils import Timer
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
+
+# tf.logging.set_verbosity(tf.logging.ERROR)
 
 
 class LSTMModel:

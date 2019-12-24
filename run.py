@@ -107,7 +107,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     # JOB: Iterate through individual stocks and generate training and test data
     for stock_id in unique_indices:
-        id_data = study_period_data.loc[stock_id].set_index('datadate').sort_index()
+        id_data = study_period_data.loc[stock_id].set_index('datadate')
         # print(stock_id)
 
         # JOB: Initialize DataLoader

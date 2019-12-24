@@ -7,6 +7,8 @@ import json
 import os
 import sys
 import time
+import warnings
+
 import wrds
 import re
 import math
@@ -26,6 +28,9 @@ pd.set_option('large_repr', 'truncate')
 pd.set_option('colheader_justify', 'left')
 pd.set_option('display.width', 800)
 pd.set_option('display.html.table_schema', False)
+
+pd.set_option('mode.chained_assignment', 'raise')
+warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 
 def get_data_table(db: wrds.Connection, sql_query=False, query_string='', library=None, table=None, columns=None,
@@ -189,7 +194,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         data.loc[:, 'return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
 
         # JOB: Calculate Daily Return
-        data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+        data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid']).get('return_index').apply(
             lambda x: x.pct_change(periods=1))
 
         # Reset index to date
@@ -355,22 +360,31 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     print('Std. daily return: %g' % std_daily_return)
 
     # JOB: Fill n/a values for trading volume
-    study_data.loc[:, 'cshtrd'] = study_data.loc[:, 'cshtrd'].fillna(value=0)
+    study_data.loc[:, 'cshtrd'].fillna(value=0)
 
     # JOB: Calculate standardized daily returns
-    study_data.loc[:, 'stand_d_return'] = (study_data.loc[:, 'daily_return'] - mean_daily_return) / std_daily_return
+    try:
+        study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
+    except pd.core.common.SettingWithCopyError as e:
+        pass
 
     # JOB: Create target
-    study_data.loc[:, 'above_cs_med'] = study_data.loc[:, 'daily_return'].gt(
-        study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
-    study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
+    try:
+        study_data.loc[:, 'above_cs_med'] = study_data['daily_return'].gt(
+            study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
+        study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
+    except pd.core.common.SettingWithCopyError as e:
+        pass
 
     # JOB: Create cross-sectional ranking
     # study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int8')
     # study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
 
     # JOB: Number of securities in cross-section
-    study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
+    try:
+        study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
+    except pd.core.common.SettingWithCopyError as e:
+        pass
 
     return study_data
 
