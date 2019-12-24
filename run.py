@@ -206,6 +206,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= 20) or (
             test_set_comparison['prediction_rank'] >= 80)]
 
+    print(filtered.head(20))
+
     accuracy = binary_accuracy(filtered['y_test'].values,
                                filtered['norm_prediction'].values).numpy()
 
