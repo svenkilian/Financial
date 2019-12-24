@@ -1,3 +1,5 @@
+from tensorflow_core.python.keras.callbacks import History
+
 GPU_ENABLED = True
 
 import os
@@ -8,11 +10,11 @@ from numpy import newaxis
 from tensorflow.keras import optimizers
 import tensorflow as tf
 
-
 from core.utils import Timer
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
+
 
 # tf.logging.set_verbosity(tf.logging.ERROR)
 
@@ -75,7 +77,22 @@ class LSTMModel:
         print('[Model] Model Compiled')
         timer.stop()
 
-    def train(self, x: np.array, y: np.array, epochs: int, batch_size: int, save_dir: str, configs: dict, verbose=1):
+    def train(self, x: np.array, y: np.array, epochs: int, batch_size: int, save_dir: str, configs: dict,
+              verbose=1):
+        """
+        Train model (in-memory)
+
+        :param x: Input data
+        :param y: Target data
+        :param epochs: Number of epochs
+        :param batch_size: Batch size
+        :param save_dir: Path to model directory
+        :param configs: Configuration dict
+        :param verbose: Verbosity
+
+        :return: Training history
+        """
+
         timer = Timer()
         timer.start()
         print('[Model] Training Started')
@@ -117,6 +134,17 @@ class LSTMModel:
         return history
 
     def train_generator(self, data_gen, epochs, batch_size, steps_per_epoch, save_dir):
+        """
+        Train model using generator
+
+        :param data_gen: Generator object
+        :param epochs: Number of epochs
+        :param batch_size: Batch size
+        :param steps_per_epoch: Steps per epoch
+        :param save_dir: Path to saving directory
+        :return:
+        """
+
         timer = Timer()
         timer.start()
         print('[Model] Training Started')
@@ -190,7 +218,15 @@ class LSTMModel:
         return predicted
 
 
-def get_optimizer(optimizer_name, parameters=None):
+def get_optimizer(optimizer_name: str, parameters: dict = None):
+    """
+    Retrieve keras optimizer for a given optimizer name
+
+    :param optimizer_name: Optimizer name
+    :param parameters: Parameters specifying optimizer options
+    :return: Parametrized keras optimizer
+    """
+
     try:
         optimizer = optimizers.get(optimizer_name).from_config(parameters)
 

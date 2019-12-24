@@ -201,13 +201,16 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
         pct=True)
 
-    cross_section_size = test_set_comparison.groupby('datadate').agg(['count'])
-    print(cross_section_size)
+    cross_section_size = round(test_set_comparison.groupby('datadate')['y_test'].count().mean())
+    print('Average size of cross sections: %d' % cross_section_size)
+    top_percentage = 0.05
+    # top_k = round(top_percentage * cross_section_size)
+    top_k = 5
 
-    filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= 20) | (
-            test_set_comparison['prediction_rank'] >= 80)]
+    filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
+            test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
 
-    print(filtered.head(10))
+    print(filtered.head(5))
 
     accuracy = binary_accuracy(filtered['y_test'].values,
                                filtered['norm_prediction'].values).numpy()
@@ -230,7 +233,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150095']
+    index_list = ['150940']
 
     for index_id in index_list:
         main(index_id=index_id, force_download=False, data_only=False)

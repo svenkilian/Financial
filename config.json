@@ -10,9 +10,9 @@
 		"normalize": true
 	},
 	"training": {
-		"epochs": 1,
+		"epochs": 100,
 		"batch_size": 16,
-		"early_stopping_patience": 2
+		"early_stopping_patience": 3
 	},
 	"model": {
 		"loss": "binary_crossentropy",
