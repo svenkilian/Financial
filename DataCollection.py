@@ -321,7 +321,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     """
 
     # Convert date columns to DatetimeIndex
-    full_data['datadate'] = pd.to_datetime(full_data['datadate'])
+    full_data.loc[:, 'datadate'] = pd.to_datetime(full_data['datadate'])
 
     # Get list of constituents for specified date
     full_data.set_index('datadate', inplace=True)
