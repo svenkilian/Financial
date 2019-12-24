@@ -186,10 +186,10 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         print('Number of individual dates: %d' % data.index.get_level_values('datadate').drop_duplicates().size)
 
         # JOB: Calculate Return Index Column
-        data['return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
+        data.loc[:, 'return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
 
         # JOB: Calculate Daily Return
-        data['daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+        data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
             lambda x: x.pct_change(periods=1))
 
         # Reset index to date
@@ -254,8 +254,8 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', folder_p
 
     # Convert date columns to datetime format
     for col in ['from', 'thru']:
-        const_data[col] = pd.to_datetime(const_data[col], format='%Y-%m-%d')
-        const_data[col] = const_data[col].dt.date
+        const_data.loc[:, col] = pd.to_datetime(const_data[col], format='%Y-%m-%d')
+        const_data.loc[:, col] = const_data[col].dt.date
 
     # Determine period starting date and relevant date range
     index_starting_date = const_data['from'].min()
