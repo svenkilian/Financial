@@ -77,15 +77,14 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
         return None
 
     # JOB: Specify study period interval
-    start_index = -2000
-    end_index = -1000
+    start_index = -3000
+    end_index = -2200
     period_range = (start_index, end_index)
 
     # Get study period data
     study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
                                               period_range=period_range,
                                               index_name=index_name, folder_path=folder_path)
-
 
     # Get all dates in study period
     full_date_range = study_period_data.index.unique()
@@ -145,6 +144,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
                 x_test = np.append(x_test, x_t, axis=0)
                 y_test = np.append(y_test, y_t, axis=0)
 
+        # Append to index
         test_data_index = test_data_index.append(data.data_test_index)
 
     # Data size conformity checks
@@ -157,9 +157,6 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     # JOB: Determine target label distribution in train and test sets
     print('Average target label (training): %g' % np.mean(y_train))
     print('Average target label (test): %g' % np.mean(y_test))
-
-    y_test_series = pd.Series(y_test.astype('int8').flatten(),
-                              index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
 
     # JOB: Build model
     model = LSTMModel()
@@ -176,8 +173,18 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     # JOB: Make point prediction
     predictions = model.predict_point_by_point(x_test)
-    predictions_series = pd.Series(predictions, index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
-    print(predictions_series[:50])
+
+    test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'predictions': predictions},
+                                       index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
+
+    study_period_data.index = study_period_data.index.tolist()
+    study_period_data.index.name = 'stock_id'
+    study_period_data.set_index('datadate', append=True, inplace=True)
+
+    test_set_comparison = test_set_comparison.merge(study_period_data, how='inner', left_index=True,
+                                                    right_on=['datadate', 'stock_id'])
+
+    print(test_set_comparison)
 
     # JOB: Plot training and validation metrics
     try:

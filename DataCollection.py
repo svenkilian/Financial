@@ -111,7 +111,7 @@ def list_tables(db, library, show_n_rows=False):
             print(table)
 
 
-def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date, folder_path: str) -> list:
+def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date, folder_path: str) -> pd.Index:
     """
     Return company name list of index constituents for given date
 
@@ -119,7 +119,7 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
     :param constituency_matrix: Constituency table providing constituency information
     :param date: Date for which to return constituency list
 
-    :return: List of company names for given date
+    :return: Index of company identifiers for given date
     """
 
     lookup_dict = pd.read_json(os.path.join(folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get('conm')
@@ -328,6 +328,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     unique_dates = full_data.index.drop_duplicates()
     constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]],
                                                  folder_path=folder_path)
+
     full_data.reset_index(inplace=True)
 
     print('Retrieving index constituency for %s as of %s' % (index_name, unique_dates[period_range[1]]))
