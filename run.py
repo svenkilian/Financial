@@ -139,10 +139,10 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
             y_train = y
             y_test = y_t
         else:
-            if len(x) > 0:
+            if x is not None:
                 x_train = np.append(x_train, x, axis=0)
                 y_train = np.append(y_train, y, axis=0)
-            if len(x_t) > 0:
+            if x_t is not None:
                 x_test = np.append(x_test, x_t, axis=0)
                 y_test = np.append(y_test, y_t, axis=0)
 
@@ -215,7 +215,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150095']
+    index_list = ['150919']
 
     for index_id in index_list:
         main(index_id=index_id, force_download=False, data_only=False)

@@ -79,6 +79,9 @@ class DataLoader:
         :return:
         """
 
+        x = None
+        y = None
+
         data_windows = []
         for i in range(self.len_test - seq_len + 1):
             data_windows.append(self.data_test[i:i + seq_len])
@@ -86,8 +89,10 @@ class DataLoader:
         data_windows = np.array(data_windows).astype(float)
         data_windows = self.normalize_windows(data_windows, single_window=False) if normalize else data_windows
 
-        x = data_windows[:, :-1, 1:]
-        y = data_windows[:, -1, [0]]
+        # print(data_windows)
+        if len(data_windows) > 0:
+            x = data_windows[:, :-1, 1:]
+            y = data_windows[:, -1, [0]]
 
         # print('Test data length: %s' % len(x))
         # print()

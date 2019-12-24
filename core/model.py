@@ -66,9 +66,8 @@ class LSTMModel:
                            configs['model']['optimizer_params']),
                            metrics=configs['model']['metrics'])
 
-        print(self.model.optimizer.get_config())
-
-        self.model.summary()
+        # print(self.model.optimizer.get_config())
+        # self.model.summary()
         print()
         print('[Model] Model Compiled')
         timer.stop()
