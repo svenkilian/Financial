@@ -139,15 +139,15 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
             y_train = y
             y_test = y_t
         else:
-            if x is not None:
+            if len(x) > 0:
                 x_train = np.append(x_train, x, axis=0)
                 y_train = np.append(y_train, y, axis=0)
             if x_t is not None:
                 x_test = np.append(x_test, x_t, axis=0)
                 y_test = np.append(y_test, y_t, axis=0)
 
-        # Append to index
-        test_data_index = test_data_index.append(data.data_test_index)
+                # Append to index
+                test_data_index = test_data_index.append(data.data_test_index)
 
     # Data size conformity checks
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
