@@ -9,6 +9,7 @@ import json
 import sys
 import numpy as np
 import pandas as pd
+import tensorflow
 
 from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
@@ -184,7 +185,16 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     test_set_comparison = test_set_comparison.merge(study_period_data, how='inner', left_index=True,
                                                     right_on=['datadate', 'stock_id'])
 
+    # JOB: Create normalized predictions
+    test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'predictions'].gt(
+        test_set_comparison.groupby('datadate')['predictions'].transform('median')).astype(int)
+
     print(test_set_comparison)
+
+    accuracy = tensorflow.keras.metrics.binary_accuracy(test_set_comparison['y_test'],
+                                                        test_set_comparison['norm_prediction'])
+
+    print('Accuracy: %g' % round(accuracy, 4))
 
     # JOB: Plot training and validation metrics
     try:
