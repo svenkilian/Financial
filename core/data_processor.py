@@ -8,15 +8,17 @@ class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
 
     def __init__(self, data: pd.DataFrame, split: float = 0.75, cols: list = list, from_csv=False, seq_len=None,
-                 full_date_range=None, stock_id: pd.MultiIndex = None):
+                 full_date_range=None, stock_id: tuple = None):
         """
         Constructor for DataLoader class
+        :param stock_id: Stock identifier tuple
         :param data: DataFrame containing study period data
         :param split: Split value between 0 and 1 determining train/test split
         :param cols: Columns to use for the model
         :param from_csv: Load data from .csv file
         """
 
+        self.stock_id = stock_id
         # Load data either from csv or pre-loaded DataFrame
         if from_csv:
             dataframe = pd.read_csv(data)
@@ -93,6 +95,10 @@ class DataLoader:
         if len(data_windows) > 0:
             x = data_windows[:, :-1, 1:]
             y = data_windows[:, -1, [0]]
+        else:
+            print(self.stock_id)
+            print(self.len_test)
+            print(self.len_train)
 
         # print('Test data length: %s' % len(x))
         # print()
