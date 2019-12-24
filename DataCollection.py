@@ -366,8 +366,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
 
     # JOB: Create cross-sectional ranking
-    study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int8')
-    study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
+    # study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int8')
+    # study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
 
     # JOB: Number of securities in cross-section
     study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()

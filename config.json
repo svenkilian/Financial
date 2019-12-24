@@ -12,11 +12,11 @@
 	"training": {
 		"epochs": 10,
 		"batch_size": 16,
-		"early_stopping_patience": 3
+		"early_stopping_patience": 4
 	},
 	"model": {
 		"loss": "binary_crossentropy",
-		"optimizer": "adam",
+		"optimizer": "rmsprop",
 		"optimizer_params": {
 
 		},

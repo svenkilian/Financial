@@ -79,8 +79,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
         return None
 
     # JOB: Specify study period interval
-    start_index = -3000
-    end_index = -2200
+    start_index = -2000
+    end_index = -1200
     period_range = (start_index, end_index)
 
     # Get study period data
