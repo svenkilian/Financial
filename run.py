@@ -91,7 +91,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     # Set MultiIndex to stock identifier and select relevant columns
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])[
-        ['datadate', 'above_cs_med', 'stand_d_return', 'cshtrd']]
+        ['datadate', 'above_cs_med', 'stand_d_return']]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()

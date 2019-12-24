@@ -27,7 +27,7 @@
 				"type": "lstm",
 				"neurons": 25,
 				"input_timesteps": 240,
-				"input_dim": 2,
+				"input_dim": 1,
 				"dropout": 0.1,
 				"return_seq": false
 			},
