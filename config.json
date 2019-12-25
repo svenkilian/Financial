@@ -10,9 +10,9 @@
 		"normalize": true
 	},
 	"training": {
-		"epochs": 10,
+		"epochs": 1000,
 		"batch_size": 16,
-		"early_stopping_patience": 3
+		"early_stopping_patience": 5
 	},
 	"model": {
 		"loss": "binary_crossentropy",
@@ -25,10 +25,10 @@
 		"layers": [
 			{
 				"type": "lstm",
-				"neurons": 25,
+				"neurons": 30,
 				"input_timesteps": 240,
 				"input_dim": 1,
-				"dropout": 0.1,
+				"dropout": 0.2,
 				"return_seq": false
 			},
 			{

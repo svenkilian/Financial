@@ -233,8 +233,6 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     top_k_accuracies = pd.DataFrame({'Accuracy': []})
 
     for top_k in top_k_list:
-        print('k = %d' % top_k)
-
         # JOB: Filter test data by top/bottom k affiliation
         filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
                 test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
@@ -275,11 +273,11 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150095']
+    index_list = ['150919']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-7000,
-             end_index=-5999)
+        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-5000,
+             end_index=-3999)
 
     """
     # Out-of memory generative training

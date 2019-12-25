@@ -4,6 +4,8 @@ import pandas as pd
 from typing import List, Tuple
 from colorama import Fore, Back, Style
 
+from utils import pretty_print
+
 
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
@@ -25,6 +27,9 @@ class DataLoader:
             dataframe = pd.read_csv(data)
         else:
             dataframe = data
+
+        # JOB: Filter out n/a observations
+        dataframe = dataframe[dataframe.get(cols).notna().all(axis=1)]
 
         i_split = int(len(full_date_range) * split)  # Determine split index
         split_date = full_date_range[i_split]
@@ -122,7 +127,8 @@ class DataLoader:
             # print(self.len_train)
             x = np.array([])
             y = np.array([])
-            print(f'{Fore.BLUE}{Back.YELLOW}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
+            print(
+                f'{Fore.BLUE}{Back.YELLOW}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
 
         # print('Test data length: %s' % len(x))
         # print()

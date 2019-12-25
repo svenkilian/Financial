@@ -18,6 +18,8 @@ import numpy as np
 from colorama import Fore, Back, Style
 
 # Configurations for displaying DataFrames
+from utils import pretty_print
+
 pd.set_option('precision', 4)
 pd.set_option('display.max_rows', 2000)
 pd.set_option('display.max_columns', 15)
@@ -343,6 +345,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     try:
         constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]],
                                                      folder_path=folder_path)
+        # TODO: Change census date to month
     except IndexError as ie:
         print(
             f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Period index out of bounds. Choose different study period bounds.{Style.RESET_ALL}')

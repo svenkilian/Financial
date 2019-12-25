@@ -73,8 +73,8 @@ class LSTMModel:
                            configs['model']['optimizer_params']),
                            metrics=configs['model']['metrics'])
 
-        # print(self.model.optimizer.get_config())
-        # self.model.summary()
+        print(f'Optimizer configuration: {self.model.optimizer.get_config()}')
+        self.model.summary()
         print()
         print('[Model] Model Compiled')
         timer.stop()
@@ -105,8 +105,8 @@ class LSTMModel:
                                                                   dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
                                                                   str(epochs), str(batch_size)))
         callbacks = [
-            EarlyStopping(monitor='val_loss', patience=early_stopping_patience, restore_best_weights=True),
-            ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True)]
+            EarlyStopping(monitor='val_accuracy', patience=early_stopping_patience, restore_best_weights=True, verbose=1),
+            ModelCheckpoint(filepath=save_fname, monitor='val_accuracy', save_best_only=True, verbose=1)]
 
         if GPU_ENABLED:
             callbacks.append(
