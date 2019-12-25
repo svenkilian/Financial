@@ -1,5 +1,3 @@
-from tensorflow_core.python.keras.callbacks import History
-
 GPU_ENABLED = True
 
 import os

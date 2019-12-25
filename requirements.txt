@@ -1,3 +1,4 @@
+colorama
 wrds
 tabulate
 matplotlib

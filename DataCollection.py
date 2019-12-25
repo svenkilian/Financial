@@ -15,6 +15,7 @@ import math
 import pandas as pd
 import datetime
 import numpy as np
+from colorama import Fore, Back, Style
 
 # Configurations for displaying DataFrames
 pd.set_option('precision', 4)
@@ -331,8 +332,15 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # Get list of constituents for specified date
     full_data.set_index('datadate', inplace=True)
     unique_dates = full_data.index.drop_duplicates()
-    constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]],
-                                                 folder_path=folder_path)
+    try:
+        constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]],
+                                                     folder_path=folder_path)
+    except IndexError as ie:
+        print(
+            f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Period index out of bounds. Choose different study period bounds.{Style.RESET_ALL}')
+        print(', '.join(ie.args))
+        print('Terminating program.')
+        sys.exit(1)
 
     full_data.reset_index(inplace=True)
 
@@ -347,7 +355,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 
     # Select data from study period
     print(
-        'Retrieving data from %s to %s \n' % (unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
+        'Retrieving data from %s to %s \n' % (
+            unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
     # JOB: Add standardized daily returns

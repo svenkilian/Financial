@@ -2,6 +2,7 @@ import math
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
+from colorama import Fore, Back, Style
 
 
 class DataLoader:
@@ -28,21 +29,36 @@ class DataLoader:
         i_split = int(len(full_date_range) * split)  # Determine split index
         split_date = full_date_range[i_split]
         # print('Split index: %d' % i_split)
-        # print('Split date: %s' % split_date)
-        # print('Total length: %d' % data.shape[0])
-        self.data_train = dataframe.get(cols).loc[:split_date].values  # Get training array
-        # TODO: Handle error of non-existent data access
-        self.data_test = dataframe.get(cols).loc[full_date_range[i_split - seq_len + 2]:].values  # Get test array
-        # TODO: ----------------------------------------
+        # print('Original split date: %s' % split_date.date())
+        if split_date.date() in dataframe.index:
+            pass
+            # print('Split date in index')
+        else:
+            i = i_split
+            while split_date.date() not in dataframe.index:
+                print('Going back one day.')
+                i -= 1
+                split_date = full_date_range[i]
+            print(f'Nearest available date in index: {full_date_range[i]}')
+            i_split = i
+
+        self.data_train = dataframe.loc[:split_date, cols].values  # Get training array
+        # print(f'Total available data points: {len(dataframe)}')
+
+        self.data_test = dataframe.get(cols).iloc[
+                         dataframe.index.get_loc(full_date_range[
+                                                     i_split]) - seq_len + 2:].values  # Get test array
+
         self.data_test_index = pd.MultiIndex.from_product(
-            [dataframe.loc[full_date_range[i_split + 1]:].index, [stock_id]])
+            [dataframe.loc[full_date_range[i_split + 1]:, cols].index, [stock_id]])
+
         self.len_train = len(self.data_train)  # Length of training data
         self.len_test = len(self.data_test)  # Length of test data
         self.len_train_windows = None
 
         # print('Length of index: %d' % len(self.data_test_index))
         # print('Split index: %s' % i_split)
-        # print('Number of data points: %d' % len(dataframe))
+        # print('Number of data points: %d' % len(dataframe.get(cols)))
         # print('Number of training data: %d' % self.len_train)
         # print('Number of test data: %d' % self.len_test)
 
@@ -86,7 +102,10 @@ class DataLoader:
 
         data_windows = []
         for i in range(self.len_test - seq_len + 1):
+            # print(f'Iteration: {i + 1}')
             data_windows.append(self.data_test[i:i + seq_len])
+            # print(f'Window length: {len(self.data_test[i:i + seq_len])}')
+            # print(f'Last index: {i + seq_len}')
 
         data_windows = np.array(data_windows).astype(float)
         data_windows = self.normalize_windows(data_windows, single_window=False) if normalize else data_windows
@@ -101,6 +120,7 @@ class DataLoader:
             # print(self.len_train)
             x = np.array([])
             y = np.array([])
+            print(f'{Fore.BLUE}{Back.YELLOW}{Style.BRIGHT}Non-positive length.{Style.RESET_ALL}')
 
         # print('Test data length: %s' % len(x))
         # print()

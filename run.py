@@ -19,6 +19,7 @@ from DataCollection import generate_study_period, retrieve_index_history, create
 from core.data_processor import DataLoader
 from core.model import LSTMModel
 from utils import plot_results, plot_train_val, get_most_recent_file
+from colorama import Fore, Back, Style
 
 
 def main(index_id='150095', force_download=False, data_only=False, last_n=None, load_last: bool = False):
@@ -72,7 +73,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
                                        folder_path=folder_path, generate_dict=True)
     print('Successfully loaded index history.\n')
 
-    # Query number of dates in full data set
+    # JOB: Query number of dates in full data set
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
 
     if data_only:
@@ -82,8 +83,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
         return None
 
     # JOB: Specify study period interval
-    start_index = -6800
-    end_index = -5800
+    start_index = -4000
+    end_index = -3000
     period_range = (start_index, end_index)
 
     # Get study period data
@@ -93,6 +94,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
     # Get all dates in study period
     full_date_range = study_period_data.index.unique()
+    print(f'Study period length: {len(full_date_range)}')
 
     # Set MultiIndex to stock identifier and select relevant columns
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])[
@@ -152,15 +154,25 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
                 x_test = np.append(x_test, x_t, axis=0)
                 y_test = np.append(y_test, y_t, axis=0)
 
+            if len(y_t) != len(data.data_test_index):
+                print(f'{Fore.RED}{Back.YELLOW}Lengths do not conform!{Style.RESET_ALL}')
+
             # Append to index
             test_data_index = test_data_index.append(data.data_test_index)
+
+        # print('Length of test labels: %d' % len(y_test))
+        # print('Length of test index: %d\n' % len(test_data_index))
+
+        if len(y_test) != len(test_data_index):
+            raise Exception('Data length is not conforming.')
 
     # Data size conformity checks
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
     print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
     print('Checking for test data index conformity: %s \n' % (len(y_test) == len(test_data_index)))
     if len(y_test) != len(test_data_index):
-        raise Exception('Test data index length is inconsistent.')
+        # raise Exception('Test data index length is inconsistent.')
+        print(f'{Fore.RED}{Back.YELLOW}Lengths do not conform!{Style.RESET_ALL}')
 
     if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
         raise AssertionError('Data length does not conform.')
@@ -246,10 +258,10 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     try:
         plot_train_val(history, configs['model']['metrics'])
     except AttributeError as ae:
-        print('Plotting failed.')
+        print(f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Plotting failed.{Style.RESET_ALL}')
         # print(ae)
     except UnboundLocalError as ule:
-        print('Plotting failed. History has not been created.')
+        print(f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Plotting failed. History has not been created.{Style.RESET_ALL}')
         # print(ule)
 
     # # JOB: Evaluate model on test data
@@ -262,7 +274,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150919']
+    index_list = ['150095']
 
     for index_id in index_list:
         main(index_id=index_id, force_download=False, data_only=False, load_last=False)
