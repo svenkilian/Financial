@@ -24,8 +24,12 @@ class LSTMModel:
     LSTM model class
     """
 
-    def __init__(self):
+    def __init__(self, index_name=None):
         self.model = Sequential()  # Initialize Keras sequential model
+        if index_name:
+            self.index_name = index_name
+        else:
+            self.index_name = ''
 
     def __repr__(self):
         return str(self.model.summary())
@@ -99,8 +103,9 @@ class LSTMModel:
         print('[Model] %s epochs, %s batch size' % (epochs, batch_size))
         early_stopping_patience = configs['training']['early_stopping_patience']
 
-        save_fname = os.path.join(save_dir, '%s-e%s-b%s.h5' % (
-            dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs), str(batch_size)))
+        save_fname = os.path.join(save_dir, '%s-%s-e%s-b%s.h5' % (self.index_name,
+                                                                  dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
+                                                                  str(epochs), str(batch_size)))
         callbacks = [
             EarlyStopping(monitor='val_loss', patience=early_stopping_patience, restore_best_weights=True),
             ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True)]

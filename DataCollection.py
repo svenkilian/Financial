@@ -17,7 +17,7 @@ import datetime
 import numpy as np
 
 # Configurations for displaying DataFrames
-pd.set_option('precision', 3)
+pd.set_option('precision', 4)
 pd.set_option('display.max_rows', 2000)
 pd.set_option('display.max_columns', 15)
 pd.set_option('max_colwidth', 25)
@@ -336,7 +336,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 
     full_data.reset_index(inplace=True)
 
-    print('Retrieving index constituency for %s as of %s' % (index_name, unique_dates[period_range[1]]))
+    print('Retrieving index constituency for %s as of %s' % (index_name, unique_dates[period_range[1]].date()))
 
     # Select relevant data
     full_data = full_data.set_index(['gvkey', 'iid'])
@@ -346,10 +346,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     full_data.sort_index(inplace=True)
 
     # Select data from study period
-    print(unique_dates[period_range[0]])
-    print(unique_dates[period_range[1]])
     print(
-        'Retrieving data from %s to %s' % (unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
+        'Retrieving data from %s to %s \n' % (unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
     # JOB: Add standardized daily returns
@@ -357,7 +355,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
                         'daily_return'].mean()
     std_daily_return = study_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]], 'daily_return'].std()
     print('Mean daily return: %g' % mean_daily_return)
-    print('Std. daily return: %g' % std_daily_return)
+    print('Std. daily return: %g \n' % std_daily_return)
 
     # JOB: Fill n/a values for trading volume
     study_data.loc[:, 'cshtrd'].fillna(value=0)

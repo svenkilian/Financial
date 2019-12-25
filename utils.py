@@ -10,6 +10,8 @@ import matplotlib.dates as mdates
 import pandas as pd
 from matplotlib import ticker
 from pandas.plotting import register_matplotlib_converters
+import glob
+import os
 
 # Update matplotlib setting
 plt.rcParams.update({'legend.fontsize': 8,
@@ -163,3 +165,13 @@ def plot_results_multiple(predicted_data, true_data, prediction_len):
         plt.plot(padding + data, label='Prediction')
         plt.legend()
     plt.show()
+
+
+def get_most_recent_file(directory: str) -> str:
+    all_files = glob.glob(directory + '/*')
+    most_recent_file = max(all_files, key=os.path.getctime)
+
+    # print(all_files)
+    # print(most_recent_file)
+
+    return most_recent_file

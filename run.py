@@ -1,3 +1,5 @@
+from matplotlib.pyplot import plot
+
 __author__ = "Sven Köpke"
 __copyright__ = "Sven Köpke 2019"
 __version__ = "0.0.1"
@@ -9,16 +11,17 @@ import json
 import sys
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from tensorflow.keras.metrics import binary_accuracy
 
 from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
 from core.model import LSTMModel
-from utils import plot_results, plot_train_val
+from utils import plot_results, plot_train_val, get_most_recent_file
 
 
-def main(index_id='150095', force_download=False, data_only=False, last_n=None):
+def main(index_id='150095', force_download=False, data_only=False, last_n=None, load_last: bool = False):
     """
     Run data preparation and model training
 
@@ -30,15 +33,15 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     index_name = gvkeyx_lookup_dict.get(index_id)
     folder_path = os.path.join('data', index_name.lower().replace(' ', '_'))
 
-    # Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
+    # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
 
     if os.path.exists(folder_path):
         if not force_download:
             load_from_file = True
-            print('Loading data from %s from folder: %s' % (index_name, folder_path))
+            print('Loading data from %s from folder: %s \n' % (index_name, folder_path))
         else:
             load_from_file = False
-            print('Downloading data from %s into existing folder: %s' % (index_name, folder_path))
+            print('Downloading data from %s into existing folder: %s \n' % (index_name, folder_path))
     else:
         print('Creating folder for %s: %s' % (index_name, folder_path))
         os.mkdir(folder_path)
@@ -61,13 +64,13 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     # JOB: Load constituency matrix
     constituency_matrix = pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
                                       parse_dates=True)
-    print('Successfully loaded constituency matrix.')
+    print('Successfully loaded constituency matrix.\n')
 
     # JOB: Load full data
     print('Retrieving full index history ...')
     full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
                                        folder_path=folder_path, generate_dict=True)
-    print('Successfully loaded index history.')
+    print('Successfully loaded index history.\n')
 
     # Query number of dates in full data set
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
@@ -155,30 +158,34 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
     # Data size conformity checks
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
     print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
-    print('Test data length: %d' % len(y_test))
-    print('Test data index length: %d' % len(test_data_index))
+    print('Checking for test data index conformity: %s \n' % (len(y_test) == len(test_data_index)))
 
     if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
         raise AssertionError('Data length does not conform.')
 
     # JOB: Determine target label distribution in train and test sets
     print('Average target label (training): %g' % np.mean(y_train))
-    print('Average target label (test): %g' % np.mean(y_test))
+    print('Average target label (test): %g \n' % np.mean(y_test))
 
-    # JOB: Build model
-    model = LSTMModel()
-    model.build_model(configs)
+    if load_last:
+        model = LSTMModel()
+        model.load_model(get_most_recent_file('saved_models'))
 
-    # JOB: In-memory training
-    history = model.train(
-        x_train,
-        y_train,
-        epochs=configs['training']['epochs'],
-        batch_size=configs['training']['batch_size'],
-        save_dir=configs['model']['save_dir'], configs=configs, verbose=2
-    )
+    else:
+        # JOB: Build model
+        model = LSTMModel(index_name.lower().replace(' ', '_'))
+        model.build_model(configs)
 
-    # JOB: Make point prediction
+        # JOB: In-memory training
+        history = model.train(
+            x_train,
+            y_train,
+            epochs=configs['training']['epochs'],
+            batch_size=configs['training']['batch_size'],
+            save_dir=configs['model']['save_dir'], configs=configs, verbose=2
+        )
+
+    # JOB: Make point prediction and join with target values
     predictions = model.predict_point_by_point(x_test)
 
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
@@ -203,40 +210,60 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None):
 
     cross_section_size = round(test_set_comparison.groupby('datadate')['y_test'].count().mean())
     print('Average size of cross sections: %d' % cross_section_size)
-    top_percentage = 0.05
+    top_percentage = 0.1
     # top_k = round(top_percentage * cross_section_size)
-    top_k = 5
 
-    filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
-            test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
+    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
 
-    print(filtered.head(5))
+    df = pd.DataFrame({'Accuracy': []})
 
-    accuracy = binary_accuracy(filtered['y_test'].values,
-                               filtered['norm_prediction'].values).numpy()
+    for top_k in top_k_list:
+        print('k = %d' % top_k)
 
-    print('Accuracy: %g' % round(accuracy, 4))
+        # JOB: Filter test data by top/bottom k affiliation
+        filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
+                test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
+
+        # print(filtered.sample(10))
+        # print()
+
+        # JOB: Calculate accuracy score
+        accuracy = binary_accuracy(filtered['y_test'].values,
+                                   filtered['norm_prediction'].values).numpy()
+
+        print('Top-%d Accuracy: %g\n' % (top_k, round(accuracy, 4)))
+
+        df.loc[top_k] = accuracy
+
+    df.index.name = 'k'
+    print(df)
+    df.plot(kind='line', legend=True, fontsize=14)
+    plt.show()
 
     # JOB: Plot training and validation metrics
     try:
         plot_train_val(history, configs['model']['metrics'])
     except AttributeError as ae:
         print('Plotting failed.')
-        print(ae)
+        # print(ae)
+    except UnboundLocalError as ule:
+        print('Plotting failed. History has not been created.')
+        # print(ule)
 
-    # JOB: Evaluate model on test data
-    test_scores = model.model.evaluate(x_test, y_test, verbose=2)
-
-    # JOB: Print test scores
-    print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
+    # # JOB: Evaluate model on test data
+    # test_scores = model.model.evaluate(x_test, y_test, verbose=2)
+    #
+    # # JOB: Print test scores
+    # print('\nTest scores:')
+    # print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150940']
+    index_list = ['150927']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=False, data_only=False)
+        main(index_id=index_id, force_download=False, data_only=False, load_last=True)
 
     """
     # Out-of memory generative training
