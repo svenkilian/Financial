@@ -34,11 +34,13 @@ class DataLoader:
             pass
             # print('Split date in index')
         else:
+            print(f'Original date ({split_date.date()}) not in index.')
             i = i_split
             while split_date.date() not in dataframe.index:
                 print('Going back one day.')
                 i -= 1
                 split_date = full_date_range[i]
+                print(f'New split date: {split_date.date()}')
             print(f'Nearest available date in index: {full_date_range[i]}')
             i_split = i
 
@@ -120,7 +122,7 @@ class DataLoader:
             # print(self.len_train)
             x = np.array([])
             y = np.array([])
-            print(f'{Fore.BLUE}{Back.YELLOW}{Style.BRIGHT}Non-positive length.{Style.RESET_ALL}')
+            print(f'{Fore.BLUE}{Back.YELLOW}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
 
         # print('Test data length: %s' % len(x))
         # print()

@@ -329,9 +329,17 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # Convert date columns to DatetimeIndex
     full_data.loc[:, 'datadate'] = pd.to_datetime(full_data['datadate'])
 
-    # Get list of constituents for specified date
+    # Set index to date column
     full_data.set_index('datadate', inplace=True)
+
+    # Get unique dates
     unique_dates = full_data.index.drop_duplicates()
+
+    # Detect potential out-of-bounds indices
+    if abs(period_range[0]) > len(unique_dates) or abs(period_range[1] > len(unique_dates)):
+        print(f'Index length is {len(unique_dates)}. Study period range ist {period_range}.')
+        raise IndexError('Period index out of bounds.')
+
     try:
         constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]],
                                                      folder_path=folder_path)

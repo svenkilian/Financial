@@ -227,7 +227,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     top_percentage = 0.1
     # top_k = round(top_percentage * cross_section_size)
 
-    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
+    # top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
+    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15]
 
     top_k_accuracies = pd.DataFrame({'Accuracy': []})
 
@@ -274,10 +275,11 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150928']
+    index_list = ['150095']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=False, data_only=False, load_last=False)
+        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-7000,
+             end_index=-5999)
 
     """
     # Out-of memory generative training
