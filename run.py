@@ -23,12 +23,13 @@ from colorama import Fore, Back, Style
 
 
 def main(index_id='150095', force_download=False, data_only=False, last_n=None, load_last: bool = False,
-         start_index=-1001, end_index=-1):
+         start_index: int = -1001, end_index: int = -1) -> None:
     """
     Run data preparation and model training
 
-    :return:
-    :rtype:
+    :param start_index: Index of period start date
+    :param end_index: Index of period end date
+    :return: None
     """
 
     gvkeyx_lookup_dict = json.load(open(os.path.join('data', 'gvkeyx_name_dict.json'), 'r'))
@@ -84,8 +85,6 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
         return None
 
     # JOB: Specify study period interval
-    start_index = -4000
-    end_index = -3000
     period_range = (start_index, end_index)
 
     # Get study period data
