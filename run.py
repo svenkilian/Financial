@@ -82,8 +82,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
         return None
 
     # JOB: Specify study period interval
-    start_index = -3000
-    end_index = -2000
+    start_index = -6800
+    end_index = -5800
     period_range = (start_index, end_index)
 
     # Get study period data
@@ -159,6 +159,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
     print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
     print('Checking for test data index conformity: %s \n' % (len(y_test) == len(test_data_index)))
+    if len(y_test) != len(test_data_index):
+        raise Exception('Test data index length is inconsistent.')
 
     if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
         raise AssertionError('Data length does not conform.')
@@ -260,10 +262,10 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150927']
+    index_list = ['150919']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=False, data_only=False, load_last=True)
+        main(index_id=index_id, force_download=False, data_only=False, load_last=False)
 
     """
     # Out-of memory generative training
