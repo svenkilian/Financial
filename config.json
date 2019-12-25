@@ -10,8 +10,8 @@
 		"normalize": true
 	},
 	"training": {
-		"epochs": 10,
-		"batch_size": 32,
+		"epochs": 20,
+		"batch_size": 16,
 		"early_stopping_patience": 3
 	},
 	"model": {

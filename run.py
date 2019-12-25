@@ -22,7 +22,8 @@ from utils import plot_results, plot_train_val, get_most_recent_file
 from colorama import Fore, Back, Style
 
 
-def main(index_id='150095', force_download=False, data_only=False, last_n=None, load_last: bool = False):
+def main(index_id='150095', force_download=False, data_only=False, last_n=None, load_last: bool = False,
+         start_index=-1001, end_index=-1):
     """
     Run data preparation and model training
 
@@ -229,7 +230,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
     top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
 
-    df = pd.DataFrame({'Accuracy': []})
+    top_k_accuracies = pd.DataFrame({'Accuracy': []})
 
     for top_k in top_k_list:
         print('k = %d' % top_k)
@@ -245,13 +246,13 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
         accuracy = binary_accuracy(filtered['y_test'].values,
                                    filtered['norm_prediction'].values).numpy()
 
-        print('Top-%d Accuracy: %g\n' % (top_k, round(accuracy, 4)))
+        # print('Top-%d Accuracy: %g\n' % (top_k, round(accuracy, 4)))
 
-        df.loc[top_k] = accuracy
+        top_k_accuracies.loc[top_k] = accuracy
 
-    df.index.name = 'k'
-    print(df)
-    df.plot(kind='line', legend=True, fontsize=14)
+    top_k_accuracies.index.name = 'k'
+    print(top_k_accuracies)
+    top_k_accuracies.plot(kind='line', legend=True, fontsize=14)
     plt.show()
 
     # JOB: Plot training and validation metrics
@@ -274,7 +275,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150095']
+    index_list = ['150928']
 
     for index_id in index_list:
         main(index_id=index_id, force_download=False, data_only=False, load_last=False)
