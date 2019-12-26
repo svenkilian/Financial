@@ -86,8 +86,8 @@ def get_data_table(db: wrds.Connection, sql_query=False, query_string='', librar
         # In case only n_recent dates are queried
 
         # Create array of last n date indices (deduplicated)
-        last_n_indices = data_table.set_index(keys='datadate').index.to_frame().iloc[:, 0].sort_values(
-            ascending=True).drop_duplicates().values[
+        last_n_indices = data_table.set_index(keys='datadate').index.drop_duplicates().sort_values(
+            ascending=True).values[
                          -n_recent:]
 
         data_table.set_index(keys='datadate', inplace=True)

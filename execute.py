@@ -27,6 +27,11 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     """
     Run data preparation and model training
 
+    :param load_last: Flag indicating whether to load last model weights from storage
+    :param index_id: Index identifier
+    :param last_n: Flag indicating the number of days to consider; *None* in case whole data history is considered
+    :param data_only: Flag indicating whether to download data only without training the model
+    :param force_download: Flag indicating whether to overwrite data if index data folder already exists
     :param start_index: Index of period start date
     :param end_index: Index of period end date
     :return: None
@@ -193,12 +198,13 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     print('Average target label (training): %g' % np.mean(y_train))
     print('Average target label (test): %g \n' % np.mean(y_test))
 
+    # JOB: Load model from storage
     if load_last:
         model = LSTMModel()
         model.load_model(get_most_recent_file('saved_models'))
 
+    # JOB: Build model from configs
     else:
-        # JOB: Build model
         model = LSTMModel(index_name.lower().replace(' ', '_'))
         model.build_model(configs)
 
