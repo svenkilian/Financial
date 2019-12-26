@@ -176,7 +176,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
         # print('Length of test index: %d\n' % len(test_data_index))
 
         if len(y_test) != len(test_data_index):
-            raise Exception('Data length is not conforming.')
+            raise AssertionError('Data length is not conforming.')
 
     # Data size conformity checks
     print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
