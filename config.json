@@ -12,7 +12,7 @@
 	"training": {
 		"epochs": 1000,
 		"batch_size": 16,
-		"early_stopping_patience": 5
+		"early_stopping_patience": 4
 	},
 	"model": {
 		"loss": "binary_crossentropy",
@@ -28,7 +28,7 @@
 				"neurons": 30,
 				"input_timesteps": 240,
 				"input_dim": 1,
-				"dropout": 0.2,
+				"dropout": 0.1,
 				"return_seq": false
 			},
 			{

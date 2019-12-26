@@ -197,7 +197,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         data.loc[:, 'return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
 
         # JOB: Calculate Daily Return
-        data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid']).get('return_index').apply(
+        data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
             lambda x: x.pct_change(periods=1))
 
         # Reset index to date
@@ -215,10 +215,12 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
     return data
 
 
-def create_constituency_matrix(load_from_file=False, index_id='150095', folder_path: str = None) -> None:
+def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_table='comp.g_idxcst_his',
+                               folder_path: str = None) -> None:
     """
     Generate constituency matrix for stock market index components
 
+    :param lookup_table: Table to use for constituency lookup
     :param folder_path: Path to data folder
     :param index_id: Index to create constituency matrix for
     :param load_from_file: Flag indicating whether to load constituency information from file
@@ -242,11 +244,20 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', folder_p
         print('Opening DB connection ...')
         db = wrds.Connection(wrds_username='afecker')
         print('Done')
-        const_data = get_data_table(db, sql_query=True,
-                                    query_string="select * "
-                                                 "from comp.g_idxcst_his "
-                                                 "where gvkeyx in %(index_id)s ",
-                                    index_col=['gvkey', 'iid'], table_info=1, params=parameters)
+        if lookup_table == 'comp.g_idxcst_his':
+            print(f'Retrieving index history from {lookup_table} ...')
+            const_data = get_data_table(db, sql_query=True,
+                                        query_string="select * "
+                                                     "from comp.g_idxcst_his "
+                                                     "where gvkeyx in %(index_id)s ",
+                                        index_col=['gvkey', 'iid'], table_info=1, params=parameters)
+        elif lookup_table == 'comp.idxcst_his':
+            print(f'Retrieving index history from {lookup_table} ...')
+            const_data = get_data_table(db, sql_query=True,
+                                        query_string="select * "
+                                                     "from comp.idxcst_his "
+                                                     "where gvkeyx in %(index_id)s ",
+                                        index_col=['gvkey', 'iid'], table_info=1, params=parameters)
 
         # Save to file
         const_data.to_csv(os.path.join(folder, 'data_constituents.csv'))

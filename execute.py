@@ -34,6 +34,17 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
     gvkeyx_lookup_dict = json.load(open(os.path.join('data', 'gvkeyx_name_dict.json'), 'r'))
     index_name = gvkeyx_lookup_dict.get(index_id)
+    lookup_table = 'comp.g_idxcst_his'
+    if index_name is None:
+        print('Index identifier not in global dictionary.')
+        print('Trying lookup in North American dictionary ...')
+        gvkeyx_lookup_dict = json.load(open(os.path.join('data', 'gvkeyx_name_dict_na.json'), 'r'))
+        index_name = gvkeyx_lookup_dict.get(index_id)
+        lookup_table = 'comp.idxcst_his'
+        if index_name is None:
+            print('Index ID not found in North American lookup dictionary.')
+            raise LookupError('Index ID not known.')
+
     folder_path = os.path.join('data', index_name.lower().replace(' ', '_'))
 
     # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
@@ -60,7 +71,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     if not load_from_file:
         # JOB: Create or load constituency matrix
         print('Creating constituency matrix ...')
-        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, folder_path=folder_path)
+        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, lookup_table=lookup_table,
+                                   folder_path=folder_path)
         print('Successfully created constituency matrix.')
 
     print('Loading constituency matrix ...')
@@ -196,7 +208,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
             y_train,
             epochs=configs['training']['epochs'],
             batch_size=configs['training']['batch_size'],
-            save_dir=configs['model']['save_dir'], configs=configs, verbose=2
+            save_dir=configs['model']['save_dir'], configs=configs, verbose=1
         )
 
     # JOB: Make point prediction and join with target values
@@ -273,11 +285,11 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150919']
+    index_list = ['150378']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-5000,
-             end_index=-3999)
+        main(index_id=index_id, force_download=False, data_only=False, load_last=True, start_index=-4800,
+             end_index=-3799)
 
     """
     # Out-of memory generative training
