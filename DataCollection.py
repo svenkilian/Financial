@@ -321,12 +321,13 @@ def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
 
 
 def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
-                          period_range: tuple, index_name: str, folder_path: str) -> pd.DataFrame:
+                          period_range: tuple, index_name: str, configs: dict, folder_path: str) -> pd.DataFrame:
     """
     Generate a time-period sample for a study period
 
+    :param configs: Dictionary containing model and training configurations
     :param folder_path: Path to data folder
-    :param period_range: Date range of study period
+    :param period_range: Date index range of study period in form (start_index, end_index)
     :type period_range: tuple
     :param full_data: Full stock data
     :type full_data: pd.DataFrame
@@ -368,7 +369,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 
     print('Retrieving index constituency for %s as of %s' % (index_name, unique_dates[period_range[1]].date()))
 
-    # Select relevant data
+    # JOB: Select relevant data
+    # Select relevant stocks
     full_data = full_data.set_index(['gvkey', 'iid'])
     full_data = full_data.loc[constituent_indices, :]
     full_data = full_data.reset_index()
@@ -376,15 +378,16 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     full_data.sort_index(inplace=True)
 
     # Select data from study period
-    print(
-        'Retrieving data from %s to %s \n' % (
-            unique_dates[period_range[0]].date(), unique_dates[period_range[1]].date()))
+    print(f'Retrieving data from {unique_dates[period_range[0]].date()} to {unique_dates[period_range[1]].date()} \n')
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
-    # JOB: Add standardized daily returns
-    mean_daily_return = study_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]],
-                        'daily_return'].mean()
-    std_daily_return = study_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]], 'daily_return'].std()
+    unique_date_indices = study_data.index.unique()
+    i_split = int(len(unique_date_indices) * configs['data']['train_test_split'])  # Determine split index
+    split_date = unique_date_indices[i_split]
+
+    # JOB: Calculate mean and standard deviation of daily returns for training period
+    mean_daily_return = study_data.loc[unique_dates[period_range[0]]:split_date, 'daily_return'].mean()
+    std_daily_return = study_data.loc[unique_dates[period_range[0]]:split_date, 'daily_return'].std()
     print('Mean daily return: %g' % mean_daily_return)
     print('Std. daily return: %g \n' % std_daily_return)
 
