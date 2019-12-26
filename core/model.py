@@ -105,8 +105,8 @@ class LSTMModel:
                                                                   dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
                                                                   str(epochs), str(batch_size)))
         callbacks = [
-            EarlyStopping(monitor='val_accuracy', patience=early_stopping_patience, restore_best_weights=True, verbose=1),
-            ModelCheckpoint(filepath=save_fname, monitor='val_accuracy', save_best_only=True, verbose=1)]
+            EarlyStopping(monitor='val_acc', patience=early_stopping_patience, restore_best_weights=True, verbose=1),
+            ModelCheckpoint(filepath=save_fname, monitor='val_acc', save_best_only=True, verbose=1)]
 
         if GPU_ENABLED:
             callbacks.append(
