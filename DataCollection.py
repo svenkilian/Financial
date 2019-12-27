@@ -34,6 +34,7 @@ pd.set_option('display.html.table_schema', False)
 
 pd.set_option('mode.chained_assignment', None)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
+warnings.simplefilter(action='error', category=FutureWarning)
 
 
 def get_data_table(db: wrds.Connection, sql_query=False, query_string='', library=None, table=None, columns=None,
@@ -383,6 +384,9 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # JOB: Select relevant data
     # Select relevant stocks
     full_data = full_data.set_index(['gvkey', 'iid'])
+    print(f'Length of intersection: {len(constituent_indices.intersection(full_data.index))}')
+    print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
+    assert len(constituent_indices.intersection(full_data.index)) == len(constituent_indices)
     full_data = full_data.loc[constituent_indices, :]
     full_data = full_data.reset_index()
     full_data.set_index('datadate', inplace=True)

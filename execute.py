@@ -105,10 +105,15 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     period_range = (start_index, end_index)
 
     # Get study period data
-    study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
-                                                           period_range=period_range,
-                                                           index_name=index_name, configs=configs,
-                                                           folder_path=folder_path)
+    try:
+        study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
+                                                               period_range=period_range,
+                                                               index_name=index_name, configs=configs,
+                                                               folder_path=folder_path)
+    except AssertionError as ae:
+        print(ae)
+        print('Not all constituents in full data set. Terminating execution.')
+        return
 
     # Get all dates in study period
     full_date_range = study_period_data.index.unique()
@@ -220,7 +225,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
             y_train,
             epochs=configs['training']['epochs'],
             batch_size=configs['training']['batch_size'],
-            save_dir=configs['model']['save_dir'], configs=configs, verbose=1
+            save_dir=configs['model']['save_dir'], configs=configs, verbose=2
         )
 
     # JOB: Make point prediction and join with target values
@@ -297,11 +302,11 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150919']
+    index_list = ['150378']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-6800,
-             end_index=-5799)
+        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-3001,
+             end_index=-1999)
 
     """
     # Out-of memory generative training
