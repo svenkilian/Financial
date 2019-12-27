@@ -53,6 +53,10 @@ class LSTMModel:
         timer.start()
 
         layer_type_dict = {key.lower(): value for key, value in layers.__dict__.items()}
+        if '_dw_wrapped_module' in layer_type_dict.keys():
+            layer_type_dict = {key.lower(): value for key, value in
+                               layer_type_dict.get('_dw_wrapped_module').__dict__.items()}
+            print(layer_type_dict)
 
         for layer in configs['model']['layers']:
             # Get layer type string
