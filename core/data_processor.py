@@ -130,7 +130,7 @@ class DataLoader:
             x = np.array([])
             y = np.array([])
             print(
-                f'{Fore.BLUE}{Back.YELLOW}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
+                f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
 
         # print('Test data length: %s' % len(x))
         # print()

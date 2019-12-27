@@ -5,7 +5,7 @@ import math
 import numpy as np
 import datetime as dt
 from numpy import newaxis
-from tensorflow.keras import optimizers
+from tensorflow.keras import optimizers, regularizers
 import tensorflow as tf
 
 from core.utils import Timer
@@ -56,7 +56,6 @@ class LSTMModel:
         if '_dw_wrapped_module' in layer_type_dict.keys():
             layer_type_dict = {key.lower(): value for key, value in
                                layer_type_dict.get('_dw_wrapped_module').__dict__.items()}
-            print(layer_type_dict)
 
         for layer in configs['model']['layers']:
             # Get layer type string
@@ -68,6 +67,9 @@ class LSTMModel:
             #     # self.model.add(LSTM(neurons, input_shape=(input_timesteps, input_dim), dropout=dropout,
             #     #                     return_sequences=return_seq))
             #     self.model.add(LSTM(**layer['params']))
+
+        for layer in self.model.layers:
+            print(layer.get_config())
 
         self.model.compile(loss=configs['model']['loss'],
                            optimizer=get_optimizer(configs['model']['optimizer'], parameters=
@@ -106,9 +108,9 @@ class LSTMModel:
                                                                   dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
                                                                   str(epochs), str(batch_size)))
         callbacks = [
-            EarlyStopping(monitor='val_accuracy', patience=early_stopping_patience, restore_best_weights=True,
+            EarlyStopping(monitor='val_loss', patience=early_stopping_patience, restore_best_weights=True,
                           verbose=1),
-            ModelCheckpoint(filepath=save_fname, monitor='val_accuracy', save_best_only=True, verbose=1)]
+            ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True, verbose=1)]
 
         if GPU_ENABLED:
             callbacks.append(
