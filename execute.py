@@ -22,11 +22,13 @@ from utils import plot_results, plot_train_val, get_most_recent_file
 from colorama import Fore, Back, Style
 
 
-def main(index_id='150095', force_download=False, data_only=False, last_n=None, load_last: bool = False,
+def main(index_id='150095', cols: list = None, force_download=False, data_only=False, last_n=None,
+         load_last: bool = False,
          start_index: int = -1001, end_index: int = -1) -> None:
     """
     Run data preparation and model training
 
+    :param cols:
     :param load_last: Flag indicating whether to load last model weights from storage
     :param index_id: Index identifier
     :param last_n: Flag indicating the number of days to consider; *None* in case whole data history is considered
@@ -106,7 +108,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
     # Get study period data
     try:
-        study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
+        study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix,
+                                                               full_data=full_data,
                                                                period_range=period_range,
                                                                index_name=index_name, configs=configs,
                                                                folder_path=folder_path)
@@ -115,9 +118,12 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
         print('Not all constituents in full data set. Terminating execution.')
         return
 
-    # Get all dates in study period
+    # JOB: Filter out n/a observations
+    study_period_data.dropna(how='any', subset=cols, inplace=True)
+
+    # JOB: Get all dates in study period
     full_date_range = study_period_data.index.unique()
-    print(f'Study period length: {len(full_date_range)}')
+    print(f'Study period length: {len(full_date_range)}\n')
 
     # Set MultiIndex to stock identifier and select relevant columns
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])[
@@ -143,13 +149,12 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
             data = DataLoader(
                 id_data,
                 split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return'],
-                from_csv=False,
-                seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id, split_index=split_index
+                seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id,
+                split_index=split_index
             )
         except AssertionError as ae:
             print(ae)
             continue
-
 
         # print('Length of data for ID %s: %d' % (stock_id, len(id_data)))
 
@@ -183,7 +188,12 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
                 y_test = np.append(y_test, y_t, axis=0)
 
             if len(y_t) != len(data.data_test_index):
-                print(f'{Fore.RED}{Back.YELLOW}Lengths do not conform!{Style.RESET_ALL}')
+                print(f'\nMismatch for index {stock_id}')
+                print(f'{Fore.YELLOW}{Back.RED}{Style.BRIGHT}Lengths do not conform!{Style.RESET_ALL}')
+                print(f'Target length: {len(y_t)}, index length: {len(data.data_test_index)}')
+            else:
+                pass
+                # print(f'{Fore.GREEN}{Style.BRIGHT}All boogey!{Style.RESET_ALL}')
 
             # Append to index
             test_data_index = test_data_index.append(data.data_test_index)
@@ -195,7 +205,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
             raise AssertionError('Data length is not conforming.')
 
     # Data size conformity checks
-    print('Checking for training data size conformity: %s' % (len(x_train) == len(y_train)))
+    print('\nChecking for training data size conformity: %s' % (len(x_train) == len(y_train)))
     print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
     print('Checking for test data index conformity: %s \n' % (len(y_test) == len(test_data_index)))
     if len(y_test) != len(test_data_index):
@@ -205,9 +215,14 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
         raise AssertionError('Data length does not conform.')
 
+    target_mean_train = np.mean(y_train)
+    target_mean_test = np.mean(y_test)
     # JOB: Determine target label distribution in train and test sets
-    print('Average target label (training): %g' % np.mean(y_train))
-    print('Average target label (test): %g \n' % np.mean(y_test))
+    print(f'Average target label (training): {np.round(target_mean_train, 4)}')
+    print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
+    print(f'Performance validation thresholds: \n'
+          f'Training: {1 - target_mean_train}\n'
+          f'Testing: {1 - target_mean_test}')
 
     # JOB: Load model from storage
     if load_last:
@@ -217,7 +232,7 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     # JOB: Build model from configs
     else:
         model = LSTMModel(index_name.lower().replace(' ', '_'))
-        model.build_model(configs)
+        model.build_model(configs, verbose=1)
 
         # JOB: In-memory training
         history = model.train(
@@ -252,12 +267,15 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
         pct=True)
 
     cross_section_size = round(test_set_comparison.groupby('datadate')['y_test'].count().mean())
-    print('Average size of cross sections: %d' % cross_section_size)
+    print(f'Average size of cross sections: {cross_section_size}')
     top_percentage = 0.1
     # top_k = round(top_percentage * cross_section_size)
 
     # top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
-    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15]
+    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+                  int(cross_section_size / 50), int(cross_section_size / 10), int(cross_section_size / 5),
+                  int(cross_section_size / 4), int(cross_section_size / 2.5),
+                  int(cross_section_size / 2)]
 
     top_k_accuracies = pd.DataFrame({'Accuracy': []})
 
@@ -302,11 +320,12 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150919']
+    index_list = ['150913']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-3001,
-             end_index=-1999)
+        main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False, data_only=False,
+             load_last=False, start_index=-7000,
+             end_index=-6499)
 
     """
     # Out-of memory generative training

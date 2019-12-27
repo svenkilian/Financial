@@ -360,6 +360,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     i_split = len(unique_dates[:period_range[0]]) + int(
         len(unique_dates[period_range[0]:period_range[1]]) * split_ratio)
     split_date = unique_dates[i_split]
+    print(split_date)  # TODO: Remove
 
     # Detect potential out-of-bounds indices
     if abs(period_range[0]) > len(unique_dates) or abs(period_range[1] > len(unique_dates)):
@@ -368,7 +369,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 
     print(f'Retrieving index constituency for {index_name} as of {split_date.date()}.')
     try:
-        constituent_indices = get_index_constituents(constituency_matrix, unique_dates[i_split],
+        constituent_indices = get_index_constituents(constituency_matrix, date=split_date,
                                                      folder_path=folder_path)
         # TODO: Change census date to month
     except IndexError as ie:
@@ -384,8 +385,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # JOB: Select relevant data
     # Select relevant stocks
     full_data = full_data.set_index(['gvkey', 'iid'])
-    print(f'Length of intersection: {len(constituent_indices.intersection(full_data.index))}')
-    print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
+    # print(f'Length of intersection: {len(constituent_indices.intersection(full_data.index))}')
+    # print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
     assert len(constituent_indices.intersection(full_data.index)) == len(constituent_indices)
     full_data = full_data.loc[constituent_indices, :]
     full_data = full_data.reset_index()
@@ -397,6 +398,9 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
     study_data_split_index = study_data.index.unique().get_loc(split_date, method='ffill')
+    study_data_split_date = study_data.index.unique()[study_data_split_index]
+    print(f'Study data split index: {study_data_split_index}')
+    print(f'Study data split date: {study_data_split_date.date()}')
 
     # JOB: Calculate mean and standard deviation of daily returns for training period
     mean_daily_return = study_data.loc[unique_dates[period_range[0]]:split_date, 'daily_return'].mean()

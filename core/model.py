@@ -5,6 +5,7 @@ import math
 import numpy as np
 import datetime as dt
 from numpy import newaxis
+import pprint
 from tensorflow.keras import optimizers, regularizers
 import tensorflow as tf
 
@@ -42,10 +43,11 @@ class LSTMModel:
         print('[Model] Loading model from file %s' % filepath)
         self.model = load_model(filepath)
 
-    def build_model(self, configs):
+    def build_model(self, configs, verbose=2):
         """
         Build model from configuration file
 
+        :param verbose: Verbosity of console output
         :param configs:
         :return:
         """
@@ -68,17 +70,27 @@ class LSTMModel:
             #     #                     return_sequences=return_seq))
             #     self.model.add(LSTM(**layer['params']))
 
-        for layer in self.model.layers:
-            print(layer.get_config())
+        pprinter = pprint.PrettyPrinter(indent=2)
+        if verbose == 1:
+            for i, layer in enumerate(self.model.layers):
+                print(f'Layer {i + 1} ({layer.name.upper()}):')
+                pprinter.pprint(layer.get_config())
+                print()
 
         self.model.compile(loss=configs['model']['loss'],
                            optimizer=get_optimizer(configs['model']['optimizer'], parameters=
                            configs['model']['optimizer_params']),
                            metrics=configs['model']['metrics'])
 
-        print(f'Optimizer configuration: {self.model.optimizer.get_config()}')
-        self.model.summary()
-        print()
+        print(f'\nOptimizer configuration: ')
+
+        if verbose == 1:
+            pprinter.pprint(self.model.optimizer.get_config())
+            print()
+        if verbose != 0:
+            print(self.model.summary())
+            print()
+
         print('[Model] Model Compiled')
         timer.stop()
 
@@ -113,8 +125,15 @@ class LSTMModel:
             ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True, verbose=1)]
 
         if GPU_ENABLED:
+            previous_runs = os.listdir('logs')
+            if len(previous_runs) == 0:
+                run_number = 1
+            else:
+                run_number = max([int(s.split('run_')[1]) for s in previous_runs])
+            log_dir_name = 'run_%02d' % run_number
             callbacks.append(
-                TensorBoard(log_dir=os.path.dirname('logs/'), histogram_freq=1, write_graph=True, write_grads=False,
+                TensorBoard(log_dir=os.path.join('logs', log_dir_name), histogram_freq=1, write_graph=True,
+                            write_grads=True,
                             write_images=True, embeddings_freq=0, embeddings_layer_names=None, embeddings_metadata=None,
                             embeddings_data=None, update_freq='epoch'))
 

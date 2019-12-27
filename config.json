@@ -12,8 +12,8 @@
   },
   "training": {
     "epochs": 1000,
-    "batch_size": 16,
-    "early_stopping_patience": 5
+    "batch_size": 32,
+    "early_stopping_patience": 4
   },
   "model": {
     "loss": "binary_crossentropy",
@@ -26,16 +26,16 @@
     "save_dir": "saved_models",
     "layers": [
       {
-        "type": "gru",
+        "type": "lstm",
         "params": {
           "units": 25,
           "input_shape": [
             240,
             1
           ],
-          "dropout": 0.15,
+          "dropout": 0.1,
           "recurrent_dropout": 0.0,
-          "kernel_regularizer": "l2",
+          "kernel_regularizer": null,
           "return_sequences": false
         }
       },

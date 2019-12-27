@@ -10,56 +10,61 @@ from utils import pretty_print
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
 
-    def __init__(self, data: pd.DataFrame, split: float = 0.75, cols: list = list, from_csv=False, seq_len=None,
+    def __init__(self, data: pd.DataFrame, split: float = 0.75, cols: list = list, seq_len=None,
                  full_date_range=None, stock_id: tuple = None, split_index: int = 0):
         """
         Constructor for DataLoader class
+
         :param stock_id: Stock identifier tuple
         :param data: DataFrame containing study period data
         :param split: Split value between 0 and 1 determining train/test split
         :param cols: Columns to use for the model
-        :param from_csv: Load data from .csv file
+        :param full_date_range: Full date index of study period
         """
 
-        self.stock_id = stock_id
         # Load data either from csv or pre-loaded DataFrame
-        if from_csv:
-            dataframe = pd.read_csv(data)
-        else:
-            dataframe = data
+        self.stock_id = stock_id
+        self.data = data
 
-        # JOB: Filter out n/a observations
-        dataframe = dataframe[dataframe.get(cols).notna().all(axis=1)]
-
-        if len(dataframe) == 0:
-            print(f'Encountered empty DataFrame for index {stock_id}.')
+        # Handle empty data frame
+        if len(self.data) == 0:
+            print(f'{Fore.RED}{Style.BRIGHT}Encountered empty DataFrame for index {stock_id}.{Style.RESET_ALL}')
             # TODO: How can this case happen?
             raise AssertionError('Empty DataFrame.')
 
-        # i_split = int(len(full_date_range) * split)  # Determine split index
-        i_split = split_index
-        split_date = full_date_range[i_split]
-        # print('Split index: %d' % i_split)
-        # print('Original split date: %s' % split_date.date())
-        if split_date.date() in dataframe.index:
+        # JOB: Determine original split index and split date
+        # print(f'Index: {stock_id}')
+        split_date = full_date_range[split_index]
+        # print(f'Original split index: {split_index}, date: {split_date.date()}')
+
+        # JOB: Check whether original split date is in index
+        if split_date.date() in self.data.index:
             # print(f'Split date {split_date.date()} in index')
-            pass
+            i_split = self.data.index.get_loc(split_date.date())
+            split_date = self.data.index[i_split]
         else:
             print(f'Original date ({split_date.date()}) not in index.')
             print('Searching for next available split date.')
-            i_split = full_date_range.get_loc(split_date.date(), method='ffill')
-            split_date = full_date_range[i_split]
-            print(f'Nearest available date in index: {split_date.date()}')
+            try:
+                i_split = self.data.index.get_loc(split_date.date(), method='ffill')
+                split_date = self.data.index[i_split]
+            except KeyError as ke:
+                print(f'Stock data for {stock_id} does not yield any training data.')
+                i_split = -1
 
-        self.data_train = dataframe.loc[:split_date, cols].values  # Get training array
-        # print(f'Total available data points: {len(dataframe)}')
+        # print(f'Using {split_date.date()} as split date.')
 
-        self.data_test = dataframe.get(cols).iloc[
-                         dataframe.index.get_loc(full_date_range[
-                                                     i_split]) - seq_len + 2:].values  # Get test array
+        self.data_train = self.data.loc[:split_date, cols].values  # Get training array
+
+        if i_split - seq_len + 2 >= 0:
+            self.data_test = self.data.get(cols).iloc[i_split - seq_len + 2:].values  # Get test array
+            target_start_index = i_split + 1
+        else:
+            self.data_test = self.data.get(cols).values
+            target_start_index = i_split + abs(i_split - seq_len + 1)
 
         self.data_test_index = pd.MultiIndex.from_product(
-            [dataframe.loc[full_date_range[i_split + 1]:, cols].index, [stock_id]])
+            [self.data.get(cols).iloc[target_start_index:].index, [stock_id]])
 
         self.len_train = len(self.data_train)  # Length of training data
         self.len_test = len(self.data_test)  # Length of test data
@@ -67,9 +72,10 @@ class DataLoader:
 
         # print('Length of index: %d' % len(self.data_test_index))
         # print('Split index: %s' % i_split)
-        # print('Number of data points: %d' % len(dataframe.get(cols)))
+        # print('Number of data points: %d' % len(self.data.get(cols)))
         # print('Number of training data: %d' % self.len_train)
         # print('Number of test data: %d' % self.len_test)
+        # print()
 
     def get_train_data(self, seq_len: int, normalize=False):
         """
@@ -130,7 +136,7 @@ class DataLoader:
             x = np.array([])
             y = np.array([])
             print(
-                f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
+                f'{Fore.RED}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
 
         # print('Test data length: %s' % len(x))
         # print()
