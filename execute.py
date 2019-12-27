@@ -96,8 +96,8 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
 
     if data_only:
-        print('Finished downloading data for %s' % index_name)
-        print('Data set contains %d individual dates' % data_length)
+        print(f'Finished downloading data for {index_name}.')
+        print(f'Data set contains {data_length} individual dates.')
         print(full_data.head(100))
         return None
 
@@ -105,9 +105,10 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
     period_range = (start_index, end_index)
 
     # Get study period data
-    study_period_data = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
-                                              period_range=period_range,
-                                              index_name=index_name, configs=configs, folder_path=folder_path)
+    study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix, full_data=full_data,
+                                                           period_range=period_range,
+                                                           index_name=index_name, configs=configs,
+                                                           folder_path=folder_path)
 
     # Get all dates in study period
     full_date_range = study_period_data.index.unique()
@@ -132,13 +133,18 @@ def main(index_id='150095', force_download=False, data_only=False, last_n=None, 
         id_data = study_period_data.loc[stock_id].set_index('datadate')
         # print(stock_id)
 
-        # JOB: Initialize DataLoader
-        data = DataLoader(
-            id_data,
-            split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return'],
-            from_csv=False,
-            seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id
-        )
+        try:
+            # JOB: Initialize DataLoader
+            data = DataLoader(
+                id_data,
+                split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return'],
+                from_csv=False,
+                seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id, split_index=split_index
+            )
+        except AssertionError as ae:
+            print(ae)
+            continue
+
 
         # print('Length of data for ID %s: %d' % (stock_id, len(id_data)))
 
@@ -294,8 +300,8 @@ if __name__ == '__main__':
     index_list = ['150919']
 
     for index_id in index_list:
-        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-4800,
-             end_index=-3799)
+        main(index_id=index_id, force_download=False, data_only=False, load_last=False, start_index=-6800,
+             end_index=-5799)
 
     """
     # Out-of memory generative training

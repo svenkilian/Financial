@@ -9,6 +9,7 @@ from tensorflow.keras import optimizers
 import tensorflow as tf
 
 from core.utils import Timer
+from tensorflow.keras import layers
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
@@ -51,22 +52,18 @@ class LSTMModel:
         timer = Timer()
         timer.start()
 
-        for layer in configs['model']['layers']:
-            neurons = layer['neurons'] if 'neurons' in layer else None
-            dropout_rate = layer['rate'] if 'rate' in layer else None
-            activation = layer['activation'] if 'activation' in layer else None
-            dropout = layer['dropout'] if 'dropout' in layer else 0.0
-            return_seq = layer['return_seq'] if 'return_seq' in layer else None
-            input_timesteps = layer['input_timesteps'] if 'input_timesteps' in layer else None
-            input_dim = layer['input_dim'] if 'input_dim' in layer else None
+        layer_type_dict = {key.lower(): value for key, value in layers.__dict__.items()}
 
-            if layer['type'] == 'dense':
-                self.model.add(Dense(neurons, activation=activation))
-            if layer['type'] == 'lstm':
-                self.model.add(LSTM(neurons, input_shape=(input_timesteps, input_dim), dropout=dropout,
-                                    return_sequences=return_seq))
-            if layer['type'] == 'dropout':
-                self.model.add(Dropout(dropout_rate))
+        for layer in configs['model']['layers']:
+            # Get layer type string
+            layer_type = layer['type'].lower()
+            # Add layer with configuration
+            self.model.add(layer_type_dict[layer_type].from_config(layer['params']))
+
+            # if layer['type'] == 'lstm':
+            #     # self.model.add(LSTM(neurons, input_shape=(input_timesteps, input_dim), dropout=dropout,
+            #     #                     return_sequences=return_seq))
+            #     self.model.add(LSTM(**layer['params']))
 
         self.model.compile(loss=configs['model']['loss'],
                            optimizer=get_optimizer(configs['model']['optimizer'], parameters=
@@ -105,7 +102,8 @@ class LSTMModel:
                                                                   dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
                                                                   str(epochs), str(batch_size)))
         callbacks = [
-            EarlyStopping(monitor='val_accuracy', patience=early_stopping_patience, restore_best_weights=True, verbose=1),
+            EarlyStopping(monitor='val_accuracy', patience=early_stopping_patience, restore_best_weights=True,
+                          verbose=1),
             ModelCheckpoint(filepath=save_fname, monitor='val_accuracy', save_best_only=True, verbose=1)]
 
         if GPU_ENABLED:

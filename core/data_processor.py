@@ -11,7 +11,7 @@ class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
 
     def __init__(self, data: pd.DataFrame, split: float = 0.75, cols: list = list, from_csv=False, seq_len=None,
-                 full_date_range=None, stock_id: tuple = None):
+                 full_date_range=None, stock_id: tuple = None, split_index: int = 0):
         """
         Constructor for DataLoader class
         :param stock_id: Stock identifier tuple
@@ -31,23 +31,25 @@ class DataLoader:
         # JOB: Filter out n/a observations
         dataframe = dataframe[dataframe.get(cols).notna().all(axis=1)]
 
-        i_split = int(len(full_date_range) * split)  # Determine split index
+        if len(dataframe) == 0:
+            print(f'Encountered empty DataFrame for index {stock_id}.')
+            # TODO: How can this case happen?
+            raise AssertionError('Empty DataFrame.')
+
+        # i_split = int(len(full_date_range) * split)  # Determine split index
+        i_split = split_index
         split_date = full_date_range[i_split]
         # print('Split index: %d' % i_split)
         # print('Original split date: %s' % split_date.date())
         if split_date.date() in dataframe.index:
+            # print(f'Split date {split_date.date()} in index')
             pass
-            # print('Split date in index')
         else:
             print(f'Original date ({split_date.date()}) not in index.')
-            i = i_split
-            while split_date.date() not in dataframe.index:
-                print('Going back one day.')
-                i -= 1
-                split_date = full_date_range[i]
-                print(f'New split date: {split_date.date()}')
-            print(f'Nearest available date in index: {full_date_range[i]}')
-            i_split = i
+            print('Searching for next available split date.')
+            i_split = full_date_range.get_loc(split_date.date(), method='ffill')
+            split_date = full_date_range[i_split]
+            print(f'Nearest available date in index: {split_date.date()}')
 
         self.data_train = dataframe.loc[:split_date, cols].values  # Get training array
         # print(f'Total available data points: {len(dataframe)}')

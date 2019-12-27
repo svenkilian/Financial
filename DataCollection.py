@@ -119,10 +119,12 @@ def list_tables(db, library, show_n_rows=False):
             print(table)
 
 
-def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date, folder_path: str) -> pd.Index:
+def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date, folder_path: str,
+                           print_constituents=False) -> pd.Index:
     """
     Return company name list of index constituents for given date
 
+    :param print_constituents: Flag indicating whether to print out index constituent names
     :param folder_path: Path to file directory
     :param constituency_matrix: Constituency table providing constituency information
     :param date: Date for which to return constituency list
@@ -132,11 +134,16 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
 
     lookup_dict = pd.read_json(os.path.join(folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get('conm')
     # print(lookup_dict)
-    # print(len(constituency_matrix.loc[date].loc[lambda x: x == 1]))
-    # print(constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values('gvkey').tolist())
-    constituent_list_names = [lookup_dict.get(key) for key in
-                              constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values(
-                                  'gvkey').tolist()]
+    print(f'Number of constituents: {len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
+    # print(
+    #     f"List of constituents: {constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values('gvkey').tolist()}")
+
+    if print_constituents:
+        constituent_list_names = [lookup_dict.get(key) for key in
+                                  constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values(
+                                      'gvkey').tolist()]
+        for company_name in constituent_list_names:
+            print(company_name)
 
     return constituency_matrix.loc[date].loc[lambda x: x == 1].index
 
@@ -321,7 +328,7 @@ def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
 
 
 def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
-                          period_range: tuple, index_name: str, configs: dict, folder_path: str) -> pd.DataFrame:
+                          period_range: tuple, index_name: str, configs: dict, folder_path: str) -> (pd.DataFrame, int):
     """
     Generate a time-period sample for a study period
 
@@ -336,8 +343,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     :param index_name: Name of index
     :type index_name: str
 
-    :return: Study period sample
-    :rtype: pd.DataFrame
+    :return: Tuple Study period sample and split index
+    :rtype: tuple[pd.DataFrame, int]
     """
 
     # Convert date columns to DatetimeIndex
@@ -348,26 +355,30 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 
     # Get unique dates
     unique_dates = full_data.index.drop_duplicates()
+    split_ratio = configs['data']['train_test_split']
+    i_split = len(unique_dates[:period_range[0]]) + int(
+        len(unique_dates[period_range[0]:period_range[1]]) * split_ratio)
+    split_date = unique_dates[i_split]
 
     # Detect potential out-of-bounds indices
     if abs(period_range[0]) > len(unique_dates) or abs(period_range[1] > len(unique_dates)):
         print(f'Index length is {len(unique_dates)}. Study period range ist {period_range}.')
         raise IndexError('Period index out of bounds.')
 
+    print(f'Retrieving index constituency for {index_name} as of {split_date.date()}.')
     try:
-        constituent_indices = get_index_constituents(constituency_matrix, unique_dates[period_range[1]],
+        constituent_indices = get_index_constituents(constituency_matrix, unique_dates[i_split],
                                                      folder_path=folder_path)
         # TODO: Change census date to month
     except IndexError as ie:
         print(
-            f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Period index out of bounds. Choose different study period bounds.{Style.RESET_ALL}')
+            f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Period index out of bounds. Choose different study period bounds.'
+            f'{Style.RESET_ALL}')
         print(', '.join(ie.args))
         print('Terminating program.')
         sys.exit(1)
 
     full_data.reset_index(inplace=True)
-
-    print('Retrieving index constituency for %s as of %s' % (index_name, unique_dates[period_range[1]].date()))
 
     # JOB: Select relevant data
     # Select relevant stocks
@@ -381,9 +392,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     print(f'Retrieving data from {unique_dates[period_range[0]].date()} to {unique_dates[period_range[1]].date()} \n')
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
-    unique_date_indices = study_data.index.unique()
-    i_split = int(len(unique_date_indices) * configs['data']['train_test_split'])  # Determine split index
-    split_date = unique_date_indices[i_split]
+    study_data_split_index = study_data.index.unique().get_loc(split_date, method='ffill')
 
     # JOB: Calculate mean and standard deviation of daily returns for training period
     mean_daily_return = study_data.loc[unique_dates[period_range[0]]:split_date, 'daily_return'].mean()
@@ -409,7 +418,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # JOB: Number of securities in cross-section
     study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
 
-    return study_data
+    return study_data, study_data_split_index
 
 
 def generate_index_lookup_dict() -> None:

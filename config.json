@@ -1,41 +1,50 @@
 {
-	"data": {
-		"filename": "test.csv",
-		"_comment": "['Close','Volume']",
-		"columns": [
-			"Close", "Volume"
-		],
-		"sequence_length": 241,
-		"train_test_split": 0.75,
-		"normalize": true
-	},
-	"training": {
-		"epochs": 1000,
-		"batch_size": 16,
-		"early_stopping_patience": 3
-	},
-	"model": {
-		"loss": "binary_crossentropy",
-		"optimizer": "rmsprop",
-		"optimizer_params": {
-
-		},
-		"metrics": ["accuracy"],
-		"save_dir": "saved_models",
-		"layers": [
-			{
-				"type": "lstm",
-				"neurons": 30,
-				"input_timesteps": 240,
-				"input_dim": 1,
-				"dropout": 0.1,
-				"return_seq": false
-			},
-			{
-				"type": "dense",
-				"neurons": 1,
-				"activation": "sigmoid"
-			}
-		]
-	}
+  "data": {
+    "filename": "test.csv",
+    "_comment": "['Close','Volume']",
+    "columns": [
+      "Close",
+      "Volume"
+    ],
+    "sequence_length": 241,
+    "train_test_split": 0.75,
+    "normalize": true
+  },
+  "training": {
+    "epochs": 1000,
+    "batch_size": 16,
+    "early_stopping_patience": 3
+  },
+  "model": {
+    "loss": "binary_crossentropy",
+    "optimizer": "rmsprop",
+    "optimizer_params": {
+    },
+    "metrics": [
+      "accuracy"
+    ],
+    "save_dir": "saved_models",
+    "layers": [
+      {
+        "type": "gru",
+        "params": {
+          "units": 50,
+          "input_shape": [
+            240,
+            1
+          ],
+          "dropout": 0.1,
+          "recurrent_dropout": 0.0,
+          "return_sequences": false
+        }
+      },
+      {
+        "type": "dense",
+        "params": {
+          "units": 1,
+          "activation": "sigmoid"
+        }
+      }
+    ]
+  }
 }
