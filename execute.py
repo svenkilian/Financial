@@ -320,7 +320,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150913']
+    index_list = ['150095']
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False, data_only=False,
