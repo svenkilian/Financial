@@ -11,9 +11,9 @@
     "normalize": true
   },
   "training": {
-    "epochs": 2,
-    "batch_size": 512,
-    "early_stopping_patience": 6
+    "epochs": 1000,
+    "batch_size": 26,
+    "early_stopping_patience": 10
   },
   "model": {
     "loss": "binary_crossentropy",
@@ -39,7 +39,7 @@
       {
         "type": "gru",
         "params": {
-          "units": 20,
+          "units": 50,
 
           "dropout": 0.1,
           "recurrent_dropout": 0.0,
