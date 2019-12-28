@@ -125,7 +125,7 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
 
     # Plot history for all metrics
     epoch_axis = range(1, len(history.history['loss']) + 1)
-    fig, ax = plt.subplots(figsize=(12, 10))
+    fig, ax = plt.subplots()
     for metric in metrics:
         ax.plot(epoch_axis, history.history[metric])
         ax.plot(epoch_axis, history.history['val_' + metric])
@@ -139,7 +139,7 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
     plt.show()
 
     # Plot history for loss
-    fig, ax = plt.subplots(figsize=(12, 10))
+    fig, ax = plt.subplots()
     ax.plot(epoch_axis, history.history['loss'])
     ax.plot(epoch_axis, history.history['val_loss'])
     ax.set_title('Model Loss')
