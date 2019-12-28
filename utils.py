@@ -135,7 +135,7 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.legend(['Training', 'Validation'], loc='upper left')
     if store_png:
-        fig.savefig(os.path.join(folder_path, 'metrics.png'))
+        fig.savefig(os.path.join(folder_path, 'metrics.png'), dpi=600)
     plt.show()
 
     # Plot history for loss
@@ -149,7 +149,7 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
     ax.legend(['Training', 'Validation'], loc='upper left')
 
     if store_png:
-        fig.savefig(os.path.join(folder_path, 'loss.png'))
+        fig.savefig(os.path.join(folder_path, 'loss.png'), dpi=600)
 
     plt.show()
 
