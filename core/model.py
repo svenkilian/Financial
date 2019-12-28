@@ -82,9 +82,8 @@ class LSTMModel:
                            configs['model']['optimizer_params']),
                            metrics=configs['model']['metrics'])
 
-        print(f'\nOptimizer configuration: ')
-
         if verbose == 1:
+            print(f'\nOptimizer configuration: ')
             pprinter.pprint(self.model.optimizer.get_config())
             print()
         if verbose != 0:
@@ -126,13 +125,13 @@ class LSTMModel:
 
         if GPU_ENABLED:
             previous_runs = os.listdir('logs')
-            print(f'Directory contents: {previous_runs}')
+            # print(f'Directory contents: {previous_runs}')
             if len(previous_runs) == 0:
                 run_number = 1
             else:
                 run_number = max([int(s.split('run_')[1]) for s in previous_runs]) + 1
             log_dir_name = 'run_%02d' % run_number
-            print(f'Log directory: {log_dir_name}')
+            print(f'Log directory: {os.path.join("logs", log_dir_name)}')
             callbacks.append(
                 TensorBoard(log_dir=os.path.join('logs', log_dir_name), histogram_freq=0, write_graph=False,
                             write_grads=False,

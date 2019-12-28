@@ -5,6 +5,7 @@ __copyright__ = "Sven Köpke 2019"
 __version__ = "0.0.1"
 __license__ = "MIT"
 
+from config import *
 import math
 import os
 import json
@@ -240,7 +241,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
             y_train,
             epochs=configs['training']['epochs'],
             batch_size=configs['training']['batch_size'],
-            save_dir=configs['model']['save_dir'], configs=configs, verbose=1
+            save_dir=configs['model']['save_dir'], configs=configs, verbose=2
         )
 
     # JOB: Make point prediction and join with target values
@@ -296,7 +297,9 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     top_k_accuracies.index.name = 'k'
     print(top_k_accuracies)
+
     top_k_accuracies.plot(kind='line', legend=True, fontsize=14)
+    plt.savefig(os.path.join(folder_path, 'top_k_acc.png'), dpi=600)
     plt.show()
 
     # JOB: Plot training and validation metrics
@@ -323,8 +326,8 @@ if __name__ == '__main__':
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False, data_only=False,
-             load_last=False, start_index=-7000,
-             end_index=-6000)
+             load_last=False, start_index=-3000,
+             end_index=-2000)
 
     """
     # Out-of memory generative training

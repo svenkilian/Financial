@@ -360,7 +360,6 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     i_split = len(unique_dates[:period_range[0]]) + int(
         len(unique_dates[period_range[0]:period_range[1]]) * split_ratio)
     split_date = unique_dates[i_split]
-    print(split_date)  # TODO: Remove
 
     # Detect potential out-of-bounds indices
     if abs(period_range[0]) > len(unique_dates) or abs(period_range[1] > len(unique_dates)):
