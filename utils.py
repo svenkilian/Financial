@@ -134,9 +134,9 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
     ax.set_xlabel('Epoch')
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.legend(['Training', 'Validation'], loc='upper left')
+    plt.show()
     if store_png:
         fig.savefig(os.path.join(folder_path, 'metrics.png'), dpi=600)
-    plt.show()
 
     # Plot history for loss
     fig, ax = plt.subplots()
@@ -148,10 +148,9 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.legend(['Training', 'Validation'], loc='upper left')
 
+    plt.show()
     if store_png:
         fig.savefig(os.path.join(folder_path, 'loss.png'), dpi=600)
-
-    plt.show()
 
 
 def plot_results(predicted_data, true_data):
