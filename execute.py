@@ -272,8 +272,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # top_k = round(top_percentage * cross_section_size)
 
     # top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
-    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                  int(cross_section_size / 50), int(cross_section_size / 10), int(cross_section_size / 5),
+    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, int(cross_section_size / 10), int(cross_section_size / 5),
                   int(cross_section_size / 4), int(cross_section_size / 2.5),
                   int(cross_section_size / 2)]
 
