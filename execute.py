@@ -221,8 +221,8 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     print(f'Average target label (training): {np.round(target_mean_train, 4)}')
     print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
     print(f'Performance validation thresholds: \n'
-          f'Training: {1 - target_mean_train}\n'
-          f'Testing: {1 - target_mean_test}')
+          f'Training: {np.round(1 - target_mean_train)}\n'
+          f'Testing: {np.round(1 - target_mean_test)}')
 
     # JOB: Load model from storage
     if load_last:
@@ -232,7 +232,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # JOB: Build model from configs
     else:
         model = LSTMModel(index_name.lower().replace(' ', '_'))
-        model.build_model(configs, verbose=1)
+        model.build_model(configs, verbose=2)
 
         # JOB: In-memory training
         history = model.train(
@@ -325,7 +325,7 @@ if __name__ == '__main__':
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False, data_only=False,
              load_last=False, start_index=-7000,
-             end_index=-6499)
+             end_index=-6600)
 
     """
     # Out-of memory generative training
