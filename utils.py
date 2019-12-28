@@ -113,7 +113,7 @@ def pretty_print(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     print(tabulate(df, headers, tablefmt=tablefmt, showindex=True))
 
 
-def plot_train_val(history, metrics: list) -> None:
+def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> None:
     """
     Plot training and validation metrics over epochs
 
@@ -125,24 +125,32 @@ def plot_train_val(history, metrics: list) -> None:
 
     # Plot history for all metrics
     epoch_axis = range(1, len(history.history['loss']) + 1)
+    fig, ax = plt.subplots(figsize=(12, 10))
     for metric in metrics:
-        plt.plot(epoch_axis, history.history[metric])
-        plt.plot(epoch_axis, history.history['val_' + metric])
-    plt.title(metrics[0].capitalize())
-    plt.ylabel(metrics[0].capitalize())
-    plt.xlabel('Epoch')
-    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-    plt.legend(['Training', 'Validation'], loc='upper left')
+        ax.plot(epoch_axis, history.history[metric])
+        ax.plot(epoch_axis, history.history['val_' + metric])
+    ax.set_title(metrics[0].capitalize())
+    ax.set_ylabel(metrics[0].capitalize())
+    ax.set_xlabel('Epoch')
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.legend(['Training', 'Validation'], loc='upper left')
+    if store_png:
+        fig.savefig(os.path.join(folder_path, 'metrics.png'))
     plt.show()
 
     # Plot history for loss
-    plt.plot(epoch_axis, history.history['loss'])
-    plt.plot(epoch_axis, history.history['val_loss'])
-    plt.title('Model Loss')
-    plt.ylabel('Loss')
-    plt.xlabel('Epoch')
-    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-    plt.legend(['Training', 'Validation'], loc='upper left')
+    fig, ax = plt.subplots(figsize=(12, 10))
+    ax.plot(epoch_axis, history.history['loss'])
+    ax.plot(epoch_axis, history.history['val_loss'])
+    ax.set_title('Model Loss')
+    ax.set_ylabel('Loss')
+    ax.set_xlabel('Epoch')
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.legend(['Training', 'Validation'], loc='upper left')
+
+    if store_png:
+        fig.savefig(os.path.join(folder_path, 'loss.png'))
+
     plt.show()
 
 

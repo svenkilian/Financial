@@ -11,9 +11,9 @@
     "normalize": true
   },
   "training": {
-    "epochs": 1000,
-    "batch_size": 32,
-    "early_stopping_patience": 10
+    "epochs": 2,
+    "batch_size": 512,
+    "early_stopping_patience": 6
   },
   "model": {
     "loss": "binary_crossentropy",
@@ -26,13 +26,21 @@
     "save_dir": "saved_models",
     "layers": [
       {
-        "type": "lstm",
+        "type": "conv1d",
+        "params":
+        {
+          "filters": 5,
+          "kernel_size": 4,
+          "strides": 2,
+          "padding": "valid",
+          "input_shape": [null, 1]
+        }
+      },
+      {
+        "type": "gru",
         "params": {
-          "units": 25,
-          "input_shape": [
-            240,
-            1
-          ],
+          "units": 20,
+
           "dropout": 0.1,
           "recurrent_dropout": 0.0,
           "kernel_regularizer": null,

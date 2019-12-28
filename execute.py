@@ -221,8 +221,8 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     print(f'Average target label (training): {np.round(target_mean_train, 4)}')
     print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
     print(f'Performance validation thresholds: \n'
-          f'Training: {np.round(1 - target_mean_train)}\n'
-          f'Testing: {np.round(1 - target_mean_test)}')
+          f'Training: {np.round(1 - target_mean_train, 4)}\n'
+          f'Testing: {np.round(1 - target_mean_test, 4)}')
 
     # JOB: Load model from storage
     if load_last:
@@ -240,7 +240,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
             y_train,
             epochs=configs['training']['epochs'],
             batch_size=configs['training']['batch_size'],
-            save_dir=configs['model']['save_dir'], configs=configs, verbose=2
+            save_dir=configs['model']['save_dir'], configs=configs, verbose=1
         )
 
     # JOB: Make point prediction and join with target values
@@ -302,7 +302,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     # JOB: Plot training and validation metrics
     try:
-        plot_train_val(history, configs['model']['metrics'])
+        plot_train_val(history, configs['model']['metrics'], store_png=True, folder_path=folder_path)
     except AttributeError as ae:
         print(f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Plotting failed.{Style.RESET_ALL}')
         # print(ae)
@@ -325,7 +325,7 @@ if __name__ == '__main__':
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False, data_only=False,
              load_last=False, start_index=-7000,
-             end_index=-6600)
+             end_index=-6000)
 
     """
     # Out-of memory generative training
