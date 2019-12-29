@@ -16,13 +16,14 @@ import pandas as pd
 import datetime
 import numpy as np
 from colorama import Fore, Back, Style
+from typing import List, Tuple
 
 # Configurations for displaying DataFrames
 from utils import pretty_print
 
 pd.set_option('precision', 4)
-pd.set_option('display.max_rows', 2000)
-pd.set_option('display.max_columns', 15)
+pd.set_option('display.max_rows', 200)
+pd.set_option('display.max_columns', 40)
 pd.set_option('max_colwidth', 25)
 pd.set_option('mode.sim_interactive', True)
 pd.set_option('expand_frame_repr', True)
@@ -208,8 +209,15 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
             lambda x: x.pct_change(periods=1))
 
-        # Reset index to date
-        data = data.reset_index()
+        # JOB: Filter out observations with zero trading volume and zero daily return (public holidays)
+        data = data[~(data['cshtrd'].isna() & (data['daily_return'] == 0))]
+
+        # JOB: Recalculate Daily Return
+        data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+            lambda x: x.pct_change(periods=1))
+
+        # Reset index
+        data.reset_index(inplace=True)
 
         # Save to file
         data.to_csv(os.path.join(folder_path, 'index_data_constituents.csv'))
@@ -328,10 +336,12 @@ def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
 
 
 def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
-                          period_range: tuple, index_name: str, configs: dict, folder_path: str) -> (pd.DataFrame, int):
+                          period_range: tuple, index_name: str, configs: dict, cols: List[str], folder_path: str) -> (
+        pd.DataFrame, int):
     """
     Generate a time-period sample for a study period
 
+    :param cols: Relevant columns
     :param configs: Dictionary containing model and training configurations
     :param folder_path: Path to data folder
     :param period_range: Date index range of study period in form (start_index, end_index)
@@ -387,7 +397,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
     assert len(constituent_indices.intersection(full_data.index)) == len(constituent_indices)
     full_data = full_data.loc[constituent_indices, :]
-    full_data = full_data.reset_index()
+    full_data.reset_index(inplace=True)
     full_data.set_index('datadate', inplace=True)
     full_data.sort_index(inplace=True)
 
@@ -406,19 +416,16 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     print('Mean daily return: %g' % mean_daily_return)
     print('Std. daily return: %g \n' % std_daily_return)
 
-    # JOB: Fill n/a values for trading volume
-    study_data.loc[:, 'cshtrd'].fillna(value=0)
-
     # JOB: Calculate standardized daily returns
     study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
 
     # JOB: Create target
     study_data.loc[:, 'above_cs_med'] = study_data['daily_return'].gt(
-        study_data.groupby('datadate')['daily_return'].transform('median')).astype(int)
+        study_data.groupby('datadate')['daily_return'].transform('median')).astype(np.int8)
     study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
 
     # JOB: Create cross-sectional ranking
-    # study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int8')
+    study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int16')
     # study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
 
     # JOB: Number of securities in cross-section

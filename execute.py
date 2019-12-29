@@ -29,6 +29,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     """
     Run data preparation and model training
 
+    :param model:
     :param cols:
     :param load_last: Flag indicating whether to load last model weights from storage
     :param index_id: Index identifier
@@ -88,7 +89,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     if data_only:
         print(f'Finished downloading data for {index_name}.')
         print(f'Data set contains {data_length} individual dates.')
-        print(full_data.head(100))
+        print(full_data.head(10))
         return
 
     # JOB: Specify study period interval
@@ -99,15 +100,12 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix,
                                                                full_data=full_data,
                                                                period_range=period_range,
-                                                               index_name=index_name, configs=configs,
+                                                               index_name=index_name, configs=configs, cols=cols,
                                                                folder_path=folder_path)
     except AssertionError as ae:
         print(ae)
         print('Not all constituents in full data set. Terminating execution.')
         return
-
-    # JOB: Filter out observations with missing values in relevant columns
-    study_period_data.dropna(how='any', subset=cols, inplace=True)
 
     # JOB: Get all dates in study period
     full_date_range = study_period_data.index.unique()
@@ -120,75 +118,13 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
 
-    # JOB: Instantiate training and test data
-    x_train = None
-    y_train = None
-    x_test = None
-    y_test = None
-    test_data_index = pd.Index([])
-
-    # JOB: Iterate through individual stocks and generate training and test data
-    for stock_id in unique_indices:
-        id_data = study_period_data.loc[stock_id].set_index('datadate')
-        # print(stock_id)
-
-        try:
-            # JOB: Initialize DataLoader
-            data = DataLoader(
-                id_data, cols=cols,
-                seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id,
-                split_index=split_index
-            )
-        except AssertionError as ae:
-            print(ae)
-            continue
-
-        # print('Length of data for ID %s: %d' % (stock_id, len(id_data)))
-
-        # JOB: Generate training data
-        x, y = data.get_train_data(
-            seq_len=configs['data']['sequence_length'],
-            normalize=False
-        )
-
-        # JOB: Generate test data
-        x_t, y_t = data.get_test_data(
-            seq_len=configs['data']['sequence_length'],
-            normalize=False
-        )
-
-        # JOB: In case training/test set is empty, set to first batch, otherwise append data
-        if (len(x) > 0) and (len(y) > 0):
-            if x_train is None:
-                x_train = x
-                y_train = y
-            else:
-                x_train = np.append(x_train, x, axis=0)
-                y_train = np.append(y_train, y, axis=0)
-
-        if (len(x_t) > 0) and (len(y_t) > 0):
-            if x_test is None:
-                x_test = x_t
-                y_test = y_t
-            else:
-                x_test = np.append(x_test, x_t, axis=0)
-                y_test = np.append(y_test, y_t, axis=0)
-
-            if len(y_t) != len(data.data_test_index):
-                print(f'\nMismatch for index {stock_id}')
-                print(f'{Fore.YELLOW}{Back.RED}{Style.BRIGHT}Lengths do not conform!{Style.RESET_ALL}')
-                print(f'Target length: {len(y_t)}, index length: {len(data.data_test_index)}')
-            else:
-                pass
-
-            # JOB: Append to test data index
-            test_data_index = test_data_index.append(data.data_test_index)
-
-        # print('Length of test labels: %d' % len(y_test))
-        # print('Length of test index: %d\n' % len(test_data_index))
-
-        if len(y_test) != len(test_data_index):
-            raise AssertionError('Data length is not conforming.')
+    # JOB: Obtain training and test data as well as test data index
+    x_train, y_train, x_test, y_test, test_data_index = preprocess_data(study_period_data=study_period_data,
+                                                                        split_index=split_index,
+                                                                        unique_indices=unique_indices, cols=cols,
+                                                                        configs=configs,
+                                                                        full_date_range=full_date_range,
+                                                                        model_type='deep_learning')
 
     # Data size conformity checks
     print('\nChecking for training data size conformity: %s' % (len(x_train) == len(y_train)))
@@ -209,6 +145,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     print(f'Performance validation thresholds: \n'
           f'Training: {np.round(1 - target_mean_train, 4)}\n'
           f'Testing: {np.round(1 - target_mean_test, 4)}')
+
 
     # JOB: Load model from storage
     if load_last:
@@ -246,11 +183,11 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     # JOB: Create normalized predictions
     test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'prediction'].gt(
-        test_set_comparison.groupby('datadate')['prediction'].transform('median')).astype(int)
+        test_set_comparison.groupby('datadate')['prediction'].transform('median')).astype(np.int8)
 
     # JOB: Create cross-sectional ranking
     test_set_comparison.loc[:, 'prediction_rank'] = test_set_comparison.groupby('datadate')['prediction'].rank(
-        method='first').astype('int8')
+        method='first').astype('int16')
     test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
         pct=True)
 
@@ -303,14 +240,101 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
 
 
+def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiIndex, cols: list, split_index: int,
+                    configs: dict, full_date_range: pd.Index, model_type: str) -> tuple:
+    """
+    Pre-process study period data to obtain training and test sets as well as test data index
+
+    :param model_type: 'deep_learning' or 'tree_based'
+    :param study_period_data: Full data for study period
+    :param unique_indices: MultiIndex of unique indices in study period
+    :param cols: Relevant columns
+    :param split_index: Split index
+    :param configs: Configuration dict
+    :param full_date_range: Index of dates
+    :return: Tuple of (x_train, y_train, x_test, y_test, test_data_index)
+    """
+
+    # JOB: Instantiate training and test data
+    x_train = None
+    y_train = None
+    x_test = None
+    y_test = None
+    test_data_index = pd.Index([])
+
+    if model_type == 'tree_based':
+        cols.append('return_index')
+
+    # JOB: Iterate through individual stocks and generate training and test data
+    for stock_id in unique_indices:
+        id_data = study_period_data.loc[stock_id].set_index('datadate')
+
+        try:
+            # JOB: Initialize DataLoader
+            data = DataLoader(
+                id_data, cols=cols,
+                seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id,
+                split_index=split_index, model_type=model_type
+            )
+        except AssertionError as ae:
+            print(ae)
+            continue
+
+        # print('Length of data for ID %s: %d' % (stock_id, len(id_data)))
+
+        # JOB: Generate training data
+        x, y = data.get_train_data()
+
+        # JOB: Generate test data
+        x_t, y_t = data.get_test_data(
+            seq_len=configs['data']['sequence_length'],
+        )
+
+        # JOB: In case training/test set is empty, set to first batch, otherwise append data
+        if (len(x) > 0) and (len(y) > 0):
+            if x_train is None:
+                x_train = x
+                y_train = y
+            else:
+                x_train = np.append(x_train, x, axis=0)
+                y_train = np.append(y_train, y, axis=0)
+
+        if (len(x_t) > 0) and (len(y_t) > 0):
+            if x_test is None:
+                x_test = x_t
+                y_test = y_t
+            else:
+                x_test = np.append(x_test, x_t, axis=0)
+                y_test = np.append(y_test, y_t, axis=0)
+
+            if len(y_t) != len(data.data_test_index):
+                print(f'\nMismatch for index {stock_id}')
+                print(f'{Fore.YELLOW}{Back.RED}{Style.BRIGHT}Lengths do not conform!{Style.RESET_ALL}')
+                print(f'Target length: {len(y_t)}, index length: {len(data.data_test_index)}')
+            else:
+                pass
+
+            # JOB: Append to test data index
+            test_data_index = test_data_index.append(data.data_test_index)
+
+        # print('Length of test labels: %d' % len(y_test))
+        # print('Length of test index: %d\n' % len(test_data_index))
+
+        if len(y_test) != len(test_data_index):
+            raise AssertionError('Data length is not conforming.')
+
+    return x_train, y_train, x_test, y_test, test_data_index
+
+
 if __name__ == '__main__':
     # main(load_latest_model=True)
     index_list = ['150095']
 
     for index_id in index_list:
-        main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False, data_only=False,
+        main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False,
+             data_only=False,
              load_last=False, start_index=-3000,
-             end_index=-2000)
+             end_index=-1999)
 
     """
     # Out-of memory generative training
