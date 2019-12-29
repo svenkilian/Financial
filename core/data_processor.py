@@ -10,14 +10,13 @@ from utils import pretty_print
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
 
-    def __init__(self, data: pd.DataFrame, split: float = 0.75, cols: list = list, seq_len=None,
-                 full_date_range=None, stock_id: tuple = None, split_index: int = 0):
+    def __init__(self, data: pd.DataFrame, cols: list = list, seq_len=None,
+                 full_date_range=None, stock_id: tuple = None, split_index: int = 0, verbose=False):
         """
         Constructor for DataLoader class
 
         :param stock_id: Stock identifier tuple
         :param data: DataFrame containing study period data
-        :param split: Split value between 0 and 1 determining train/test split
         :param cols: Columns to use for the model
         :param full_date_range: Full date index of study period
         """
@@ -52,8 +51,6 @@ class DataLoader:
                 print(f'Stock data for {stock_id} does not yield any training data.')
                 i_split = -1
 
-        # print(f'Using {split_date.date()} as split date.')
-
         self.data_train = self.data.loc[:split_date, cols].values  # Get training array
 
         if i_split - seq_len + 2 >= 0:
@@ -70,12 +67,13 @@ class DataLoader:
         self.len_test = len(self.data_test)  # Length of test data
         self.len_train_windows = None
 
-        # print('Length of index: %d' % len(self.data_test_index))
-        # print('Split index: %s' % i_split)
-        # print('Number of data points: %d' % len(self.data.get(cols)))
-        # print('Number of training data: %d' % self.len_train)
-        # print('Number of test data: %d' % self.len_test)
-        # print()
+        if verbose:
+            print('Length of index: %d' % len(self.data_test_index))
+            print('Split index: %s' % i_split)
+            print('Number of data points: %d' % len(self.data.get(cols)))
+            print('Number of training data: %d' % self.len_train)
+            print('Number of test data: %d' % self.len_test)
+            print()
 
     def get_train_data(self, seq_len: int, normalize=False):
         """

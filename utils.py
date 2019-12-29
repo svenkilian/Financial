@@ -206,8 +206,23 @@ def lookup_multiple(dict_of_dicts: dict = None, data_folder: str = '', index_id:
     return index_name, lookup_table
 
 
-class Timer():
+def check_directory_for_file(index_name: str, folder_path: str, force_download: bool) -> bool:
+    if os.path.exists(folder_path):
+        if force_download:
+            load_from_file = False
+            print('Downloading data from %s into existing folder: %s \n' % (index_name, folder_path))
+        else:
+            load_from_file = True
+            print('Loading data from %s from folder: %s \n' % (index_name, folder_path))
+    else:
+        print('Creating folder for %s: %s' % (index_name, folder_path))
+        os.mkdir(folder_path)
+        load_from_file = False
 
+    return load_from_file
+
+
+class Timer():
     def __init__(self):
         self.start_dt = None
 

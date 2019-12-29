@@ -19,7 +19,7 @@ from tensorflow.keras.metrics import binary_accuracy
 from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
 from core.model import LSTMModel
-from utils import plot_results, plot_train_val, get_most_recent_file, lookup_multiple
+from utils import plot_results, plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file
 from colorama import Fore, Back, Style
 
 
@@ -50,20 +50,11 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
               'lookup_table': 'comp.idxcst_his'}},
         data_folder=ROOT_DIR, index_id=index_id)
 
-    folder_path = os.path.join('data', index_name.lower().replace(' ', '_'))  # Path to index data folder
+    folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
 
     # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
-    if os.path.exists(folder_path):
-        if not force_download:
-            load_from_file = True
-            print('Loading data from %s from folder: %s \n' % (index_name, folder_path))
-        else:
-            load_from_file = False
-            print('Downloading data from %s into existing folder: %s \n' % (index_name, folder_path))
-    else:
-        print('Creating folder for %s: %s' % (index_name, folder_path))
-        os.mkdir(folder_path)
-        load_from_file = False
+    load_from_file = check_directory_for_file(index_name=index_name, folder_path=folder_path,
+                                              force_download=force_download)
 
     # JOB: Load configurations
     configs = json.load(open('config.json', 'r'))
@@ -98,12 +89,12 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         print(f'Finished downloading data for {index_name}.')
         print(f'Data set contains {data_length} individual dates.')
         print(full_data.head(100))
-        return None
+        return
 
     # JOB: Specify study period interval
     period_range = (start_index, end_index)
 
-    # Get study period data
+    # JOB: Get study period data and split index
     try:
         study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix,
                                                                full_data=full_data,
@@ -115,16 +106,16 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         print('Not all constituents in full data set. Terminating execution.')
         return
 
-    # JOB: Filter out n/a observations
+    # JOB: Filter out observations with missing values in relevant columns
     study_period_data.dropna(how='any', subset=cols, inplace=True)
 
     # JOB: Get all dates in study period
     full_date_range = study_period_data.index.unique()
     print(f'Study period length: {len(full_date_range)}\n')
 
-    # Set MultiIndex to stock identifier and select relevant columns
+    # JOB: Set MultiIndex to stock identifier and select relevant columns
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])[
-        ['datadate', 'above_cs_med', 'stand_d_return']]
+        ['datadate', *cols]]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
@@ -144,8 +135,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         try:
             # JOB: Initialize DataLoader
             data = DataLoader(
-                id_data,
-                split=configs['data']['train_test_split'], cols=['above_cs_med', 'stand_d_return'],
+                id_data, cols=cols,
                 seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id,
                 split_index=split_index
             )
@@ -167,7 +157,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
             normalize=False
         )
 
-        # In case training set is empty, set to first batch, otherwise append data
+        # JOB: In case training/test set is empty, set to first batch, otherwise append data
         if (len(x) > 0) and (len(y) > 0):
             if x_train is None:
                 x_train = x
@@ -190,9 +180,8 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
                 print(f'Target length: {len(y_t)}, index length: {len(data.data_test_index)}')
             else:
                 pass
-                # print(f'{Fore.GREEN}{Style.BRIGHT}All boogey!{Style.RESET_ALL}')
 
-            # Append to index
+            # JOB: Append to test data index
             test_data_index = test_data_index.append(data.data_test_index)
 
         # print('Length of test labels: %d' % len(y_test))
@@ -204,17 +193,17 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # Data size conformity checks
     print('\nChecking for training data size conformity: %s' % (len(x_train) == len(y_train)))
     print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
-    print('Checking for test data index conformity: %s \n' % (len(y_test) == len(test_data_index)))
+    print('Checking for test data index size conformity: %s \n' % (len(y_test) == len(test_data_index)))
     if len(y_test) != len(test_data_index):
-        # raise Exception('Test data index length is inconsistent.')
         print(f'{Fore.RED}{Back.YELLOW}Lengths do not conform!{Style.RESET_ALL}')
+        raise AssertionError('Test data index length is not conforming.')
 
     if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
         raise AssertionError('Data length does not conform.')
 
+    # JOB: Determine target label distribution in train and test sets
     target_mean_train = np.mean(y_train)
     target_mean_test = np.mean(y_test)
-    # JOB: Determine target label distribution in train and test sets
     print(f'Average target label (training): {np.round(target_mean_train, 4)}')
     print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
     print(f'Performance validation thresholds: \n'
@@ -243,13 +232,15 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # JOB: Make point prediction and join with target values
     predictions = model.predict_point_by_point(x_test)
 
+    # Create data frame with true and predicted values
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
                                        index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
 
-    study_period_data.index = study_period_data.index.tolist()
-    study_period_data.index.name = 'stock_id'
+    study_period_data.index = study_period_data.index.tolist()  # Flatten MultiIndex to tuples
+    study_period_data.index.name = 'stock_id'  # Rename index
     study_period_data.set_index('datadate', append=True, inplace=True)
 
+    # JOB: Merge test set with study period data
     test_set_comparison = test_set_comparison.merge(study_period_data, how='inner', left_index=True,
                                                     right_on=['datadate', 'stock_id'])
 
@@ -265,8 +256,6 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     cross_section_size = round(test_set_comparison.groupby('datadate')['y_test'].count().mean())
     print(f'Average size of cross sections: {cross_section_size}')
-    top_percentage = 0.1
-    # top_k = round(top_percentage * cross_section_size)
 
     # top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
     top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, int(cross_section_size / 10), int(cross_section_size / 5),
@@ -274,28 +263,26 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
                   int(cross_section_size / 2)]
 
     top_k_accuracies = pd.DataFrame({'Accuracy': []})
+    top_k_accuracies.index.name = 'k'
 
     for top_k in top_k_list:
         # JOB: Filter test data by top/bottom k affiliation
-        filtered = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
+        filtered_data = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
                 test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
 
-        # print(filtered.sample(10))
+        # print(filtered_data.sample(10))
         # print()
 
         # JOB: Calculate accuracy score
-        accuracy = binary_accuracy(filtered['y_test'].values,
-                                   filtered['norm_prediction'].values).numpy()
-
-        # print('Top-%d Accuracy: %g\n' % (top_k, round(accuracy, 4)))
+        accuracy = binary_accuracy(filtered_data['y_test'].values,
+                                   filtered_data['norm_prediction'].values).numpy()
 
         top_k_accuracies.loc[top_k] = accuracy
 
-    top_k_accuracies.index.name = 'k'
     print(top_k_accuracies)
 
     top_k_accuracies.plot(kind='line', legend=True, fontsize=14)
-    plt.savefig(os.path.join(folder_path, 'top_k_acc.png'), dpi=600)
+    plt.savefig(os.path.join(ROOT_DIR, folder_path, 'top_k_acc.png'), dpi=600)
     plt.show()
 
     # JOB: Plot training and validation metrics
@@ -318,8 +305,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['000003']
-    # index_list = ['150095']
+    index_list = ['150095']
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False, data_only=False,
@@ -344,11 +330,3 @@ if __name__ == '__main__':
     )
     
     """
-
-    # predictions = model.predict_sequences_multiple(x_test, configs['data']['sequence_length'],
-    #                                                configs['data']['sequence_length'])
-    # predictions = model.predict_sequence_full(x_test, configs['data']['sequence_length'])
-    # JOB: Make point prediction
-    # predictions = model.predict_point_by_point(x_test)
-
-    # plot_results_multiple(predictions, y_test, configs['data']['sequence_length'])
