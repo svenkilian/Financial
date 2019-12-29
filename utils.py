@@ -1,6 +1,8 @@
 """
 This utilities module implements helper functions for displaying data frames and plotting data
 """
+import datetime as dt
+import json
 
 import matplotlib.pyplot as plt
 import matplotlib
@@ -182,3 +184,36 @@ def get_most_recent_file(directory: str) -> str:
     # print(most_recent_file)
 
     return most_recent_file
+
+
+def lookup_multiple(dict_of_dicts: dict = None, data_folder: str = '', index_id: str = ''):
+    # Load index name dict and get index name
+    for key, value in dict_of_dicts.items():
+        print(f'Trying lookup in {key} ...')
+        lookup_dict = json.load(open(os.path.join(data_folder, 'data', value.get('file_path')), 'r'))
+        lookup_table = value.get('lookup_table')
+        index_name = lookup_dict.get(index_id)  # Check whether index id is in global dict
+        if index_name is not None:
+            print(f'Found index ID in {key}: {index_name}\n')
+            break
+        else:
+            # In case index id is not in dict, search in remaining dicts
+            print(f'Index identifier not in {key}.')
+    else:
+        print('Index ID not found in any dictionary.')
+        raise LookupError('Index ID not known.')
+
+    return index_name, lookup_table
+
+
+class Timer():
+
+    def __init__(self):
+        self.start_dt = None
+
+    def start(self):
+        self.start_dt = dt.datetime.now()
+
+    def stop(self):
+        end_dt = dt.datetime.now()
+        print('Time taken: %s' % (end_dt - self.start_dt))

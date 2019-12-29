@@ -9,7 +9,7 @@ import pprint
 from tensorflow.keras import optimizers, regularizers
 import tensorflow as tf
 
-from core.utils import Timer
+from utils import Timer
 from tensorflow.keras import layers
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
 from tensorflow.keras.models import Sequential, load_model

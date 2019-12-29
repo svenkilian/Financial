@@ -19,7 +19,7 @@ from tensorflow.keras.metrics import binary_accuracy
 from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
 from core.model import LSTMModel
-from utils import plot_results, plot_train_val, get_most_recent_file
+from utils import plot_results, plot_train_val, get_most_recent_file, lookup_multiple
 from colorama import Fore, Back, Style
 
 
@@ -40,23 +40,19 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     :return: None
     """
 
-    gvkeyx_lookup_dict = json.load(open(os.path.join('data', 'gvkeyx_name_dict.json'), 'r'))
-    index_name = gvkeyx_lookup_dict.get(index_id)
-    lookup_table = 'comp.g_idxcst_his'
-    if index_name is None:
-        print('Index identifier not in global dictionary.')
-        print('Trying lookup in North American dictionary ...')
-        gvkeyx_lookup_dict = json.load(open(os.path.join('data', 'gvkeyx_name_dict_na.json'), 'r'))
-        index_name = gvkeyx_lookup_dict.get(index_id)
-        lookup_table = 'comp.idxcst_his'
-        if index_name is None:
-            print('Index ID not found in North American lookup dictionary.')
-            raise LookupError('Index ID not known.')
+    # Load index name dict and get index name
+    index_name, lookup_table = lookup_multiple(
+        {'Global Dictionary':
+             {'file_path': 'gvkeyx_name_dict.json',
+              'lookup_table': 'comp.g_idxcst_his'},
+         'North American Dictionary':
+             {'file_path': 'gvkeyx_name_dict_na.json',
+              'lookup_table': 'comp.idxcst_his'}},
+        data_folder=ROOT_DIR, index_id=index_id)
 
-    folder_path = os.path.join('data', index_name.lower().replace(' ', '_'))
+    folder_path = os.path.join('data', index_name.lower().replace(' ', '_'))  # Path to index data folder
 
     # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
-
     if os.path.exists(folder_path):
         if not force_download:
             load_from_file = True
@@ -322,7 +318,8 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150095']
+    index_list = ['000003']
+    # index_list = ['150095']
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False, data_only=False,

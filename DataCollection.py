@@ -252,15 +252,14 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_t
         print('Opening DB connection ...')
         db = wrds.Connection(wrds_username='afecker')
         print('Done')
+        print(f'Retrieving index history from {lookup_table} ...')
         if lookup_table == 'comp.g_idxcst_his':
-            print(f'Retrieving index history from {lookup_table} ...')
             const_data = get_data_table(db, sql_query=True,
                                         query_string="select * "
                                                      "from comp.g_idxcst_his "
                                                      "where gvkeyx in %(index_id)s ",
                                         index_col=['gvkey', 'iid'], table_info=1, params=parameters)
         elif lookup_table == 'comp.idxcst_his':
-            print(f'Retrieving index history from {lookup_table} ...')
             const_data = get_data_table(db, sql_query=True,
                                         query_string="select * "
                                                      "from comp.idxcst_his "
