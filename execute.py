@@ -237,10 +237,10 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
                                        filtered_data['norm_prediction'].values).numpy()
 
         elif model_type == 'tree_based':
-            top_k_accuracies.loc[top_k] = accuracy_score(filtered_data['y_test'].values,
-                                                         filtered_data['norm_prediction'].values)
+            accuracy = accuracy_score(filtered_data['y_test'].values,
+                                      filtered_data['norm_prediction'].values)
 
-    print(top_k_accuracies)
+        top_k_accuracies.loc[top_k] = accuracy
 
     top_k_accuracies.plot(kind='line', legend=True, fontsize=14)
     plt.savefig(os.path.join(ROOT_DIR, folder_path, 'top_k_acc.png'), dpi=600)
