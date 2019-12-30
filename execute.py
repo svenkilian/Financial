@@ -228,7 +228,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         filtered_data = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
                 test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
 
-        print(filtered_data.sample(10))
+        # print(filtered_data.sample(10))
 
         accuracy = None
 
@@ -243,6 +243,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
         top_k_accuracies.loc[top_k] = accuracy
 
+    print(top_k_accuracies)
     top_k_accuracies.plot(kind='line', legend=True, fontsize=14)
     plt.savefig(os.path.join(ROOT_DIR, folder_path, 'top_k_acc.png'), dpi=600)
     plt.show()
