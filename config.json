@@ -6,7 +6,7 @@
       "Close",
       "Volume"
     ],
-    "sequence_length": 241,
+    "sequence_length": 121,
     "train_test_split": 0.75,
     "normalize": true
   },

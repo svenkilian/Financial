@@ -363,13 +363,13 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150928']
+    index_list = ['150378']
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False,
              data_only=False,
-             load_last=False, start_index=-2800,
-             end_index=-1799, model_type='tree_based')
+             load_last=False, start_index=-4800,
+             end_index=-3799, model_type='tree_based')
 
     """
     # Out-of memory generative training
