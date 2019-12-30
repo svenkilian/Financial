@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import pprint
 
 from tensorflow.keras.metrics import binary_accuracy
+from sklearn.metrics import accuracy_score
 
 from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
@@ -185,7 +186,6 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         model.build_model(verbose=1)
 
         model.model.fit(x_train, y_train)
-        print(model.model.classes_)
 
         predictions = model.model.predict_proba(x_test)[:, 1]
         print(predictions)
@@ -212,7 +212,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
         pct=True)
 
-    cross_section_size = round(test_set_comparison.groupby('datadate')['y_test'].count().mean())
+    cross_section_size = int(round(test_set_comparison.groupby('datadate')['y_test'].count().mean()))
     print(f'Average size of cross sections: {cross_section_size}')
 
     # top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
@@ -232,11 +232,13 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         # print()
 
         # JOB: Calculate accuracy score
-        accuracy = binary_accuracy(filtered_data['y_test'].values,
-                                   filtered_data['norm_prediction'].values)
-        print(type(accuracy))
+        if model_type == 'deep_learning':
+            accuracy = binary_accuracy(filtered_data['y_test'].values,
+                                       filtered_data['norm_prediction'].values).numpy()
 
-        top_k_accuracies.loc[top_k] = accuracy
+        elif model_type == 'tree_based':
+            top_k_accuracies.loc[top_k] = accuracy_score(filtered_data['y_test'].values,
+                                                         filtered_data['norm_prediction'].values)
 
     print(top_k_accuracies)
 
@@ -347,13 +349,13 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150095']
+    index_list = ['150928']
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False,
              data_only=False,
-             load_last=False, start_index=-4800,
-             end_index=-3799, model_type='tree_based')
+             load_last=False, start_index=-2800,
+             end_index=-1799, model_type='tree_based')
 
     """
     # Out-of memory generative training
