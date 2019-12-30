@@ -146,6 +146,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
           f'Training: {np.round(1 - target_mean_train, 4)}\n'
           f'Testing: {np.round(1 - target_mean_test, 4)}')
 
+    # print(x_train.)
 
     # JOB: Load model from storage
     if load_last:
@@ -328,13 +329,13 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150095']
+    index_list = ['150913']
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False,
              data_only=False,
-             load_last=False, start_index=-3000,
-             end_index=-1999)
+             load_last=False, start_index=-4800,
+             end_index=-3799)
 
     """
     # Out-of memory generative training

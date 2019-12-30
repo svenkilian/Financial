@@ -419,13 +419,17 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # JOB: Calculate standardized daily returns
     study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
 
+    # JOB: Drop observations with critical n/a values
+    critical_cols = cols[1:]
+    study_data.dropna(how='any', subset=critical_cols, inplace=True)
+
     # JOB: Create target
     study_data.loc[:, 'above_cs_med'] = study_data['daily_return'].gt(
         study_data.groupby('datadate')['daily_return'].transform('median')).astype(np.int8)
     study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
 
     # JOB: Create cross-sectional ranking
-    study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int16')
+    # study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first').astype('int16')
     # study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
 
     # JOB: Number of securities in cross-section
