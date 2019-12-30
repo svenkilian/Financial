@@ -134,7 +134,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     print(f'Length of training data: {x_train.shape}')
     print(f'Length of test data: {x_test.shape}')
-    print(f'Length of test label data: {y_test.shape}')
+    print(f'Length of test target data: {y_test.shape}')
 
     # Data size conformity checks
     print('\nChecking for training data size conformity: %s' % (len(x_train) == len(y_train)))
@@ -336,6 +336,18 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
                 print(f'Target length: {len(y_t)}, index length: {len(data.data_test_index)}')
             else:
                 pass
+
+            # print('Training data dimensions: \n')
+            # print(x_train.shape)
+            # print(x_train.ndim)
+            # print(y_train.shape)
+            # print(y_train.ndim)
+            # print()
+            # print('Test data dimensions: \n')
+            # print(x_test.shape)
+            # print(x_test.ndim)
+            # print(y_test.shape)
+            # print(y_test.ndim)
 
             # JOB: Append to test data index
             test_data_index = test_data_index.append(data.data_test_index)

@@ -64,12 +64,21 @@ class DataLoader:
         self.data_train = self.data.loc[:self.split_date, self.cols].values  # Get training array
         self.len_train = len(self.data_train)  # Length of training data
 
-        if self.len_train >= self.seq_len - 1:
-            self.data_test = self.data.get(self.cols).iloc[self.i_split - seq_len + 2:].values  # Get test array
-            target_start_index = self.i_split + 1
-        else:
-            self.data_test = self.data.values
-            target_start_index = self.i_split + abs(self.i_split - seq_len + 1)
+        target_start_index = 0
+        if model_type == 'deep_learning':
+            if self.len_train >= self.seq_len - 1:
+                self.data_test = self.data.get(self.cols).iloc[self.i_split - seq_len + 2:].values  # Get test array
+                target_start_index = self.i_split + 1
+            else:
+                self.data_test = self.data.values
+                target_start_index = self.i_split + abs(self.i_split - seq_len + 1)
+        elif model_type == 'tree_based':
+            if self.len_train >= self.seq_len:
+                self.data_test = self.data.get(self.cols).iloc[self.i_split - seq_len + 2:].values  # Get test array
+                target_start_index = self.i_split + 1
+            else:
+                self.data_test = self.data[1:].values
+                target_start_index = self.i_split + abs(self.i_split - seq_len)
 
         self.data_test_index = pd.MultiIndex.from_product(
             [self.data.get(self.cols).iloc[target_start_index:].index, [stock_id]])
@@ -107,8 +116,11 @@ class DataLoader:
             # print('Training data length: %s' % len(data_x))
 
         elif self.model_type == 'tree_based':
-            data_x = self.data_train[self.seq_len - 1:, -len(self.lag_cols):]
-            data_y = self.data_train[self.seq_len - 1:, 0].astype(np.int8)
+            for i in range(self.seq_len, self.len_train):
+                x = self.data_train[i - 1, -len(self.lag_cols):]
+                y = self.data_train[i, 0]
+                data_x.append(x)
+                data_y.append(y)
 
         return np.array(data_x), np.array(data_y)
 
@@ -135,7 +147,7 @@ class DataLoader:
 
     def get_test_data(self, seq_len: int):
         """
-        Create x, y test data windows
+        Create data_x, data_y test data windows
 
         Warning:: Batch method, not generative. Make sure you have enough memory to
         load data, otherwise reduce size of the training split.
@@ -145,8 +157,8 @@ class DataLoader:
         :return:
         """
 
-        x = None
-        y = None
+        data_x = []
+        data_y = []
 
         if self.model_type == 'deep_learning':
             data_windows = []
@@ -160,24 +172,27 @@ class DataLoader:
 
             # print(data_windows)
             if len(data_windows) > 0:
-                x = data_windows[:, :-1, 1:]
-                y = data_windows[:, -1, [0]]
+                data_x = data_windows[:, :-1, 1:]
+                data_y = data_windows[:, -1, [0]]
             else:
                 # print(self.stock_id)
                 # print(self.len_test)
                 # print(self.len_train)
-                x = np.array([])
-                y = np.array([])
+                data_x = np.array([])
+                data_y = np.array([])
                 print(
                     f'{Fore.RED}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
 
-            # print('Test data length: %s' % len(x))
+            # print('Test data length: %s' % len(data_x))
 
         elif self.model_type == 'tree_based':
-            x = self.data_test[self.seq_len - 1:, -len(self.lag_cols):]
-            y = self.data_test[self.seq_len - 1:, 0].astype(np.int8)
+            for i in range(self.seq_len - 1, self.len_test):
+                data_x.append(self.data_test[i - 1, -len(self.lag_cols):])
+                data_y.append(self.data_test[i, 0])
+            data_x = np.array(data_x)
+            data_y = np.array(data_y)
 
-        return x, y
+        return data_x, data_y
 
     def _next_window(self, i: int) -> Tuple[np.array, np.array]:
         """
@@ -189,7 +204,7 @@ class DataLoader:
 
         window = self.data_train[i:i + self.seq_len]
         x = window[:-1, 1:]
-        y = window[-1, 0].astype(np.int8)
+        y = window[-1, [0]].astype(np.int8)
 
         return x, y
 
