@@ -228,8 +228,9 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         filtered_data = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
                 test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
 
-        # print(filtered_data.sample(10))
-        # print()
+        print(filtered_data.sample(10))
+
+        accuracy = None
 
         # JOB: Calculate accuracy score
         if model_type == 'deep_learning':
