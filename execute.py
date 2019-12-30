@@ -13,24 +13,25 @@ import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import pprint
 
 from tensorflow.keras.metrics import binary_accuracy
 
 from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
 from core.data_processor import DataLoader
-from core.model import LSTMModel
+from core.model import LSTMModel, RandomForestModel
 from utils import plot_results, plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file
 from colorama import Fore, Back, Style
 
 
 def main(index_id='150095', cols: list = None, force_download=False, data_only=False, last_n=None,
          load_last: bool = False,
-         start_index: int = -1001, end_index: int = -1) -> None:
+         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning') -> None:
     """
     Run data preparation and model training
 
-    :param model:
-    :param cols:
+    :param model_type:
+    :param cols: Relevant columns for model training and testing
     :param load_last: Flag indicating whether to load last model weights from storage
     :param index_id: Index identifier
     :param last_n: Flag indicating the number of days to consider; *None* in case whole data history is considered
@@ -52,6 +53,10 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         data_folder=ROOT_DIR, index_id=index_id)
 
     folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
+
+    # Add 'return_index' column for feature generation in case of tree-based model
+    if model_type == 'tree_based':
+        cols.append('return_index')
 
     # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
     load_from_file = check_directory_for_file(index_name=index_name, folder_path=folder_path,
@@ -124,7 +129,11 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
                                                                         unique_indices=unique_indices, cols=cols,
                                                                         configs=configs,
                                                                         full_date_range=full_date_range,
-                                                                        model_type='deep_learning')
+                                                                        model_type=model_type)
+
+    print(f'Length of training data: {x_train.shape}')
+    print(f'Length of test data: {x_test.shape}')
+    print(f'Length of test label data: {y_test.shape}')
 
     # Data size conformity checks
     print('\nChecking for training data size conformity: %s' % (len(x_train) == len(y_train)))
@@ -146,29 +155,40 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
           f'Training: {np.round(1 - target_mean_train, 4)}\n'
           f'Testing: {np.round(1 - target_mean_test, 4)}')
 
-    # print(x_train.)
+    predictions = None
 
-    # JOB: Load model from storage
-    if load_last:
-        model = LSTMModel()
-        model.load_model(get_most_recent_file('saved_models'))
+    if model_type == 'deep_learning':
+        # JOB: Load model from storage
+        if load_last:
+            model = LSTMModel()
+            model.load_model(get_most_recent_file('saved_models'))
 
-    # JOB: Build model from configs
-    else:
-        model = LSTMModel(index_name.lower().replace(' ', '_'))
-        model.build_model(configs, verbose=2)
+        # JOB: Build model from configs
+        else:
+            model = LSTMModel(index_name.lower().replace(' ', '_'))
+            model.build_model(configs, verbose=2)
 
-        # JOB: In-memory training
-        history = model.train(
-            x_train,
-            y_train,
-            epochs=configs['training']['epochs'],
-            batch_size=configs['training']['batch_size'],
-            save_dir=configs['model']['save_dir'], configs=configs, verbose=2
-        )
+            # JOB: In-memory training
+            history = model.train(
+                x_train,
+                y_train,
+                epochs=configs['training']['epochs'],
+                batch_size=configs['training']['batch_size'],
+                save_dir=configs['model']['save_dir'], configs=configs, verbose=2
+            )
 
-    # JOB: Make point prediction and join with target values
-    predictions = model.predict_point_by_point(x_test)
+        # JOB: Make point prediction and join with target values
+        predictions = model.predict_point_by_point(x_test)
+
+    elif model_type == 'tree_based':
+        model = RandomForestModel(index_name.lower().replace(' ', '_'))
+        model.build_model(verbose=1)
+
+        model.model.fit(x_train, y_train)
+        print(model.model.classes_)
+
+        predictions = model.model.predict_proba(x_test)[:, 1]
+        print(predictions)
 
     # Create data frame with true and predicted values
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
@@ -213,7 +233,8 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
         # JOB: Calculate accuracy score
         accuracy = binary_accuracy(filtered_data['y_test'].values,
-                                   filtered_data['norm_prediction'].values).numpy()
+                                   filtered_data['norm_prediction'].values)
+        print(type(accuracy))
 
         top_k_accuracies.loc[top_k] = accuracy
 
@@ -262,9 +283,6 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     x_test = None
     y_test = None
     test_data_index = pd.Index([])
-
-    if model_type == 'tree_based':
-        cols.append('return_index')
 
     # JOB: Iterate through individual stocks and generate training and test data
     for stock_id in unique_indices:
@@ -329,13 +347,13 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
 
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150913']
+    index_list = ['150095']
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False,
              data_only=False,
              load_last=False, start_index=-4800,
-             end_index=-3799)
+             end_index=-3799, model_type='tree_based')
 
     """
     # Out-of memory generative training

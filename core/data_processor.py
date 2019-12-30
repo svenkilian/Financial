@@ -31,7 +31,6 @@ class DataLoader:
         self.cols = cols.copy()
         self.lag_cols = None
 
-
         # Handle empty data frame
         if len(self.data) == 0:
             print(f'{Fore.RED}{Style.BRIGHT}Encountered empty DataFrame for index {stock_id}.{Style.RESET_ALL}')
@@ -100,7 +99,7 @@ class DataLoader:
         data_y = []
 
         if self.model_type == 'deep_learning':
-            for i in range(self.len_train - self.seq_len):
+            for i in range(self.len_train - self.seq_len + 1):
                 x, y = self._next_window(i)
                 data_x.append(x)
                 data_y.append(y)
@@ -114,6 +113,13 @@ class DataLoader:
         return np.array(data_x), np.array(data_y)
 
     def generate_tree_features(self) -> None:
+        """
+        Generate lagged multi-period returns as features for tree-based methods
+
+        :return:
+        """
+
+        # Define lags for multi-period returns
         lags = np.concatenate(
             (np.linspace(1, 20, num=20, dtype=np.int16), np.linspace(40, 240, num=11, dtype=np.int16))).tolist()
 
@@ -142,30 +148,34 @@ class DataLoader:
         x = None
         y = None
 
-        data_windows = []
-        for i in range(self.len_test - seq_len + 1):
-            # print(f'Iteration: {i + 1}')
-            data_windows.append(self.data_test[i:i + seq_len])
-            # print(f'Window length: {len(self.data_test[i:i + seq_len])}')
-            # print(f'Last index: {i + seq_len}')
+        if self.model_type == 'deep_learning':
+            data_windows = []
+            for i in range(self.len_test - seq_len + 1):
+                # print(f'Iteration: {i + 1}')
+                data_windows.append(self.data_test[i:i + seq_len])
+                # print(f'Window length: {len(self.data_test[i:i + seq_len])}')
+                # print(f'Last index: {i + seq_len}')
 
-        data_windows = np.array(data_windows).astype(float)
+            data_windows = np.array(data_windows).astype(float)
 
-        # print(data_windows)
-        if len(data_windows) > 0:
-            x = data_windows[:, :-1, 1:]
-            y = data_windows[:, -1, [0]]
-        else:
-            # print(self.stock_id)
-            # print(self.len_test)
-            # print(self.len_train)
-            x = np.array([])
-            y = np.array([])
-            print(
-                f'{Fore.RED}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
+            # print(data_windows)
+            if len(data_windows) > 0:
+                x = data_windows[:, :-1, 1:]
+                y = data_windows[:, -1, [0]]
+            else:
+                # print(self.stock_id)
+                # print(self.len_test)
+                # print(self.len_train)
+                x = np.array([])
+                y = np.array([])
+                print(
+                    f'{Fore.RED}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
 
-        # print('Test data length: %s' % len(x))
-        # print()
+            # print('Test data length: %s' % len(x))
+
+        elif self.model_type == 'tree_based':
+            x = self.data_test[self.seq_len - 1:, -len(self.lag_cols):]
+            y = self.data_test[self.seq_len - 1:, 0].astype(np.int8)
 
         return x, y
 
@@ -174,7 +184,6 @@ class DataLoader:
         Generates the next data window from the given index location i
 
         :param i: Index location
-        :param seq_len: Sequence length
         :return: x, y
         """
 

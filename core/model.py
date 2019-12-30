@@ -14,7 +14,7 @@ from tensorflow.keras import layers
 from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
-
+from sklearn.ensemble import RandomForestClassifier
 
 # tf.logging.set_verbosity(tf.logging.ERROR)
 
@@ -264,3 +264,33 @@ def get_optimizer(optimizer_name: str, parameters: dict = None):
         optimizer = optimizers.RMSprop()
 
     return optimizer
+
+
+class RandomForestModel:
+    """
+    Random Forest model class
+    """
+
+    def __init__(self, index_name):
+
+        self.model = None
+        if index_name:
+            self.index_name = index_name
+        else:
+            index_name = ''
+
+    def __repr__(self):
+        return str(self.model.get_params())
+
+    def build_model(self, verbose=2):
+        parameters = {'n_estimators': 1000,
+                      'max_depth': 20,
+                      'n_jobs': -1,
+                      'verbose': 1}
+        self.model = RandomForestClassifier(**parameters)
+        if verbose == 2:
+            print(type(self.model).__name__)
+        elif verbose == 1:
+            print(self.model)
+
+

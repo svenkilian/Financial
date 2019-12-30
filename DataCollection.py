@@ -405,6 +405,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     print(f'Retrieving data from {unique_dates[period_range[0]].date()} to {unique_dates[period_range[1]].date()} \n')
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
+    print(len(study_data.index.unique()))
+
     study_data_split_index = study_data.index.unique().get_loc(split_date, method='ffill')
     study_data_split_date = study_data.index.unique()[study_data_split_index]
     print(f'Study data split index: {study_data_split_index}')
@@ -420,6 +422,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
 
     # JOB: Drop observations with critical n/a values
+    # TODO: Check whether operation is redundant
     critical_cols = cols[1:]
     study_data.dropna(how='any', subset=critical_cols, inplace=True)
 
