@@ -2,24 +2,24 @@
 This module implements methods to collect financial data from Wharton Research Services via the wrds package
 """
 
+import datetime
 # Imports
 import json
 import os
+import re
 import sys
 import time
 import warnings
+from typing import List
 
-import wrds
-import re
-import math
-import pandas as pd
-import datetime
 import numpy as np
+import pandas as pd
+import wrds
 from colorama import Fore, Back, Style
-from typing import List, Tuple
 
+import utils
 # Configurations for displaying DataFrames
-from utils import pretty_print
+from config import ROOT_DIR
 
 pd.set_option('precision', 4)
 pd.set_option('display.max_rows', 200)
@@ -223,7 +223,9 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         data.to_csv(os.path.join(folder_path, 'index_data_constituents.csv'))
 
     else:
-        data = pd.read_csv(os.path.join(folder_path, 'index_data_constituents.csv'), dtype={'gvkey': str})
+        data = pd.read_csv(os.path.join(folder_path, 'index_data_constituents.csv'), dtype={'gvkey': str},
+                           parse_dates=True)
+        data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'])
 
     if generate_dict:
         generate_company_lookup_dict(folder_path=folder_path, data=data)
@@ -231,7 +233,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
     return data
 
 
-def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_table='comp.g_idxcst_his',
+def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_table='global',
                                folder_path: str = None) -> None:
     """
     Generate constituency matrix for stock market index components
@@ -252,6 +254,7 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_t
         folder = ''
 
     db = None
+    const_data = None
     parameters = {'index_id': (index_id,)}
 
     # JOB: In case constituents have to be downloaded from database
@@ -261,13 +264,13 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_t
         db = wrds.Connection(wrds_username='afecker')
         print('Done')
         print(f'Retrieving index history from {lookup_table} ...')
-        if lookup_table == 'comp.g_idxcst_his':
+        if lookup_table == 'global':
             const_data = get_data_table(db, sql_query=True,
                                         query_string="select * "
                                                      "from comp.g_idxcst_his "
                                                      "where gvkeyx in %(index_id)s ",
                                         index_col=['gvkey', 'iid'], table_info=1, params=parameters)
-        elif lookup_table == 'comp.idxcst_his':
+        elif lookup_table == 'north_america':
             const_data = get_data_table(db, sql_query=True,
                                         query_string="select * "
                                                      "from comp.idxcst_his "
@@ -301,11 +304,20 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_t
 
     # JOB: Iterate through all company stocks ever listed in index and set adjacency to 0 or 1
     for stock_index in const_data.index:
-        for row in const_data.loc[stock_index].iterrows():
-            if pd.isnull(row[1]['thru']):
-                constituency_matrix.loc[pd.date_range(start=row[1]['from'], end=datetime.date.today()), stock_index] = 1
+        if isinstance(const_data.loc[stock_index], pd.Series):
+            if pd.isnull(const_data.loc[stock_index, 'thru']):
+                constituency_matrix.loc[pd.date_range(start=const_data.loc[stock_index, 'from'],
+                                                      end=datetime.date.today()), stock_index] = 1
             else:
-                constituency_matrix.loc[pd.date_range(start=row[1]['from'], end=row[1]['thru']), stock_index] = 1
+                constituency_matrix.loc[pd.date_range(start=const_data.loc[stock_index, 'from'], end=const_data.loc[
+                    stock_index, 'thru']), stock_index] = 1
+        else:
+            for row in const_data.loc[stock_index].iterrows():
+                if pd.isnull(row[1]['thru']):
+                    constituency_matrix.loc[
+                        pd.date_range(start=row[1]['from'], end=datetime.date.today()), stock_index] = 1
+                else:
+                    constituency_matrix.loc[pd.date_range(start=row[1]['from'], end=row[1]['thru']), stock_index] = 1
 
     # Save constituency table to file
     constituency_matrix.to_csv(os.path.join(folder, 'constituency_matrix.csv'))
@@ -379,7 +391,6 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     try:
         constituent_indices = get_index_constituents(constituency_matrix, date=split_date,
                                                      folder_path=folder_path)
-        # TODO: Change census date to month
     except IndexError as ie:
         print(
             f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Period index out of bounds. Choose different study period bounds.'
@@ -534,6 +545,141 @@ def main():
     # Close database connection
     db.close()
     print('DB connection closed.')
+
+
+def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, folder_path: str = None,
+                       load_from_file=False) -> pd.DataFrame:
+    """
+    Generate constituency matrix Global Industry Classification Standard (GICS) classification.
+
+    :param index_id: Index to create constituency matrix for
+    :param index_name: (Optional) - Index name
+    :param lookup_table: (Optional) - Lookup table name
+    :param folder_path: (Optional) - Folder path
+    :param load_from_file: (Optional) - Tag indicating whether to load matrix from file
+
+    :return:
+    """
+
+    lookup_dict = {'Global Dictionary':
+                       {'file_path': 'gvkeyx_name_dict.json',
+                        'lookup_table': 'global'},
+                   'North American Dictionary':
+                       {'file_path': 'gvkeyx_name_dict_na.json',
+                        'lookup_table': 'north_america'}
+                   }
+
+    if load_from_file:
+        if folder_path is None:
+            if index_name is None:
+                index_name, lookup_table = utils.lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_id)
+
+            folder_path = os.path.join(ROOT_DIR, 'data',
+                                       index_name.lower().replace(' ', '_'))  # Path to index data folder
+
+        constituency_matrix = pd.read_csv(os.path.join(folder_path, 'gics_matrix.csv'), index_col=0,
+                                          header=0,
+                                          parse_dates=True, dtype=str)
+        constituency_matrix.index = pd.to_datetime(constituency_matrix.index)
+
+    else:
+        if folder_path is None:
+            if (index_name is None) or (lookup_table is None):
+                index_name, lookup_table = utils.lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_id)
+
+            folder_path = os.path.join(ROOT_DIR, 'data',
+                                       index_name.lower().replace(' ', '_'))  # Path to index data folder
+        else:
+            index_name = str.split(folder_path, '\\')[-1].replace('_', ' ')
+            print(index_name)
+            index_id, lookup_table = utils.lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_name,
+                                                           reverse_lookup=True, key_to_lower=True)
+
+        folder_exists = utils.check_directory_for_file(index_name=index_name, folder_path=folder_path, create_dir=False)
+
+        if folder_exists:
+            print(f'Creating GICS matrix for {index_id}: {index_name}')
+        else:
+            print(
+                f'Directory for index {index_id} ({index_name}) does not exist. \nPlease either download the '
+                f'necessary data or choose different index ID.')
+            raise LookupError('Value not found.')
+
+        # JOB: Get all historic index constituents
+        gvkey_list, _ = get_all_constituents(
+            constituency_matrix=pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0,
+                                            header=[0, 1],
+                                            parse_dates=True))
+
+        parameters = {'index_ids': tuple(gvkey_list)}
+
+        # JOB: Download GICS table
+        # Establish database connection
+        print('Opening DB connection ...')
+        db = wrds.Connection(wrds_username='afecker')
+        print('Done')
+        print(f'Retrieving GICS history from {lookup_table} ...')
+        if lookup_table == 'global':
+            const_data = get_data_table(db, sql_query=True,
+                                        query_string="select * "
+                                                     "from comp.g_co_hgic "
+                                                     "where gvkey in %(index_ids)s ",
+                                        index_col=['gvkey'], table_info=1, params=parameters)
+        elif lookup_table == 'north_america':
+            const_data = get_data_table(db, sql_query=True,
+                                        query_string="select * "
+                                                     "from comp.co_hgic "
+                                                     "where gvkey in %(index_ids)s ",
+                                        index_col=['gvkey'], table_info=1, params=parameters)
+        else:
+            raise LookupError('Value not found.')
+
+        # Convert date columns to datetime format
+        for col in ['indfrom', 'indthru']:
+            const_data.loc[:, col] = pd.to_datetime(const_data[col], format='%Y-%m-%d')
+            const_data.loc[:, col] = const_data[col].dt.date
+
+        # Determine period starting date and relevant date range
+        index_starting_date = const_data['indfrom'].min()
+        relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
+
+        # Create empty constituency matrix
+        constituency_matrix = pd.DataFrame(None, index=relevant_date_range,
+                                           columns=const_data.index.drop_duplicates())
+
+        # JOB: Iterate through all company stocks ever listed in index and set adjacency to 0 or 1
+        for stock_index in const_data.index:
+            if isinstance(const_data.loc[stock_index], pd.Series):
+                if pd.isnull(const_data.loc[stock_index, 'indthru']):
+                    constituency_matrix.loc[
+                        pd.date_range(start=const_data.loc[stock_index, 'indfrom'],
+                                      end=datetime.date.today()), stock_index] = const_data.loc[stock_index, 'gsubind']
+                else:
+                    constituency_matrix.loc[
+                        pd.date_range(start=const_data.loc[stock_index, 'indfrom'], end=const_data.loc[
+                            stock_index, 'indthru']), stock_index] = const_data.loc[stock_index, 'gsubind']
+            else:
+                for row in const_data.loc[stock_index].iterrows():
+                    if pd.isnull(row[1]['indthru']):
+                        constituency_matrix.loc[
+                            pd.date_range(start=row[1]['indfrom'], end=datetime.date.today()), stock_index] = row[1][
+                            'gsubind']
+                    else:
+                        constituency_matrix.loc[
+                            pd.date_range(start=row[1]['indfrom'], end=row[1]['indthru']), stock_index] = row[1][
+                            'gsubind']
+
+        # Save constituency table to file
+        constituency_matrix.to_csv(os.path.join(folder_path, 'gics_matrix.csv'))
+
+        db.close()
+        print('DB connection closed.')
+
+    constituency_matrix = constituency_matrix.stack()
+    constituency_matrix.index.set_names(['datadate', 'gvkey'], inplace=True)
+    constituency_matrix.name = 'gics_full'
+
+    return constituency_matrix
 
 
 # Main method

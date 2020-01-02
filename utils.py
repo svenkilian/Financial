@@ -2,18 +2,18 @@
 This utilities module implements helper functions for displaying data frames and plotting data
 """
 import datetime as dt
+import glob
 import json
+import os
 
-import matplotlib.pyplot as plt
 import matplotlib
-from matplotlib.ticker import MaxNLocator
-from tabulate import tabulate
 import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import ticker
+from matplotlib.ticker import MaxNLocator
 from pandas.plotting import register_matplotlib_converters
-import glob
-import os
+from tabulate import tabulate
 
 # Update matplotlib setting
 plt.rcParams.update({'legend.fontsize': 8,
@@ -186,11 +186,37 @@ def get_most_recent_file(directory: str) -> str:
     return most_recent_file
 
 
-def lookup_multiple(dict_of_dicts: dict = None, data_folder: str = '', index_id: str = ''):
+def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_lookup=False, key_to_lower=False):
+    """
+    Retrieve index name and lookup table name for given index id and collection of lookup dicts.
+
+    The nested dictionary "dict_of_dicts" should have the following structure:
+
+    {'Global Dictionary':
+             {'file_path': 'gvkeyx_name_dict.json',
+              'lookup_table': 'global'},
+    'North American Dictionary':
+             {'file_path': 'gvkeyx_name_dict_na.json',
+              'lookup_table': 'north_america'}}
+
+    :param key_to_lower:
+    :param reverse_lookup:
+    :param dict_of_dicts: Nested dictionary with lookup dicts
+    :param data_folder: Root project folder
+    :param index_id: Index ID
+    :return: Tuple of [0] index_name, [1] lookup_table
+    """
+
     # Load index name dict and get index name
     for key, value in dict_of_dicts.items():
         print(f'Trying lookup in {key} ...')
-        lookup_dict = json.load(open(os.path.join(data_folder, 'data', value.get('file_path')), 'r'))
+        lookup_dict = json.load(open(os.path.join('data', value.get('file_path')), 'r'))
+
+        if reverse_lookup:
+            lookup_dict = {v: k for k, v in lookup_dict.items()}
+        if key_to_lower:
+            lookup_dict = {k.lower(): v for k, v in lookup_dict.items()}
+
         lookup_table = value.get('lookup_table')
         index_name = lookup_dict.get(index_id)  # Check whether index id is in global dict
         if index_name is not None:
@@ -206,7 +232,17 @@ def lookup_multiple(dict_of_dicts: dict = None, data_folder: str = '', index_id:
     return index_name, lookup_table
 
 
-def check_directory_for_file(index_name: str, folder_path: str, force_download: bool) -> bool:
+def check_directory_for_file(index_name: str = '', folder_path: str = '', force_download: bool = False,
+                             create_dir=True) -> bool:
+    """
+    Check whether folder path already exists
+
+    :param index_name: Name of index
+    :param folder_path: Folder path to check
+    :param force_download: Flag indicating whether to force download into existing folder
+    :param create_dir: Flag indicating whether to create new directory if path does not exist
+    :return: Boolean indicating whether to load from file (directory exists)
+    """
     if os.path.exists(folder_path):
         if force_download:
             load_from_file = False
@@ -215,11 +251,21 @@ def check_directory_for_file(index_name: str, folder_path: str, force_download: 
             load_from_file = True
             print('Loading data from %s from folder: %s \n' % (index_name, folder_path))
     else:
-        print('Creating folder for %s: %s' % (index_name, folder_path))
-        os.mkdir(folder_path)
+        if create_dir:
+            print('Creating folder for %s: %s' % (index_name, folder_path))
+            os.mkdir(folder_path)
         load_from_file = False
 
     return load_from_file
+
+
+def apply_batch_directory(directory_path, function=None, **func_args):
+    index_directories = [name for name in os.listdir(directory_path)
+                         if os.path.isdir(os.path.join(directory_path, name))]
+
+    for index_dir in index_directories:
+        full_path = os.path.join(directory_path, index_dir)
+        function(folder_path=full_path, **func_args)
 
 
 class Timer():

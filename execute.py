@@ -1,28 +1,23 @@
-from matplotlib.pyplot import plot
-
 __author__ = "Sven Köpke"
 __copyright__ = "Sven Köpke 2019"
 __version__ = "0.0.1"
 __license__ = "MIT"
 
-from config import *
-import math
-import os
 import json
-import sys
+import os
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import pprint
-
-from tensorflow.keras.metrics import binary_accuracy
+from colorama import Fore, Back, Style
 from sklearn.metrics import accuracy_score
+from tensorflow.keras.metrics import binary_accuracy
 
-from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix
+from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix, create_gics_matrix
+from config import *
 from core.data_processor import DataLoader
 from core.model import LSTMModel, RandomForestModel
-from utils import plot_results, plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file
-from colorama import Fore, Back, Style
+from utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file
 
 
 def main(index_id='150095', cols: list = None, force_download=False, data_only=False, last_n=None,
@@ -47,11 +42,10 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     index_name, lookup_table = lookup_multiple(
         {'Global Dictionary':
              {'file_path': 'gvkeyx_name_dict.json',
-              'lookup_table': 'comp.g_idxcst_his'},
+              'lookup_table': 'global'},
          'North American Dictionary':
              {'file_path': 'gvkeyx_name_dict_na.json',
-              'lookup_table': 'comp.idxcst_his'}},
-        data_folder=ROOT_DIR, index_id=index_id)
+              'lookup_table': 'north_america'}}, index_id=index_id)
 
     folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
 
@@ -77,17 +71,24 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
                                    folder_path=folder_path)
         print('Successfully created constituency matrix.')
 
-    print('Loading constituency matrix ...')
     # JOB: Load constituency matrix
+    print('Loading constituency matrix ...')
     constituency_matrix = pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
                                       parse_dates=True)
     print('Successfully loaded constituency matrix.\n')
+
+    # JOB: Create GICS (Global Industry Classification Standard) matrix
+    gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table, load_from_file=load_from_file)
 
     # JOB: Load full data
     print('Retrieving full index history ...')
     full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
                                        folder_path=folder_path, generate_dict=True)
     print('Successfully loaded index history.\n')
+
+    # JOB: Merge gics matrix with full data set
+    full_data.set_index(['datadate', 'gvkey'], inplace=True)
+    full_data = full_data.join(gics_matrix, how='inner').reset_index()
 
     # JOB: Query number of dates in full data set
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
@@ -368,8 +369,8 @@ if __name__ == '__main__':
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False,
              data_only=False,
-             load_last=False, start_index=-4800,
-             end_index=-3799, model_type='tree_based')
+             load_last=False, start_index=-2000,
+             end_index=-1000, model_type='deep_learning')
 
     """
     # Out-of memory generative training
