@@ -249,6 +249,25 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                study_period_data: pd.DataFrame, model_type: str = 'deep_learning', history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
                start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today()):
+    """
+    Test model on unseen data.
+
+    :param predictions:
+    :param configs:
+    :param folder_path:
+    :param test_data_index:
+    :param y_test:
+    :param study_period_data:
+    :param model_type:
+    :param history:
+    :param index_id:
+    :param index_name:
+    :param study_period_length:
+    :param model:
+    :param period_range:
+    :param start_date:
+    :param end_date:
+    """
     # JOB: Create data frame with true and predicted values
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
                                        index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
@@ -368,7 +387,7 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                    'End Date': end_date
                    }
 
-    logger = CSVWriter(output_path='training_log.csv', field_names=list(data_record.keys()))
+    logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'), field_names=list(data_record.keys()))
     logger.add_line(data_record)
 
 
