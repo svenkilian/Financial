@@ -31,6 +31,8 @@ class DataLoader:
         self.cols = cols.copy()
         self.lag_cols = None
 
+        self.data = self.data[cols]
+
         # Handle empty data frame
         if len(self.data) == 0:
             print(f'{Fore.RED}{Style.BRIGHT}Encountered empty DataFrame for index {stock_id}.{Style.RESET_ALL}')

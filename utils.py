@@ -10,12 +10,14 @@ import matplotlib
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 from config import ROOT_DIR
 from matplotlib import ticker
 from matplotlib.ticker import MaxNLocator
 from pandas.plotting import register_matplotlib_converters
 from pygments.lexers import configs
 from tabulate import tabulate
+from colorama import Fore, Back, Style
 import logging
 import csv
 import io
@@ -271,6 +273,40 @@ def apply_batch_directory(directory_path, function=None, **func_args):
     for index_dir in index_directories:
         full_path = os.path.join(directory_path, index_dir)
         function(folder_path=full_path, **func_args)
+
+
+def check_data_conformity(x_train: np.array, y_train: np.array, x_test: np.array, y_test: np.array,
+                          test_data_index: pd.MultiIndex):
+    """
+
+    :param x_train:
+    :param y_train:
+    :param x_test:
+    :param y_test:
+    :param test_data_index:
+    """
+
+    # JOB: Perform data size conformity checks
+    print('\nChecking for training data size conformity: %s' % (len(x_train) == len(y_train)))
+    print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
+    print('Checking for test data index size conformity: %s \n' % (len(y_test) == len(test_data_index)))
+
+    if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
+        print(f'{Fore.RED}{Back.YELLOW}Training data lengths do not conform!{Style.RESET_ALL}')
+        raise AssertionError('Training data lengths do not conform.')
+
+    if len(y_test) != len(test_data_index):
+        print(f'{Fore.RED}{Back.YELLOW}Test data lengths do not conform!{Style.RESET_ALL}')
+        raise AssertionError('Test data index length is not conforming.')
+
+    # JOB: Determine target label distribution in train and test sets and check for plausibility
+    target_mean_train = np.mean(y_train)
+    assert target_mean_train <= 1
+    target_mean_test = np.mean(y_test)
+    assert (y_test <= 1).all()
+    assert target_mean_test <= 1
+
+    return target_mean_train, target_mean_test
 
 
 class Timer():

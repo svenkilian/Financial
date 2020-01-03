@@ -295,7 +295,7 @@ class RandomForestModel:
         return self.parameters
 
     def build_model(self, verbose=2):
-        parameters = {'n_estimators': 500,
+        parameters = {'n_estimators': 100,
                       'max_depth': 20,
                       'n_jobs': -1,
                       'verbose': verbose,

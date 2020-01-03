@@ -9,8 +9,8 @@
     "normalize": true
   },
   "training": {
-    "epochs": 100,
-    "batch_size": 16,
+    "epochs": 1000,
+    "batch_size": 32,
     "early_stopping_patience": 5
   },
   "model": {
@@ -24,9 +24,9 @@
     "save_dir": "saved_models",
     "layers": [
       {
-        "type": "lstm",
+        "type": "gru",
         "params": {
-          "units": 25,
+          "units": 30,
           "dropout": 0.15,
           "recurrent_dropout": 0.0,
           "kernel_regularizer": "l2",

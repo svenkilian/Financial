@@ -7,6 +7,7 @@ import datetime
 import json
 import os
 import logging
+from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,15 +20,19 @@ from DataCollection import generate_study_period, retrieve_index_history, create
 from config import *
 from core.data_processor import DataLoader
 from core.model import LSTMModel, RandomForestModel
-from utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter
+from utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
+    check_data_conformity
 
 
 def main(index_id='150095', cols: list = None, force_download=False, data_only=False, last_n=None,
-         load_last: bool = False,
+         load_last: bool = False, train_full=False, study_period_length=1000,
          start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning', verbose=2) -> None:
     """
     Run data preparation and model training
 
+    :param study_period_length:
+    :param verbose:
+    :param train_full:
     :param model_type:
     :param cols: Relevant columns for model training and testing
     :param load_last: Flag indicating whether to load last model weights from storage
@@ -40,60 +45,19 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     :return: None
     """
 
-    # Load index name dict and get index name
-    index_name, lookup_table = lookup_multiple(
-        {'Global Dictionary':
-             {'file_path': 'gvkeyx_name_dict.json',
-              'lookup_table': 'global'},
-         'North American Dictionary':
-             {'file_path': 'gvkeyx_name_dict_na.json',
-              'lookup_table': 'north_america'}}, index_id=index_id)
-
-    folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
+    # JOB: Load configurations
+    configs = json.load(open('config.json', 'r'))
 
     # Add 'return_index' column for feature generation in case of tree-based model
     if model_type == 'tree_based':
         cols.append('return_index')
 
-    # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
-    load_from_file = check_directory_for_file(index_name=index_name, folder_path=folder_path,
-                                              force_download=force_download)
+    constituency_matrix, full_data, index_name, folder_path = load_full_data(force_download=force_download,
+                                                                             last_n=last_n,
+                                                                             configs=configs)
 
-    # JOB: Load configurations
-    configs = json.load(open('config.json', 'r'))
-
-    # JOB: Check if saved model folder exists and create one if not
-    if not os.path.exists(configs['model']['save_dir']):
-        os.makedirs(configs['model']['save_dir'])
-
-    if not load_from_file:
-        # JOB: Create or load constituency matrix
-        print('Creating constituency matrix ...')
-        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, lookup_table=lookup_table,
-                                   folder_path=folder_path)
-        print('Successfully created constituency matrix.')
-
-    # JOB: Load constituency matrix
-    print('Loading constituency matrix ...')
-    constituency_matrix = pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
-                                      parse_dates=True)
-    print('Successfully loaded constituency matrix.\n')
-
-    # JOB: Create GICS (Global Industry Classification Standard) matrix
-    gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
-                                     load_from_file=load_from_file)
-
-    # JOB: Load full data
-    print('Retrieving full index history ...')
-    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
-                                       folder_path=folder_path, generate_dict=True)
-    print('Successfully loaded index history.\n')
-
-    if not load_from_file:
-        # JOB: Merge gics matrix with full data set
-        print('Merging GICS matrix with full data set.')
-        full_data.set_index(['datadate', 'gvkey'], inplace=True)
-        full_data = full_data.join(gics_matrix, how='inner').reset_index()
+    full_data = full_data.get([column for column in full_data.columns if not column.startswith('Unnamed')])
+    full_data.dropna(subset=['daily_return'], inplace=True)
 
     # JOB: Query number of dates in full data set
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
@@ -102,7 +66,13 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         print(f'Finished downloading data for {index_name}.')
         print(f'Data set contains {data_length} individual dates.')
         print(full_data.head(10))
-        return
+        print(full_data.tail(10))
+        exit(0)
+
+    if train_full:
+        n_full_periods = data_length // study_period_length
+        print(f'Available index history for {index_name} allows for {n_full_periods} study periods.')
+        exit()
 
     # JOB: Specify study period interval
     period_range = (start_index, end_index)
@@ -127,7 +97,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     # JOB: Set MultiIndex to stock identifier and select relevant columns
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
-        # ['datadate', *cols]]
+    # ['datadate', *cols]]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
@@ -144,22 +114,9 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     print(f'Length of test data: {x_test.shape}')
     print(f'Length of test target data: {y_test.shape}')
 
-    # Data size conformity checks
-    print('\nChecking for training data size conformity: %s' % (len(x_train) == len(y_train)))
-    print('Checking for test data size conformity: %s' % (len(x_test) == len(y_test)))
-    print('Checking for test data index size conformity: %s \n' % (len(y_test) == len(test_data_index)))
-    if len(y_test) != len(test_data_index):
-        print(f'{Fore.RED}{Back.YELLOW}Lengths do not conform!{Style.RESET_ALL}')
-        raise AssertionError('Test data index length is not conforming.')
+    target_mean_train, target_mean_test = check_data_conformity(x_train=x_train, y_train=y_train, x_test=x_test,
+                                                                y_test=y_test, test_data_index=test_data_index)
 
-    if (len(x_train) != len(y_train)) or (len(x_test) != len(y_test)):
-        raise AssertionError('Data length does not conform.')
-
-    # JOB: Determine target label distribution in train and test sets
-    target_mean_train = np.mean(y_train)
-    assert target_mean_train < 1
-    target_mean_test = np.mean(y_test)
-    assert target_mean_test < 1
     print(f'Average target label (training): {np.round(target_mean_train, 4)}')
     print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
     print(f'Performance validation thresholds: \n'
@@ -202,6 +159,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
         predictions = model.model.predict_proba(x_test)[:, 1]
 
+    # JOB: Test model
     test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
                y_test=y_test, study_period_data=study_period_data, model_type=model_type, history=history,
                index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
@@ -296,7 +254,6 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                study_period_data: pd.DataFrame, model_type: str = 'deep_learning', history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
                start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today()):
-
     # JOB: Create data frame with true and predicted values
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
                                        index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
@@ -316,7 +273,7 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
 
     # JOB: Create cross-sectional ranking
     test_set_comparison.loc[:, 'prediction_rank'] = test_set_comparison.groupby('datadate')['prediction'].rank(
-        method='first').astype('int16')
+        method='first', ascending=False).astype('int16')
     test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
         pct=True)
 
@@ -329,31 +286,46 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                   int(cross_section_size / 2)]
 
     # Create empty dataframe for top-k accuracies
-    top_k_accuracies = pd.DataFrame({'Accuracy': [], 'Mean Daily Return': []})
+    top_k_accuracies = pd.DataFrame(
+        {'Accuracy': [], 'Mean Daily Return': [], 'Short Positions': [], 'Long Positions': []})
     top_k_accuracies.index.name = 'k'
 
     for top_k in top_k_list:
         # JOB: Filter test data by top/bottom k affiliation
-        filtered_data = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
-                test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
+        long_positions = test_set_comparison[test_set_comparison['prediction_rank'] <= top_k]
+        short_positions = test_set_comparison[test_set_comparison['prediction_rank'] > cross_section_size - top_k]
+        short_positions.loc[:, 'daily_return'] = - short_positions.loc[:, 'daily_return']
 
-        # print(filtered_data.sample(10))
+        full_portfolio = pd.concat([long_positions, short_positions], axis=0)
+
+        # print(full_portfolio.head())
+        # print(full_portfolio.tail())
+
+        # print(full_portfolio.sample(10))
         accuracy = None
         mean_daily_return = None
+        mean_daily_short = None
+        mean_daily_long = None
 
         # JOB: Calculate accuracy score
         if model_type == 'deep_learning':
-            accuracy = binary_accuracy(filtered_data['y_test'].values,
-                                       filtered_data['norm_prediction'].values).numpy()
-            mean_daily_return = filtered_data['daily_return'].mean()
+            accuracy = binary_accuracy(full_portfolio['y_test'].values,
+                                       full_portfolio['norm_prediction'].values).numpy()
+            mean_daily_return = full_portfolio['daily_return'].mean()
+            mean_daily_short = short_positions['daily_return'].mean()
+            mean_daily_long = long_positions['daily_return'].mean()
 
         elif model_type == 'tree_based':
-            accuracy = accuracy_score(filtered_data['y_test'].values,
-                                      filtered_data['norm_prediction'].values)
-            mean_daily_return = filtered_data['daily_return'].mean()
+            accuracy = accuracy_score(full_portfolio['y_test'].values,
+                                      full_portfolio['norm_prediction'].values)
+            mean_daily_return = full_portfolio['daily_return'].mean()
+            mean_daily_short = short_positions['daily_return'].mean()
+            mean_daily_long = long_positions['daily_return'].mean()
 
         top_k_accuracies.loc[top_k, 'Accuracy'] = accuracy
         top_k_accuracies.loc[top_k, 'Mean Daily Return'] = mean_daily_return
+        top_k_accuracies.loc[top_k, 'Short Positions'] = mean_daily_short
+        top_k_accuracies.loc[top_k, 'Long Positions'] = mean_daily_long
 
     print(top_k_accuracies)
     # Plot accuracies and save figure to file
@@ -405,17 +377,78 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     logger.add_line(data_record)
 
 
+def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd.DataFrame, pd.DataFrame, str, str]:
+    """
+    Load all available records from the data for a specified index
+
+    :param force_download: Flag indicating whether to overwrite existing data
+    :param last_n: Number of last available dates to consider
+    :param configs: Dict containing model and training configurations
+    :return: Tuple of (constituency_matrix, full_data, index_name, folder_path)
+    """
+    # Load index name dict and get index name
+    index_name, lookup_table = lookup_multiple(
+        {'Global Dictionary':
+             {'file_path': 'gvkeyx_name_dict.json',
+              'lookup_table': 'global'},
+         'North American Dictionary':
+             {'file_path': 'gvkeyx_name_dict_na.json',
+              'lookup_table': 'north_america'}}, index_id=index_id)
+
+    folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
+
+    # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
+    load_from_file = check_directory_for_file(index_name=index_name, folder_path=folder_path,
+                                              force_download=force_download)
+
+    # JOB: Check if saved model folder exists and create one if not
+    if not os.path.exists(configs['model']['save_dir']):
+        os.makedirs(configs['model']['save_dir'])
+
+    if not load_from_file:
+        # JOB: Create or load constituency matrix
+        print('Creating constituency matrix ...')
+        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, lookup_table=lookup_table,
+                                   folder_path=folder_path)
+        print('Successfully created constituency matrix.')
+
+    # JOB: Load constituency matrix
+    print('Loading constituency matrix ...')
+    constituency_matrix = pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+                                      parse_dates=True)
+    print('Successfully loaded constituency matrix.\n')
+
+    # JOB: Create GICS (Global Industry Classification Standard) matrix
+    gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
+                                     load_from_file=load_from_file)
+
+    # JOB: Load full data
+    print('Retrieving full index history ...')
+    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
+                                       folder_path=folder_path, generate_dict=True)
+    print('Successfully loaded index history.\n')
+
+    if not load_from_file:
+        # JOB: Merge gics matrix with full data set
+        print('Merging GICS matrix with full data set.')
+        full_data.set_index(['datadate', 'gvkey'], inplace=True)
+        full_data = full_data.join(gics_matrix, how='inner').reset_index()
+
+    return constituency_matrix, full_data, index_name, folder_path
+
+
 if __name__ == '__main__':
     # main(load_latest_model=True)
-    index_list = ['150378']
-    # index_list = ['150928']
-    # index_list = ['150095']
-
+    # index_list = ['150378']  # Dow Jones European STOXX Index
+    # index_list = ['150913']  # S&P Euro Index
+    # index_list = ['150928']  # Euronext 100 Index
+    index_list = ['150095']  # DAX
+    cols = ['above_cs_med', 'stand_d_return']
     for index_id in index_list:
-        main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False,
+        main(index_id=index_id, cols=cols, force_download=False,
              data_only=False,
-             load_last=False, start_index=-4800,
-             end_index=-3800, model_type='tree_based', verbose=1)
+             load_last=False, train_full=True, start_index=-1001,
+             end_index=-1, model_type='tree_based', verbose=1)
 
     """
     # Out-of memory generative training
