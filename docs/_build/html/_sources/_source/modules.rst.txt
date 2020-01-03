@@ -1,0 +1,12 @@
+Financial
+=========
+
+.. toctree::
+   :maxdepth: 4
+
+   DataAcquisition
+   DataCollection
+   config
+   core
+   execute
+   utils

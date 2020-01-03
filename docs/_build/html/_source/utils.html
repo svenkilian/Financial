@@ -1,0 +1,269 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>utils module &#8212; Financial Time Series Prediction 0.1 documentation</title>
+    <link rel="stylesheet" href="../_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Financial Time Series Prediction 0.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/_source/utils.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="module-utils">
+<span id="utils-module"></span><h1>utils module<a class="headerlink" href="#module-utils" title="Permalink to this headline">¶</a></h1>
+<p>This utilities module implements helper functions for displaying data frames and plotting data.</p>
+<dl class="class">
+<dt id="utils.CSVWriter">
+<em class="property">class </em><code class="sig-prename descclassname">utils.</code><code class="sig-name descname">CSVWriter</code><span class="sig-paren">(</span><em class="sig-param">output_path: str</em>, <em class="sig-param">field_names: list</em><span class="sig-paren">)</span><a class="headerlink" href="#utils.CSVWriter" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="utils.CSVWriter.add_line">
+<code class="sig-name descname">add_line</code><span class="sig-paren">(</span><em class="sig-param">record: dict</em><span class="sig-paren">)</span><a class="headerlink" href="#utils.CSVWriter.add_line" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="utils.Timer">
+<em class="property">class </em><code class="sig-prename descclassname">utils.</code><code class="sig-name descname">Timer</code><a class="headerlink" href="#utils.Timer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dl class="method">
+<dt id="utils.Timer.start">
+<code class="sig-name descname">start</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#utils.Timer.start" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="utils.Timer.stop">
+<code class="sig-name descname">stop</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#utils.Timer.stop" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="utils.apply_batch_directory">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">apply_batch_directory</code><span class="sig-paren">(</span><em class="sig-param">directory_path</em>, <em class="sig-param">function=None</em>, <em class="sig-param">**func_args</em><span class="sig-paren">)</span><a class="headerlink" href="#utils.apply_batch_directory" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="utils.check_data_conformity">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">check_data_conformity</code><span class="sig-paren">(</span><em class="sig-param">x_train: numpy.array</em>, <em class="sig-param">y_train: numpy.array</em>, <em class="sig-param">x_test: numpy.array</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">test_data_index: pandas.core.indexes.multi.MultiIndex</em><span class="sig-paren">)</span><a class="headerlink" href="#utils.check_data_conformity" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x_train</strong> – </p></li>
+<li><p><strong>y_train</strong> – </p></li>
+<li><p><strong>x_test</strong> – </p></li>
+<li><p><strong>y_test</strong> – </p></li>
+<li><p><strong>test_data_index</strong> – </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="utils.check_directory_for_file">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">check_directory_for_file</code><span class="sig-paren">(</span><em class="sig-param">index_name: str = ''</em>, <em class="sig-param">folder_path: str = ''</em>, <em class="sig-param">force_download: bool = False</em>, <em class="sig-param">create_dir=True</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#utils.check_directory_for_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Check whether folder path already exists</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index_name</strong> – Name of index</p></li>
+<li><p><strong>folder_path</strong> – Folder path to check</p></li>
+<li><p><strong>force_download</strong> – Flag indicating whether to force download into existing folder</p></li>
+<li><p><strong>create_dir</strong> – Flag indicating whether to create new directory if path does not exist</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Boolean indicating whether to load from file (directory exists)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="utils.get_most_recent_file">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">get_most_recent_file</code><span class="sig-paren">(</span><em class="sig-param">directory: str</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#utils.get_most_recent_file" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="utils.lookup_multiple">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">lookup_multiple</code><span class="sig-paren">(</span><em class="sig-param">dict_of_dicts: dict = None</em>, <em class="sig-param">index_id: str = ''</em>, <em class="sig-param">reverse_lookup=False</em>, <em class="sig-param">key_to_lower=False</em><span class="sig-paren">)</span><a class="headerlink" href="#utils.lookup_multiple" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve index name and lookup table name for given index id and collection of lookup dicts.</p>
+<p>The nested dictionary “dict_of_dicts” should have the following structure:</p>
+<dl class="simple">
+<dt>{‘Global Dictionary’:</dt><dd><dl class="simple">
+<dt>{‘file_path’: ‘gvkeyx_name_dict.json’,</dt><dd><p>‘lookup_table’: ‘global’},</p>
+</dd>
+</dl>
+</dd>
+<dt>‘North American Dictionary’:</dt><dd><dl class="simple">
+<dt>{‘file_path’: ‘gvkeyx_name_dict_na.json’,</dt><dd><p>‘lookup_table’: ‘north_america’}}</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key_to_lower</strong> – </p></li>
+<li><p><strong>reverse_lookup</strong> – </p></li>
+<li><p><strong>dict_of_dicts</strong> – Nested dictionary with lookup dicts</p></li>
+<li><p><strong>data_folder</strong> – Root project folder</p></li>
+<li><p><strong>index_id</strong> – Index ID</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Tuple of [0] index_name, [1] lookup_table</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="utils.plot_data">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">plot_data</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame</em>, <em class="sig-param">columns: list = None</em>, <em class="sig-param">index_name: str = None</em>, <em class="sig-param">title=''</em>, <em class="sig-param">col_multi_index=False</em>, <em class="sig-param">label_mapping=None</em>, <em class="sig-param">export_as_png=False</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#utils.plot_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plot data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> – DataFrame containing the data to plot</p></li>
+<li><p><strong>columns</strong> – Columns to plot</p></li>
+<li><p><strong>index_name</strong> – Name of the row index</p></li>
+<li><p><strong>title</strong> – Title of the plot</p></li>
+<li><p><strong>col_multi_index</strong> – Flag indicating whether MultiIndex is used in columns</p></li>
+<li><p><strong>label_mapping</strong> – Dict mapping label codes to descriptive text</p></li>
+<li><p><strong>export_as_png</strong> – Flag indicating whether to export plot to png</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+<p>Usage::
+Plotting all rows and columns:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">plot_data</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">loc</span><span class="p">[:],</span> <span class="n">columns</span><span class="o">=</span><span class="n">data</span><span class="o">.</span><span class="n">columns</span><span class="p">,</span> <span class="n">index_name</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Indices&#39;</span><span class="p">,</span> <span class="n">col_multi_index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="go">label_mapping=indices, export_as_png=True)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="function">
+<dt id="utils.plot_results">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">plot_results</code><span class="sig-paren">(</span><em class="sig-param">predicted_data</em>, <em class="sig-param">true_data</em><span class="sig-paren">)</span><a class="headerlink" href="#utils.plot_results" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="utils.plot_results_multiple">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">plot_results_multiple</code><span class="sig-paren">(</span><em class="sig-param">predicted_data</em>, <em class="sig-param">true_data</em>, <em class="sig-param">prediction_len</em><span class="sig-paren">)</span><a class="headerlink" href="#utils.plot_results_multiple" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="utils.plot_train_val">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">plot_train_val</code><span class="sig-paren">(</span><em class="sig-param">history</em>, <em class="sig-param">metrics: list</em>, <em class="sig-param">store_png=False</em>, <em class="sig-param">folder_path=''</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#utils.plot_train_val" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plot training and validation metrics over epochs</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>history</strong> – Training history</p></li>
+<li><p><strong>metrics</strong> (<em>list of strings</em>) – List of metrics to plot</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="utils.pretty_print">
+<code class="sig-prename descclassname">utils.</code><code class="sig-name descname">pretty_print</code><span class="sig-paren">(</span><em class="sig-param">df: pandas.core.frame.DataFrame</em>, <em class="sig-param">headers='keys'</em>, <em class="sig-param">tablefmt='fancy_grid'</em><span class="sig-paren">)</span><a class="headerlink" href="#utils.pretty_print" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prints out DataFrame in tabular format</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>df</strong> – DataFrame to print</p></li>
+<li><p><strong>headers</strong> (<em>list</em><em> or </em><em>string</em>) – Table headers</p></li>
+<li><p><strong>tablefmt</strong> – Table style</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+<dl>
+<dt>Usage::</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">pretty_print</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;col_1&#39;</span><span class="p">,</span> <span class="s1">&#39;col_2&#39;</span><span class="p">])</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Financial Time Series Prediction 0.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2020, Sven Köpke.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 2.3.0.
+    </div>
+  </body>
+</html>
