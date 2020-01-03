@@ -1,11 +1,10 @@
 # Financial Time Series Forecasting
 
 This code repository pertains to the seminar project titled "*Using Machine Learning for Empirical Asset Pricing*", 
-supervised by *Patrick Jaquart* at the chair of *Information & Market Engineering* at KIT.
+supervised by *Patrick Jaquart* at the chair of *Information & Market Engineering* at KIT (winter semester 2019/20).
 
-The project aims at predicting the excess returns for a defined asset universe by means of advanced machine learning 
-methods such as **LSTM Networks** and **Gradient-Boosted Decision Trees** and devising trading strategies to capitalize 
-on uncovered opportunities for arbitrage.
+The project aims to predict the excess returns for a defined asset universe by means of advanced machine learning 
+methods such as **LSTM Networks** and **Gradient-Boosted Decision Trees** and to devise derived trading strategies to capitalize on opportunities for arbitrage.
 
 This work extends the previoud work by [[1]](#1)[[2]](#2).
 
