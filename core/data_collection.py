@@ -464,7 +464,7 @@ def generate_index_lookup_dict() -> None:
     gvkeyx_lookup.index = gvkeyx_lookup.index.astype(str)
     gvkeyx_lookup = gvkeyx_lookup['index_name'].to_dict()
 
-    with open(os.path.join('../data', 'gvkeyx_name_dict.json'), 'w') as fp:
+    with open(os.path.join(ROOT_DIR, 'data', 'gvkeyx_name_dict.json'), 'w') as fp:
         json.dump(gvkeyx_lookup, fp)
 
 
