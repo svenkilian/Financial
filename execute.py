@@ -397,7 +397,7 @@ def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd
                                               force_download=force_download)
 
     # JOB: Check if saved model folder exists and create one if not
-    if not os.path.exists(configs['model']['save_dir']):
+    if not os.path.exists(os.path.join(ROOT_DIR, configs['model']['save_dir'])):
         os.makedirs(configs['model']['save_dir'])
 
     if not load_from_file:
@@ -409,7 +409,7 @@ def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd
 
     # JOB: Load constituency matrix
     print('Loading constituency matrix ...')
-    constituency_matrix = pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
                                       parse_dates=True)
     print('Successfully loaded constituency matrix.\n')
 

@@ -145,7 +145,7 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
     ax.legend(['Training', 'Validation'], loc='upper left')
     plt.show()
     if store_png:
-        fig.savefig(os.path.join(folder_path, 'metrics.png'), dpi=600)
+        fig.savefig(os.path.join(ROOT_DIR, folder_path, 'metrics.png'), dpi=600)
 
     # Plot history for loss
     fig, ax = plt.subplots()
@@ -159,7 +159,7 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
 
     plt.show()
     if store_png:
-        fig.savefig(os.path.join(folder_path, 'loss.png'), dpi=600)
+        fig.savefig(os.path.join(ROOT_DIR, folder_path, 'loss.png'), dpi=600)
 
 
 def plot_results(predicted_data, true_data):
@@ -217,7 +217,7 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
     # Load index name dict and get index name
     for key, value in dict_of_dicts.items():
         print(f'Trying lookup in {key} ...')
-        lookup_dict = json.load(open(os.path.join('../data', value.get('file_path')), 'r'))
+        lookup_dict = json.load(open(os.path.join(ROOT_DIR, 'data', value.get('file_path')), 'r'))
 
         if reverse_lookup:
             lookup_dict = {v: k for k, v in lookup_dict.items()}
@@ -242,7 +242,7 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
 def check_directory_for_file(index_name: str = '', folder_path: str = '', force_download: bool = False,
                              create_dir=True) -> bool:
     """
-    Check whether folder path already exists
+    Check whether folder path already exists.
 
     :param index_name: Name of index
     :param folder_path: Folder path to check
@@ -250,7 +250,7 @@ def check_directory_for_file(index_name: str = '', folder_path: str = '', force_
     :param create_dir: Flag indicating whether to create new directory if path does not exist
     :return: Boolean indicating whether to load from file (directory exists)
     """
-    if os.path.exists(folder_path):
+    if os.path.exists(os.path.join(ROOT_DIR, folder_path)):
         if force_download:
             load_from_file = False
             print('Downloading data from %s into existing folder: %s \n' % (index_name, folder_path))
@@ -260,7 +260,7 @@ def check_directory_for_file(index_name: str = '', folder_path: str = '', force_
     else:
         if create_dir:
             print('Creating folder for %s: %s' % (index_name, folder_path))
-            os.mkdir(folder_path)
+            os.mkdir(os.path.join(ROOT_DIR, folder_path))
         load_from_file = False
 
     return load_from_file
@@ -275,11 +275,11 @@ def apply_batch_directory(directory_path, function=None, **func_args):
     :param func_args: Optional function arguments
     :return:
     """
-    index_directories = [name for name in os.listdir(directory_path)
-                         if os.path.isdir(os.path.join(directory_path, name))]
+    index_directories = [name for name in os.listdir(os.path.join(ROOT_DIR, directory_path))
+                         if os.path.isdir(os.path.join(ROOT_DIR, directory_path, name))]
 
     for index_dir in index_directories:
-        full_path = os.path.join(directory_path, index_dir)
+        full_path = os.path.join(ROOT_DIR, directory_path, index_dir)
         function(folder_path=full_path, **func_args)
 
 

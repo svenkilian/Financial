@@ -1,3 +1,5 @@
+from config import ROOT_DIR
+
 GPU_ENABLED = True
 
 import os
@@ -119,7 +121,7 @@ class LSTMModel:
         print('[Model] %s epochs, %s batch size' % (epochs, batch_size))
         early_stopping_patience = configs['training']['early_stopping_patience']
 
-        save_fname = os.path.join(save_dir, '%s-%s-e%s-b%s.h5' % (self.index_name,
+        save_fname = os.path.join(ROOT_DIR, save_dir, '%s-%s-e%s-b%s.h5' % (self.index_name,
                                                                   dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
                                                                   str(epochs), str(batch_size)))
         callbacks = [
@@ -128,7 +130,7 @@ class LSTMModel:
             ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True, verbose=1)]
 
         if GPU_ENABLED:
-            previous_runs = os.listdir('logs')
+            previous_runs = os.listdir(os.path.join(ROOT_DIR, 'logs'))
             # print(f'Directory contents: {previous_runs}')
             if len(previous_runs) == 0:
                 run_number = 1
@@ -137,7 +139,7 @@ class LSTMModel:
             log_dir_name = 'run_%02d' % run_number
             print(f'Log directory: {os.path.join("logs", log_dir_name)}')
             callbacks.append(
-                TensorBoard(log_dir=os.path.join('logs', log_dir_name), histogram_freq=0, write_graph=False,
+                TensorBoard(log_dir=os.path.join(ROOT_DIR, 'logs', log_dir_name), histogram_freq=0, write_graph=False,
                             write_grads=False,
                             write_images=False, embeddings_freq=0, embeddings_layer_names=None,
                             embeddings_metadata=None,
@@ -182,7 +184,7 @@ class LSTMModel:
         print('[Model] Training Started')
         print('[Model] %s epochs, %s batch size, %s batches per epoch' % (epochs, batch_size, steps_per_epoch))
 
-        save_fname = os.path.join(save_dir, '%s-e%s.h5' % (dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs)))
+        save_fname = os.path.join(ROOT_DIR, save_dir, '%s-e%s.h5' % (dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs)))
         callbacks = [
             ModelCheckpoint(filepath=save_fname, monitor='loss', save_best_only=True)
         ]
