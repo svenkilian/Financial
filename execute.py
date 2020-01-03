@@ -5,7 +5,6 @@ __license__ = "MIT"
 
 import datetime
 import json
-import os
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -15,11 +14,11 @@ from colorama import Fore, Back, Style
 from sklearn.metrics import accuracy_score
 from tensorflow.keras.metrics import binary_accuracy
 
-from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix, create_gics_matrix
+from core.data_collection import generate_study_period, retrieve_index_history, create_constituency_matrix, create_gics_matrix
 from config import *
 from core.data_processor import DataLoader
 from core.model import LSTMModel, RandomForestModel
-from utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
+from core.utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
     check_data_conformity
 
 

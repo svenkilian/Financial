@@ -17,7 +17,7 @@ import pandas as pd
 import wrds
 from colorama import Fore, Back, Style
 
-import utils
+from core import utils
 # Configurations for displaying DataFrames
 from config import ROOT_DIR
 
@@ -161,7 +161,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
 
     if not from_file:
         # Load GVKEYX lookup dict
-        with open(os.path.join('data', 'gvkeyx_name_dict.json'), 'r') as fp:
+        with open(os.path.join('../data', 'gvkeyx_name_dict.json'), 'r') as fp:
             gvkeyx_lookup = json.load(fp)
 
         # Establish database connection
@@ -459,11 +459,11 @@ def generate_index_lookup_dict() -> None:
     :return:
     """
 
-    gvkeyx_lookup = pd.read_csv(os.path.join('data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
+    gvkeyx_lookup = pd.read_csv(os.path.join('../data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
     gvkeyx_lookup.index = gvkeyx_lookup.index.astype(str)
     gvkeyx_lookup = gvkeyx_lookup['index_name'].to_dict()
 
-    with open(os.path.join('data', 'gvkeyx_name_dict.json'), 'w') as fp:
+    with open(os.path.join('../data', 'gvkeyx_name_dict.json'), 'w') as fp:
         json.dump(gvkeyx_lookup, fp)
 
 
@@ -520,7 +520,7 @@ def main():
 
     # Import data file
     print('Loading data from csv file ...')
-    data = pd.read_csv(os.path.join('data', 'data.csv'))
+    data = pd.read_csv(os.path.join('../data', 'data.csv'))
     data['datadate'] = pd.to_datetime(data['datadate'], format='%Y-%m-%d')
 
     # Set Multiindex

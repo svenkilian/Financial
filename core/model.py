@@ -1,17 +1,14 @@
 GPU_ENABLED = True
 
 import os
-import math
 import numpy as np
 import datetime as dt
 from numpy import newaxis
 import pprint
-from tensorflow.keras import optimizers, regularizers
-import tensorflow as tf
+from tensorflow.keras import optimizers
 
-from utils import Timer
+from core.utils import Timer
 from tensorflow.keras import layers
-from tensorflow.keras.layers import Dense, Activation, Dropout, LSTM
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
 from sklearn.ensemble import RandomForestClassifier

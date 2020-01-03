@@ -2,13 +2,10 @@
 This module implements the class DataLoader which implements function for data preprocessing.
 """
 
-import math
 import numpy as np
 import pandas as pd
-from typing import List, Tuple
-from colorama import Fore, Back, Style
-
-from utils import pretty_print
+from typing import Tuple
+from colorama import Fore, Style
 
 
 class DataLoader:

@@ -217,7 +217,7 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
     # Load index name dict and get index name
     for key, value in dict_of_dicts.items():
         print(f'Trying lookup in {key} ...')
-        lookup_dict = json.load(open(os.path.join('data', value.get('file_path')), 'r'))
+        lookup_dict = json.load(open(os.path.join('../data', value.get('file_path')), 'r'))
 
         if reverse_lookup:
             lookup_dict = {v: k for k, v in lookup_dict.items()}
