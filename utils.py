@@ -1,5 +1,5 @@
 """
-This utilities module implements helper functions for displaying data frames and plotting data
+This utilities module implements helper functions for displaying data frames and plotting data.
 """
 import datetime as dt
 import glob
@@ -55,7 +55,7 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
     Usage::
     Plotting all rows and columns:
             >>> plot_data(data.loc[:], columns=data.columns, index_name=None, title='Indices', col_multi_index=False,
-            label_mapping=indices, export_as_png=True)
+            >>> label_mapping=indices, export_as_png=True)
     """
 
     # Initialize date locators and formatters
@@ -108,7 +108,7 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
 
 def pretty_print(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     """
-    Prints out DataFrame in tabular format
+    Print out DataFrame in tabular format.
 
     :type headers: list or string
     :param df: DataFrame to print
@@ -124,7 +124,7 @@ def pretty_print(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
 
 def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> None:
     """
-    Plot training and validation metrics over epochs
+    Plot training and validation metrics over epochs.
 
     :param history: Training history
     :param metrics: List of metrics to plot
@@ -163,6 +163,13 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
 
 
 def plot_results(predicted_data, true_data):
+    """
+    Plot predictions vs. true labels.
+
+    :param predicted_data:
+    :param true_data:
+    :return:
+    """
     fig = plt.figure(facecolor='white')
     ax = fig.add_subplot(111)
     ax.plot(true_data, label='True Data')
@@ -171,19 +178,13 @@ def plot_results(predicted_data, true_data):
     plt.show()
 
 
-def plot_results_multiple(predicted_data, true_data, prediction_len):
-    fig = plt.figure(facecolor='white')
-    ax = fig.add_subplot(111)
-    ax.plot(true_data, label='True Data')
-    # Pad the list of predictions to shift it in the graph to it's correct start
-    for i, data in enumerate(predicted_data):
-        padding = [None for p in range(i * prediction_len)]
-        plt.plot(padding + data, label='Prediction')
-        plt.legend()
-    plt.show()
-
-
 def get_most_recent_file(directory: str) -> str:
+    """
+    Retrieve name of most recently changed file in given directory.
+
+    :param directory: Directory to search for most recently edited file
+    :return: Name of most recently edited file
+    """
     all_files = glob.glob(directory + '/*')
     most_recent_file = max(all_files, key=os.path.getctime)
 
@@ -209,7 +210,6 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
     :param key_to_lower:
     :param reverse_lookup:
     :param dict_of_dicts: Nested dictionary with lookup dicts
-    :param data_folder: Root project folder
     :param index_id: Index ID
     :return: Tuple of [0] index_name, [1] lookup_table
     """
@@ -267,6 +267,14 @@ def check_directory_for_file(index_name: str = '', folder_path: str = '', force_
 
 
 def apply_batch_directory(directory_path, function=None, **func_args):
+    """
+    Apply given function to all subdirectories in a given parent directory.
+
+    :param directory_path: Path of the parent directory
+    :param function: Function to apply to direct subdirectories
+    :param func_args: Optional function arguments
+    :return:
+    """
     index_directories = [name for name in os.listdir(directory_path)
                          if os.path.isdir(os.path.join(directory_path, name))]
 
@@ -278,12 +286,13 @@ def apply_batch_directory(directory_path, function=None, **func_args):
 def check_data_conformity(x_train: np.array, y_train: np.array, x_test: np.array, y_test: np.array,
                           test_data_index: pd.MultiIndex):
     """
+    Check for conformity of given training and test sets (including test set index)
 
-    :param x_train:
-    :param y_train:
-    :param x_test:
-    :param y_test:
-    :param test_data_index:
+    :param x_train: Training data input
+    :param y_train: Training data labels
+    :param x_test: Test data input
+    :param y_test: Test data labels
+    :param test_data_index: Test data index
     """
 
     # JOB: Perform data size conformity checks
@@ -310,6 +319,10 @@ def check_data_conformity(x_train: np.array, y_train: np.array, x_test: np.array
 
 
 class Timer():
+    """
+    Timer class for timing operations.
+    """
+
     def __init__(self):
         self.start_dt = None
 
@@ -322,6 +335,10 @@ class Timer():
 
 
 class CSVWriter:
+    """
+    Writer class for handling the logging of training runs into a .csv file.
+    """
+
     def __init__(self, output_path: str, field_names: list):
         self.output_path = output_path
         self.field_names = field_names
@@ -332,6 +349,12 @@ class CSVWriter:
                 writer.writeheader()
 
     def add_line(self, record: dict):
+        """
+        Add data line (dict format) to .csv file.
+
+        :param record: Dictionary of records to add to file
+        :return:
+        """
         with open(self.output_path, 'a') as f:
             writer = csv.DictWriter(f, fieldnames=self.field_names, delimiter=';', lineterminator='\n')
             writer.writerow(record)

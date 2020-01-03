@@ -1,3 +1,7 @@
+"""
+This module implements the class DataLoader which implements function for data preprocessing.
+"""
+
 import math
 import numpy as np
 import pandas as pd
