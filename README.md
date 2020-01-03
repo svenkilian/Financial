@@ -7,7 +7,7 @@ The project aims at predicting the excess returns for a defined asset universe b
 methods such as **LSTM Networks** and **Gradient-Boosted Decision Trees** and devising trading strategies to capitalize 
 on uncovered opportunities for arbitrage.
 
-This work extends the previoud work by [[1]](#1).
+This work extends the previoud work by [[1]](#1)[[2]](#2).
 
 
 ## References
@@ -15,3 +15,8 @@ This work extends the previoud work by [[1]](#1).
 Fischer, Thomas; Krauss, Christopher (2018). 
 Deep learning with long short-term memory networks for financial market predictions.
 European Journal of Operational Research 270 (2), S. 654–669. DOI: 10.1016/j.ejor.2017.11.054.
+
+<a id="2">[2]</a> 
+Krauss, Christopher; Do, Xuan Anh; Huck, Nicolas (2017).
+Deep neural networks, gradient-boosted trees, random forests: Statistical arbitrage on the S&P 500. 
+European Journal of Operational Research 259 (2), S. 689–702. DOI: 10.1016/j.ejor.2016.10.031.
