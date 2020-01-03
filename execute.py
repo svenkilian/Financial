@@ -14,12 +14,14 @@ from colorama import Fore, Back, Style
 from sklearn.metrics import accuracy_score
 from tensorflow.keras.metrics import binary_accuracy
 
-from core.data_collection import generate_study_period, retrieve_index_history, create_constituency_matrix, create_gics_matrix
+from core import utils
+from core.data_collection import generate_study_period, retrieve_index_history, create_constituency_matrix, \
+    create_gics_matrix
 from config import *
 from core.data_processor import DataLoader
 from core.model import LSTMModel, RandomForestModel
 from core.utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
-    check_data_conformity
+    check_data_conformity, annualize_metric, get_study_period_ranges
 
 
 def main(index_id='150095', columns: list = None, force_download=False, data_only=False, last_n=None,
@@ -295,14 +297,14 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     print(f'Average size of cross sections: {cross_section_size}')
 
     # Define top k values
-    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, int(cross_section_size / 10), int(cross_section_size / 5),
+    top_k_list = [5, 10, int(cross_section_size / 10), int(cross_section_size / 5),
                   int(cross_section_size / 4), int(cross_section_size / 2.5),
                   int(cross_section_size / 2)]
 
     # Create empty dataframe for top-k accuracies
-    top_k_accuracies = pd.DataFrame(
-        {'Accuracy': [], 'Mean Daily Return': [], 'Short Positions': [], 'Long Positions': []})
-    top_k_accuracies.index.name = 'k'
+    top_k_metrics = pd.DataFrame(
+        {'Accuracy': [], 'Mean Daily Return': [], 'Mean Daily Return (Short)': [], 'Mean Daily Return (Long)': []})
+    top_k_metrics.index.name = 'k'
 
     for top_k in top_k_list:
         # JOB: Filter test data by top/bottom k affiliation
@@ -336,15 +338,16 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
             mean_daily_short = short_positions['daily_return'].mean()
             mean_daily_long = long_positions['daily_return'].mean()
 
-        top_k_accuracies.loc[top_k, 'Accuracy'] = accuracy
-        top_k_accuracies.loc[top_k, 'Mean Daily Return'] = mean_daily_return
-        top_k_accuracies.loc[top_k, 'Short Positions'] = mean_daily_short
-        top_k_accuracies.loc[top_k, 'Long Positions'] = mean_daily_long
+        top_k_metrics.loc[top_k, 'Accuracy'] = accuracy
+        top_k_metrics.loc[top_k, 'Mean Daily Return'] = mean_daily_return
+        top_k_metrics.loc[top_k, 'Annualized Return'] = annualize_metric(mean_daily_return)
+        top_k_metrics.loc[top_k, 'Mean Daily Return (Short)'] = mean_daily_short
+        top_k_metrics.loc[top_k, 'Mean Daily Return (Long)'] = mean_daily_long
 
-    print(top_k_accuracies)
+    print(top_k_metrics)
     # Plot accuracies and save figure to file
-    for col in top_k_accuracies.columns:
-        top_k_accuracies[col].plot(kind='line', legend=True, fontsize=14)
+    for col in top_k_metrics.columns:
+        top_k_metrics[col].plot(kind='line', legend=True, fontsize=14)
         plt.savefig(os.path.join(ROOT_DIR, folder_path, f'top_k_{col.lower()}.png'), dpi=600)
         plt.show()
 
@@ -378,8 +381,9 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                    'Number days': study_period_length,
                    'Test Set Size': len(y_test),
                    'Total Accuracy': test_score,
-                   'Top-k Accuracy Scores': top_k_accuracies['Accuracy'].to_dict(),
-                   'Top-k Mean Daily Return': top_k_accuracies['Mean Daily Return'].to_dict(),
+                   'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
+                   'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
+                   'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
                    'Model Configs': model.get_params(),
                    'Total Epochs': total_epochs,
                    'Period Range': period_range,
@@ -387,7 +391,8 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                    'End Date': end_date
                    }
 
-    logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'), field_names=list(data_record.keys()))
+    logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'),
+                       field_names=list(data_record.keys()))
     logger.add_line(data_record)
 
 
@@ -428,7 +433,8 @@ def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd
 
     # JOB: Load constituency matrix
     print('Loading constituency matrix ...')
-    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
+                                      header=[0, 1],
                                       parse_dates=True)
     print('Successfully loaded constituency matrix.\n')
 
@@ -452,36 +458,33 @@ def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd
 
 
 if __name__ == '__main__':
+
+    configs = json.load(open('config.json', 'r'))
+
     # main(load_latest_model=True)
     # index_list = ['150378']  # Dow Jones European STOXX Index
     # index_list = ['150913']  # S&P Euro Index
     # index_list = ['150928']  # Euronext 100 Index
-    index_id = '150021'
+    index_id = '150378'
     cols = ['above_cs_med', 'stand_d_return']
     study_period_length = 1000
+    test_period_length = round(study_period_length * (1 - configs['data']['train_test_split']))
 
     index_name, data_length = main(index_id=index_id, columns=cols.copy(), force_download=False,
                                    data_only=True,
                                    load_last=False, train_full=True, start_index=-1001,
                                    end_index=-1, model_type='tree_based', verbose=1)
 
-    print(f'Data set contains {data_length} individual dates.')
-    n_full_periods = data_length // study_period_length
-    remaining_days = data_length % study_period_length
-    print(f'Available index history for {index_name} allows for {n_full_periods} study periods.')
-    print(f'{remaining_days} days remaining.')
-    study_period_ranges = {}
-    for period in range(n_full_periods):
-        study_period_ranges[period + 1] = (
-            - ((period + 1) * study_period_length), -(period * study_period_length + 1))
-
+    study_period_ranges = get_study_period_ranges(data_length=data_length, test_period_length=test_period_length,
+                                                  study_period_length=study_period_length,
+                                                  index_name=index_name, reverse=True, verbose=1)
+    print('\nStudy period date index ranges:')
     print(study_period_ranges)
 
-    exit()
-
-    for study_period_ix in list(reversed(sorted(study_period_ranges.keys()))):
+    for study_period_ix in list(sorted(study_period_ranges.keys())):
         date_range = study_period_ranges.get(study_period_ix)
-        print(f'{Fore.YELLOW}{Back.RED}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
+        print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
+
         main(index_id=index_id, columns=cols.copy(), force_download=False,
              data_only=False,
              load_last=False, train_full=False, start_index=date_range[0],

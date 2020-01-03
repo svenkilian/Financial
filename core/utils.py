@@ -5,6 +5,7 @@ import datetime as dt
 import glob
 import json
 import os
+import pprint
 
 import matplotlib
 import matplotlib.dates as mdates
@@ -106,7 +107,7 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
     plt.show()
 
 
-def pretty_print(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
+def pretty_print_table(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     """
     Print out DataFrame in tabular format.
 
@@ -117,7 +118,7 @@ def pretty_print(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     :return:
 
     Usage::
-            >>> pretty_print(db, headers=['col_1', 'col_2'])
+            >>> pretty_print_table(db, headers=['col_1', 'col_2'])
     """
     print(tabulate(df, headers, tablefmt=tablefmt, showindex=True))
 
@@ -316,6 +317,56 @@ def check_data_conformity(x_train: np.array, y_train: np.array, x_test: np.array
     assert target_mean_test <= 1
 
     return target_mean_train, target_mean_test
+
+
+def annualize_metric(metric: float, holding_periods: int = 1) -> float:
+    """
+    Annualize metric of arbitrary periodicity
+
+    :param metric: Metric to analyze
+    :param holding_periods:
+    :return: Annualized metric
+    """
+
+    trading_days_per_year = 240
+    trans_ratio = trading_days_per_year / holding_periods
+
+    return (1 + metric) ** trans_ratio - 1
+
+
+def get_study_period_ranges(data_length: int, test_period_length: int, study_period_length: int, index_name: int,
+                            reverse=True,
+                            verbose=1) -> dict:
+    """
+    Get study period ranges, going backwards in time, as a dict
+
+    :param data_length: Number of total dates in index data
+    :param test_period_length: Length of test period
+    :param study_period_length: Length of study period
+    :param index_name: Index name
+    :param reverse:
+    :param verbose:
+    :return: Dict of study period ranges
+    """
+
+    n_full_periods = (data_length - (study_period_length - test_period_length)) // test_period_length
+    remaining_days = (data_length - (study_period_length - test_period_length)) % test_period_length
+
+    if verbose == 1:
+        print(f'Data set contains {data_length} individual dates.')
+        print(f'Available index history for {index_name} allows for {n_full_periods} overlapping study periods.')
+        print(f'{remaining_days} days are excluded from study data.')
+
+    study_period_ranges = {}
+    for period in range(n_full_periods):
+        study_period_ranges[period + 1] = (
+            - (period * test_period_length + study_period_length), -(period * test_period_length + 1))
+
+    if reverse:
+        dict_len = len(study_period_ranges.keys())
+        study_period_ranges = {dict_len - key + 1: value for key, value in study_period_ranges.items()}
+
+    return study_period_ranges
 
 
 class Timer():
