@@ -35,7 +35,7 @@ pd.set_option('display.html.table_schema', False)
 
 pd.set_option('mode.chained_assignment', None)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
-warnings.simplefilter(action='error', category=FutureWarning)
+warnings.simplefilter(action='error', category=FutureWarning)  # TODO: Change to ignore
 
 
 def get_data_table(db: wrds.Connection, sql_query=False, query_string='', library=None, table=None, columns=None,

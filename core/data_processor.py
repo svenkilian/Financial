@@ -31,7 +31,7 @@ class DataLoader:
         self.cols = cols.copy()
         self.lag_cols = None
 
-        self.data = self.data[cols]
+        self.data = self.data[self.cols]
 
         # Handle empty data frame
         if len(self.data) == 0:
@@ -213,7 +213,7 @@ class DataLoader:
 
     def generate_train_batch(self, seq_len: int, batch_size: int):
         """
-        Yield a generator of training data from filename on given list of cols split for train/test
+        Yield a generator of training data from filename on given list of columns split for train/test
 
         :param seq_len: Sequence length
         :param batch_size: Batch size

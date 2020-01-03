@@ -6,7 +6,6 @@ __license__ = "MIT"
 import datetime
 import json
 import os
-import logging
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -24,9 +23,9 @@ from utils import plot_train_val, get_most_recent_file, lookup_multiple, check_d
     check_data_conformity
 
 
-def main(index_id='150095', cols: list = None, force_download=False, data_only=False, last_n=None,
-         load_last: bool = False, train_full=False, study_period_length=1000,
-         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning', verbose=2) -> None:
+def main(index_id='150095', columns: list = None, force_download=False, data_only=False, last_n=None,
+         load_last: bool = False, train_full=False,
+         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning', verbose=2):
     """
     Run data preparation and model training
 
@@ -34,7 +33,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     :param verbose:
     :param train_full:
     :param model_type:
-    :param cols: Relevant columns for model training and testing
+    :param columns: Relevant columns for model training and testing
     :param load_last: Flag indicating whether to load last model weights from storage
     :param index_id: Index identifier
     :param last_n: Flag indicating the number of days to consider; *None* in case whole data history is considered
@@ -50,7 +49,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     # Add 'return_index' column for feature generation in case of tree-based model
     if model_type == 'tree_based':
-        cols.append('return_index')
+        columns.append('return_index')
 
     constituency_matrix, full_data, index_name, folder_path = load_full_data(force_download=force_download,
                                                                              last_n=last_n,
@@ -65,14 +64,11 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     if data_only:
         print(f'Finished downloading data for {index_name}.')
         print(f'Data set contains {data_length} individual dates.')
-        print(full_data.head(10))
-        print(full_data.tail(10))
-        exit(0)
+        # print(full_data.head(10))
+        # print(full_data.tail(10))
 
     if train_full:
-        n_full_periods = data_length // study_period_length
-        print(f'Available index history for {index_name} allows for {n_full_periods} study periods.')
-        exit()
+        return index_name, data_length
 
     # JOB: Specify study period interval
     period_range = (start_index, end_index)
@@ -82,7 +78,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix,
                                                                full_data=full_data,
                                                                period_range=period_range,
-                                                               index_name=index_name, configs=configs, cols=cols,
+                                                               index_name=index_name, configs=configs, cols=columns,
                                                                folder_path=folder_path)
     except AssertionError as ae:
         print(ae)
@@ -97,7 +93,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     # JOB: Set MultiIndex to stock identifier and select relevant columns
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
-    # ['datadate', *cols]]
+    # ['datadate', *columns]]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
@@ -105,7 +101,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # JOB: Obtain training and test data as well as test data index
     x_train, y_train, x_test, y_test, test_data_index = preprocess_data(study_period_data=study_period_data,
                                                                         split_index=split_index,
-                                                                        unique_indices=unique_indices, cols=cols,
+                                                                        unique_indices=unique_indices, cols=columns,
                                                                         configs=configs,
                                                                         full_date_range=full_date_range,
                                                                         model_type=model_type)
@@ -442,13 +438,36 @@ if __name__ == '__main__':
     # index_list = ['150378']  # Dow Jones European STOXX Index
     # index_list = ['150913']  # S&P Euro Index
     # index_list = ['150928']  # Euronext 100 Index
-    index_list = ['150095']  # DAX
+    index_id = '150021'
     cols = ['above_cs_med', 'stand_d_return']
-    for index_id in index_list:
-        main(index_id=index_id, cols=cols, force_download=False,
+    study_period_length = 1000
+
+    index_name, data_length = main(index_id=index_id, columns=cols.copy(), force_download=False,
+                                   data_only=True,
+                                   load_last=False, train_full=True, start_index=-1001,
+                                   end_index=-1, model_type='tree_based', verbose=1)
+
+    print(f'Data set contains {data_length} individual dates.')
+    n_full_periods = data_length // study_period_length
+    remaining_days = data_length % study_period_length
+    print(f'Available index history for {index_name} allows for {n_full_periods} study periods.')
+    print(f'{remaining_days} days remaining.')
+    study_period_ranges = {}
+    for period in range(n_full_periods):
+        study_period_ranges[period + 1] = (
+            - ((period + 1) * study_period_length), -(period * study_period_length + 1))
+
+    print(study_period_ranges)
+
+    exit()
+
+    for study_period_ix in list(reversed(sorted(study_period_ranges.keys()))):
+        date_range = study_period_ranges.get(study_period_ix)
+        print(f'{Fore.YELLOW}{Back.RED}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
+        main(index_id=index_id, columns=cols.copy(), force_download=False,
              data_only=False,
-             load_last=False, train_full=True, start_index=-1001,
-             end_index=-1, model_type='tree_based', verbose=1)
+             load_last=False, train_full=False, start_index=date_range[0],
+             end_index=date_range[1], model_type='tree_based', verbose=1)
 
     """
     # Out-of memory generative training
