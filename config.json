@@ -1,7 +1,5 @@
 {
   "data": {
-    "filename": "test.csv",
-    "_comment": "['Close','Volume']",
     "columns": [
       "Close",
       "Volume"
@@ -11,9 +9,9 @@
     "normalize": true
   },
   "training": {
-    "epochs": 10,
-    "batch_size": 64,
-    "early_stopping_patience": 2
+    "epochs": 100,
+    "batch_size": 16,
+    "early_stopping_patience": 5
   },
   "model": {
     "loss": "binary_crossentropy",
@@ -29,13 +27,13 @@
         "type": "lstm",
         "params": {
           "units": 25,
+          "dropout": 0.15,
+          "recurrent_dropout": 0.0,
+          "kernel_regularizer": "l2",
           "input_shape": [
             240,
             1
           ],
-          "dropout": 0.1,
-          "recurrent_dropout": 0.0,
-          "kernel_regularizer": "l2",
           "return_sequences": false
         }
       },

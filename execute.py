@@ -3,8 +3,10 @@ __copyright__ = "Sven Köpke 2019"
 __version__ = "0.0.1"
 __license__ = "MIT"
 
+import datetime
 import json
 import os
+import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,12 +19,12 @@ from DataCollection import generate_study_period, retrieve_index_history, create
 from config import *
 from core.data_processor import DataLoader
 from core.model import LSTMModel, RandomForestModel
-from utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file
+from utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter
 
 
 def main(index_id='150095', cols: list = None, force_download=False, data_only=False, last_n=None,
          load_last: bool = False,
-         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning') -> None:
+         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning', verbose=2) -> None:
     """
     Run data preparation and model training
 
@@ -78,7 +80,8 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     print('Successfully loaded constituency matrix.\n')
 
     # JOB: Create GICS (Global Industry Classification Standard) matrix
-    gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table, load_from_file=load_from_file)
+    gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
+                                     load_from_file=load_from_file)
 
     # JOB: Load full data
     print('Retrieving full index history ...')
@@ -86,9 +89,11 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
                                        folder_path=folder_path, generate_dict=True)
     print('Successfully loaded index history.\n')
 
-    # JOB: Merge gics matrix with full data set
-    full_data.set_index(['datadate', 'gvkey'], inplace=True)
-    full_data = full_data.join(gics_matrix, how='inner').reset_index()
+    if not load_from_file:
+        # JOB: Merge gics matrix with full data set
+        print('Merging GICS matrix with full data set.')
+        full_data.set_index(['datadate', 'gvkey'], inplace=True)
+        full_data = full_data.join(gics_matrix, how='inner').reset_index()
 
     # JOB: Query number of dates in full data set
     data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
@@ -117,10 +122,12 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # JOB: Get all dates in study period
     full_date_range = study_period_data.index.unique()
     print(f'Study period length: {len(full_date_range)}\n')
+    start_date = full_date_range.min().date()
+    end_date = full_date_range.max().date()
 
     # JOB: Set MultiIndex to stock identifier and select relevant columns
-    study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])[
-        ['datadate', *cols]]
+    study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
+        # ['datadate', *cols]]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
@@ -150,15 +157,19 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     # JOB: Determine target label distribution in train and test sets
     target_mean_train = np.mean(y_train)
+    assert target_mean_train < 1
     target_mean_test = np.mean(y_test)
+    assert target_mean_test < 1
     print(f'Average target label (training): {np.round(target_mean_train, 4)}')
     print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
     print(f'Performance validation thresholds: \n'
           f'Training: {np.round(1 - target_mean_train, 4)}\n'
           f'Testing: {np.round(1 - target_mean_test, 4)}')
 
+    history = None
     predictions = None
-
+    model = None
+    # JOB: Test model performance on test data
     if model_type == 'deep_learning':
         # JOB: Load model from storage
         if load_last:
@@ -167,7 +178,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
         # JOB: Build model from configs
         else:
-            model = LSTMModel(index_name.lower().replace(' ', '_'))
+            model = LSTMModel(index_name=index_name.lower().replace(' ', '_'))
             model.build_model(configs, verbose=2)
 
             # JOB: In-memory training
@@ -176,95 +187,25 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
                 y_train,
                 epochs=configs['training']['epochs'],
                 batch_size=configs['training']['batch_size'],
-                save_dir=configs['model']['save_dir'], configs=configs, verbose=2
+                save_dir=configs['model']['save_dir'], configs=configs, verbose=verbose
             )
 
-        # JOB: Make point prediction and join with target values
+        # JOB: Make point prediction
         predictions = model.predict_point_by_point(x_test)
 
     elif model_type == 'tree_based':
         model = RandomForestModel(index_name.lower().replace(' ', '_'))
-        model.build_model(verbose=1)
+        model.build_model(verbose=verbose)
 
+        # JOB: Fit model
         model.model.fit(x_train, y_train)
 
         predictions = model.model.predict_proba(x_test)[:, 1]
-        print(predictions)
 
-    # Create data frame with true and predicted values
-    test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
-                                       index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
-
-    study_period_data.index = study_period_data.index.tolist()  # Flatten MultiIndex to tuples
-    study_period_data.index.name = 'stock_id'  # Rename index
-    study_period_data.set_index('datadate', append=True, inplace=True)
-
-    # JOB: Merge test set with study period data
-    test_set_comparison = test_set_comparison.merge(study_period_data, how='inner', left_index=True,
-                                                    right_on=['datadate', 'stock_id'])
-
-    # JOB: Create normalized predictions
-    test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'prediction'].gt(
-        test_set_comparison.groupby('datadate')['prediction'].transform('median')).astype(np.int8)
-
-    # JOB: Create cross-sectional ranking
-    test_set_comparison.loc[:, 'prediction_rank'] = test_set_comparison.groupby('datadate')['prediction'].rank(
-        method='first').astype('int16')
-    test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
-        pct=True)
-
-    cross_section_size = int(round(test_set_comparison.groupby('datadate')['y_test'].count().mean()))
-    print(f'Average size of cross sections: {cross_section_size}')
-
-    # top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30]
-    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, int(cross_section_size / 10), int(cross_section_size / 5),
-                  int(cross_section_size / 4), int(cross_section_size / 2.5),
-                  int(cross_section_size / 2)]
-
-    top_k_accuracies = pd.DataFrame({'Accuracy': []})
-    top_k_accuracies.index.name = 'k'
-
-    for top_k in top_k_list:
-        # JOB: Filter test data by top/bottom k affiliation
-        filtered_data = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
-                test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
-
-        # print(filtered_data.sample(10))
-
-        accuracy = None
-
-        # JOB: Calculate accuracy score
-        if model_type == 'deep_learning':
-            accuracy = binary_accuracy(filtered_data['y_test'].values,
-                                       filtered_data['norm_prediction'].values).numpy()
-
-        elif model_type == 'tree_based':
-            accuracy = accuracy_score(filtered_data['y_test'].values,
-                                      filtered_data['norm_prediction'].values)
-
-        top_k_accuracies.loc[top_k] = accuracy
-
-    print(top_k_accuracies)
-    top_k_accuracies.plot(kind='line', legend=True, fontsize=14)
-    plt.savefig(os.path.join(ROOT_DIR, folder_path, 'top_k_acc.png'), dpi=600)
-    plt.show()
-
-    # JOB: Plot training and validation metrics
-    try:
-        plot_train_val(history, configs['model']['metrics'], store_png=True, folder_path=folder_path)
-    except AttributeError as ae:
-        print(f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Plotting failed.{Style.RESET_ALL}')
-        # print(ae)
-    except UnboundLocalError as ule:
-        print(f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Plotting failed. History has not been created.{Style.RESET_ALL}')
-        # print(ule)
-
-    # # JOB: Evaluate model on test data
-    # test_scores = model.model.evaluate(x_test, y_test, verbose=2)
-    #
-    # # JOB: Print test scores
-    # print('\nTest scores:')
-    # print(pd.DataFrame(test_scores, index=model.model.metrics_names).T)
+    test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
+               y_test=y_test, study_period_data=study_period_data, model_type=model_type, history=history,
+               index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
+               period_range=period_range, start_date=start_date, end_date=end_date)
 
 
 def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiIndex, cols: list, split_index: int,
@@ -338,18 +279,6 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
             else:
                 pass
 
-            # print('Training data dimensions: \n')
-            # print(x_train.shape)
-            # print(x_train.ndim)
-            # print(y_train.shape)
-            # print(y_train.ndim)
-            # print()
-            # print('Test data dimensions: \n')
-            # print(x_test.shape)
-            # print(x_test.ndim)
-            # print(y_test.shape)
-            # print(y_test.ndim)
-
             # JOB: Append to test data index
             test_data_index = test_data_index.append(data.data_test_index)
 
@@ -362,15 +291,131 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     return x_train, y_train, x_test, y_test, test_data_index
 
 
+def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_data_index: pd.MultiIndex,
+               y_test: np.array,
+               study_period_data: pd.DataFrame, model_type: str = 'deep_learning', history=None, index_id='',
+               index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
+               start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today()):
+
+    # JOB: Create data frame with true and predicted values
+    test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
+                                       index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
+
+    # JOB: Transform index of study period data to match test_set_comparison index
+    study_period_data.index = study_period_data.index.tolist()  # Flatten MultiIndex to tuples
+    study_period_data.index.name = 'stock_id'  # Rename index
+    study_period_data.set_index('datadate', append=True, inplace=True)
+
+    # JOB: Merge test set with study period data
+    test_set_comparison = test_set_comparison.merge(study_period_data, how='inner', left_index=True,
+                                                    right_on=['datadate', 'stock_id'])
+
+    # JOB: Create normalized predictions (e.g., directional prediction relative to cross-sectional median of predictions)
+    test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'prediction'].gt(
+        test_set_comparison.groupby('datadate')['prediction'].transform('median')).astype(np.int8)
+
+    # JOB: Create cross-sectional ranking
+    test_set_comparison.loc[:, 'prediction_rank'] = test_set_comparison.groupby('datadate')['prediction'].rank(
+        method='first').astype('int16')
+    test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
+        pct=True)
+
+    cross_section_size = int(round(test_set_comparison.groupby('datadate')['y_test'].count().mean()))
+    print(f'Average size of cross sections: {cross_section_size}')
+
+    # Define top k values
+    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, int(cross_section_size / 10), int(cross_section_size / 5),
+                  int(cross_section_size / 4), int(cross_section_size / 2.5),
+                  int(cross_section_size / 2)]
+
+    # Create empty dataframe for top-k accuracies
+    top_k_accuracies = pd.DataFrame({'Accuracy': [], 'Mean Daily Return': []})
+    top_k_accuracies.index.name = 'k'
+
+    for top_k in top_k_list:
+        # JOB: Filter test data by top/bottom k affiliation
+        filtered_data = test_set_comparison[(test_set_comparison['prediction_rank'] <= top_k) | (
+                test_set_comparison['prediction_rank'] > cross_section_size - top_k)]
+
+        # print(filtered_data.sample(10))
+        accuracy = None
+        mean_daily_return = None
+
+        # JOB: Calculate accuracy score
+        if model_type == 'deep_learning':
+            accuracy = binary_accuracy(filtered_data['y_test'].values,
+                                       filtered_data['norm_prediction'].values).numpy()
+            mean_daily_return = filtered_data['daily_return'].mean()
+
+        elif model_type == 'tree_based':
+            accuracy = accuracy_score(filtered_data['y_test'].values,
+                                      filtered_data['norm_prediction'].values)
+            mean_daily_return = filtered_data['daily_return'].mean()
+
+        top_k_accuracies.loc[top_k, 'Accuracy'] = accuracy
+        top_k_accuracies.loc[top_k, 'Mean Daily Return'] = mean_daily_return
+
+    print(top_k_accuracies)
+    # Plot accuracies and save figure to file
+    for col in top_k_accuracies.columns:
+        top_k_accuracies[col].plot(kind='line', legend=True, fontsize=14)
+        plt.savefig(os.path.join(ROOT_DIR, folder_path, f'top_k_{col.lower()}.png'), dpi=600)
+        plt.show()
+
+    # JOB: Plot training and validation metrics
+    try:
+        plot_train_val(history, configs['model']['metrics'], store_png=True, folder_path=folder_path)
+    except AttributeError as ae:
+        print(f'{Fore.RED}{Style.BRIGHT}Plotting failed.{Style.RESET_ALL}')
+        # print(ae)
+    except UnboundLocalError as ule:
+        print(f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Plotting failed. History has not been created.{Style.RESET_ALL}')
+        # print(ule)
+
+    # JOB: Evaluate model on full test data
+    test_score = None
+    if model_type == 'deep_learning':
+        test_score = binary_accuracy(test_set_comparison['y_test'].values,
+                                     test_set_comparison['norm_prediction'].values).numpy()
+
+        print(f'\nTest score on full test set: {np.round(test_score, 4)}')
+
+    elif model_type == 'tree_based':
+        test_score = accuracy_score(test_set_comparison['y_test'].values,
+                                    test_set_comparison['norm_prediction'].values)
+        print(f'\nTest score on full test set: {np.round(test_score, 4)}')
+
+    total_epochs = len(history.history['loss']) if history is not None else None
+    data_record = {'Model Type': model_type,
+                   'Index ID': index_id,
+                   'Index Name': index_name,
+                   'Number days': study_period_length,
+                   'Test Set Size': len(y_test),
+                   'Total Accuracy': test_score,
+                   'Top-k Accuracy Scores': top_k_accuracies['Accuracy'].to_dict(),
+                   'Top-k Mean Daily Return': top_k_accuracies['Mean Daily Return'].to_dict(),
+                   'Model Configs': model.get_params(),
+                   'Total Epochs': total_epochs,
+                   'Period Range': period_range,
+                   'Start Date': start_date,
+                   'End Date': end_date
+                   }
+
+    logger = CSVWriter(output_path='training_log.csv', field_names=list(data_record.keys()))
+    logger.add_line(data_record)
+
+
 if __name__ == '__main__':
     # main(load_latest_model=True)
     index_list = ['150378']
+    # index_list = ['150928']
+    # index_list = ['150095']
 
     for index_id in index_list:
         main(index_id=index_id, cols=['above_cs_med', 'stand_d_return'], force_download=False,
              data_only=False,
-             load_last=False, start_index=-2000,
-             end_index=-1000, model_type='deep_learning')
+             load_last=False, start_index=-4800,
+             end_index=-3800, model_type='tree_based', verbose=1)
 
     """
     # Out-of memory generative training

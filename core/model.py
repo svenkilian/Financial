@@ -16,6 +16,7 @@ from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
 from sklearn.ensemble import RandomForestClassifier
 
+
 # tf.logging.set_verbosity(tf.logging.ERROR)
 
 
@@ -30,9 +31,13 @@ class LSTMModel:
             self.index_name = index_name
         else:
             self.index_name = ''
+        self.configs = None
 
     def __repr__(self):
         return str(self.model.summary())
+
+    def get_params(self):
+        return self.configs
 
     def load_model(self, filepath):
         """
@@ -53,6 +58,8 @@ class LSTMModel:
         """
         timer = Timer()
         timer.start()
+
+        self.configs = configs
 
         layer_type_dict = {key.lower(): value for key, value in layers.__dict__.items()}
         if '_dw_wrapped_module' in layer_type_dict.keys():
@@ -193,7 +200,7 @@ class LSTMModel:
         print('[Model] Training Completed. Model saved as %s' % save_fname)
         timer.stop()
 
-    def predict_point_by_point(self, data):
+    def predict_point_by_point(self, data) -> np.array:
         """
         Predict each time step given the last sequence of true data, in effect only predicting 1 step ahead each time
 
@@ -203,6 +210,7 @@ class LSTMModel:
         print('[Model] Predicting Point-by-Point ...')
         predicted = self.model.predict(data)
         predicted = np.reshape(predicted, (predicted.size,))
+
         return predicted
 
     def predict_sequences_multiple(self, data, window_size, prediction_len):
@@ -278,19 +286,24 @@ class RandomForestModel:
             self.index_name = index_name
         else:
             index_name = ''
+        self.parameters = None
 
     def __repr__(self):
         return str(self.model.get_params())
 
+    def get_params(self):
+        return self.parameters
+
     def build_model(self, verbose=2):
-        parameters = {'n_estimators': 1000,
+        parameters = {'n_estimators': 500,
                       'max_depth': 20,
                       'n_jobs': -1,
-                      'verbose': 1}
+                      'verbose': verbose,
+                      'warm_start': True}
+        # Default: 1000, 20
+        self.parameters = parameters
         self.model = RandomForestClassifier(**parameters)
         if verbose == 2:
             print(type(self.model).__name__)
         elif verbose == 1:
             print(self.model)
-
-

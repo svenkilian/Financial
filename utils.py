@@ -10,10 +10,15 @@ import matplotlib
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
+from config import ROOT_DIR
 from matplotlib import ticker
 from matplotlib.ticker import MaxNLocator
 from pandas.plotting import register_matplotlib_converters
+from pygments.lexers import configs
 from tabulate import tabulate
+import logging
+import csv
+import io
 
 # Update matplotlib setting
 plt.rcParams.update({'legend.fontsize': 8,
@@ -278,3 +283,19 @@ class Timer():
     def stop(self):
         end_dt = dt.datetime.now()
         print('Time taken: %s' % (end_dt - self.start_dt))
+
+
+class CSVWriter:
+    def __init__(self, output_path: str, field_names: list):
+        self.output_path = output_path
+        self.field_names = field_names
+
+        if not os.path.exists(os.path.join(ROOT_DIR, output_path)):
+            with open(self.output_path, 'a') as f:
+                writer = csv.DictWriter(f, fieldnames=self.field_names, delimiter=';', lineterminator='\n')
+                writer.writeheader()
+
+    def add_line(self, record: dict):
+        with open(self.output_path, 'a') as f:
+            writer = csv.DictWriter(f, fieldnames=self.field_names, delimiter=';', lineterminator='\n')
+            writer.writerow(record)

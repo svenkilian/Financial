@@ -133,7 +133,8 @@ class DataLoader:
 
         # Define lags for multi-period returns
         lags = np.concatenate(
-            (np.linspace(1, 20, num=20, dtype=np.int16), np.linspace(40, 240, num=11, dtype=np.int16))).tolist()
+            (np.linspace(1, 20, num=20, dtype=np.int16),
+             np.linspace(40, self.seq_len - 1, num=(self.seq_len - 1 - 40) / 20 + 1, dtype=np.int16))).tolist()
 
         self.lag_cols = [f'm_{lag}_return' for lag in lags]
 
