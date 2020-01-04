@@ -17,7 +17,7 @@ import pandas as pd
 import wrds
 from colorama import Fore, Back, Style
 
-import utils
+from core import utils
 # Configurations for displaying DataFrames
 from config import ROOT_DIR
 
@@ -35,7 +35,7 @@ pd.set_option('display.html.table_schema', False)
 
 pd.set_option('mode.chained_assignment', None)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
-warnings.simplefilter(action='error', category=FutureWarning)
+warnings.simplefilter(action='error', category=FutureWarning)  # TODO: Change to ignore
 
 
 def get_data_table(db: wrds.Connection, sql_query=False, query_string='', library=None, table=None, columns=None,
@@ -134,7 +134,8 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
     :return: Index of company identifiers for given date
     """
 
-    lookup_dict = pd.read_json(os.path.join(folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get('conm')
+    lookup_dict = pd.read_json(os.path.join(ROOT_DIR, folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get(
+        'conm')
     # print(lookup_dict)
     print(f'Number of constituents: {len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
     # print(
@@ -161,7 +162,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
 
     if not from_file:
         # Load GVKEYX lookup dict
-        with open(os.path.join('data', 'gvkeyx_name_dict.json'), 'r') as fp:
+        with open(os.path.join(ROOT_DIR, 'data', 'gvkeyx_name_dict.json'), 'r') as fp:
             gvkeyx_lookup = json.load(fp)
 
         # Establish database connection
@@ -171,7 +172,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
 
         # Retrieve list of all stocks (gvkeys) for specified index including full date range of historic index data
         gvkey_list, relevant_date_range = get_all_constituents(
-            constituency_matrix=pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0,
+            constituency_matrix=pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
                                             header=[0, 1],
                                             parse_dates=True))
 
@@ -220,10 +221,10 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         data.reset_index(inplace=True)
 
         # Save to file
-        data.to_csv(os.path.join(folder_path, 'index_data_constituents.csv'))
+        data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
     else:
-        data = pd.read_csv(os.path.join(folder_path, 'index_data_constituents.csv'), dtype={'gvkey': str},
+        data = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'), dtype={'gvkey': str},
                            parse_dates=True)
         data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'])
 
@@ -278,12 +279,12 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_t
                                         index_col=['gvkey', 'iid'], table_info=1, params=parameters)
 
         # Save to file
-        const_data.to_csv(os.path.join(folder, 'data_constituents.csv'))
+        const_data.to_csv(os.path.join(ROOT_DIR, folder, 'data_constituents.csv'))
 
     # JOB: Load table from local file
     else:
         # Load constituency table from file and transform key to string
-        const_data = pd.read_csv(os.path.join(folder, file_name), dtype={'gvkey': str})
+        const_data = pd.read_csv(os.path.join(ROOT_DIR, folder, file_name), dtype={'gvkey': str})
         # const_data['gvkey'] = const_data['gvkey'].astype('str')
 
         # Set gvkey and iid as MultiIndex
@@ -320,7 +321,7 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_t
                     constituency_matrix.loc[pd.date_range(start=row[1]['from'], end=row[1]['thru']), stock_index] = 1
 
     # Save constituency table to file
-    constituency_matrix.to_csv(os.path.join(folder, 'constituency_matrix.csv'))
+    constituency_matrix.to_csv(os.path.join(ROOT_DIR, folder, 'constituency_matrix.csv'))
 
     if not load_from_file:
         db.close()
@@ -459,11 +460,11 @@ def generate_index_lookup_dict() -> None:
     :return:
     """
 
-    gvkeyx_lookup = pd.read_csv(os.path.join('data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
+    gvkeyx_lookup = pd.read_csv(os.path.join(ROOT_DIR, 'data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
     gvkeyx_lookup.index = gvkeyx_lookup.index.astype(str)
     gvkeyx_lookup = gvkeyx_lookup['index_name'].to_dict()
 
-    with open(os.path.join('data', 'gvkeyx_name_dict.json'), 'w') as fp:
+    with open(os.path.join(ROOT_DIR, 'data', 'gvkeyx_name_dict.json'), 'w') as fp:
         json.dump(gvkeyx_lookup, fp)
 
 
@@ -480,71 +481,7 @@ def generate_company_lookup_dict(folder_path: str, data: pd.DataFrame) -> None:
         ~company_name_lookup.duplicated(subset='gvkey', keep='first'), ['gvkey', 'conm']].set_index('gvkey')
 
     # JOB: Save dict to json file
-    company_name_lookup.to_json(os.path.join(folder_path, 'gvkey_name_dict.json'))
-
-
-def main():
-    # JOB: Run settings:
-    download_data = True
-    pivot_transform = False
-    data = None
-
-    # Establish database connection
-    print('Opening DB connection ...')
-    db = wrds.Connection(wrds_username='afecker')
-    print('Done')
-
-    if pivot_transform:
-        # JOB: Load data
-        data = pd.read_csv('data/dax_data.csv', index_col=[0, 1])
-
-        # JOB: Query first value (in a temporal sense) of each security and normalize data by respective first values
-        # firsts = data.groupby(level='gvkeyx').transform('first')
-        # data = data / firsts
-
-        # JOB: Create pivot table from data
-        data.reset_index(inplace=True)
-        data = data.pivot_table(values=['prccd'], index=['datadate'], columns=['gvkey'], )
-        # data = data.pivot_table(values=['prccm'], index=['datadate'], columns=['gvkeyx'], )
-
-        # JOB: Drop top level of column index
-        # data = data.droplevel(0, axis=1)
-
-        # JOB: Select time range and gvxkeys
-        # data = data.loc['1994-01-01':'2019-11-09', [150007]]  # [150007, 150008, 150069]]
-
-        # JOB: Show data table head and indices
-        # print(data.head(10))
-        # print(data.index)
-        # print(data.columns)
-
-    # Import data file
-    print('Loading data from csv file ...')
-    data = pd.read_csv(os.path.join('data', 'data.csv'))
-    data['datadate'] = pd.to_datetime(data['datadate'], format='%Y-%m-%d')
-
-    # Set Multiindex
-    data.set_index(keys=['datadate', 'gvkey'], inplace=True)
-
-    data['exchg'] = data['exchg'].astype(int)
-    # Filter by ISIN and exchg code
-    # data = data[(data['isin'].str.startswith('DE')) & (data['exchg'] == 171)]
-    data = data[data['isin'].str.startswith('DE')]
-
-    print('Data loaded successfully.')
-
-    # print(data.index)
-    # print(data.columns)
-
-    # Filter out duplicates
-    data = data[~data.index.duplicated(keep='first')]
-
-    print(len(data.loc['2019-11-18':'2019-11-18']))
-    print(data.loc['2019-11-18':'2019-11-18'])
-
-    # Close database connection
-    db.close()
-    print('DB connection closed.')
+    company_name_lookup.to_json(os.path.join(ROOT_DIR, folder_path, 'gvkey_name_dict.json'))
 
 
 def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, folder_path: str = None,
@@ -577,7 +514,7 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
             folder_path = os.path.join(ROOT_DIR, 'data',
                                        index_name.lower().replace(' ', '_'))  # Path to index data folder
 
-        constituency_matrix = pd.read_csv(os.path.join(folder_path, 'gics_matrix.csv'), index_col=0,
+        constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'gics_matrix.csv'), index_col=0,
                                           header=0,
                                           parse_dates=True, dtype=str)
         constituency_matrix.index = pd.to_datetime(constituency_matrix.index)
@@ -607,7 +544,7 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
 
         # JOB: Get all historic index constituents
         gvkey_list, _ = get_all_constituents(
-            constituency_matrix=pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0,
+            constituency_matrix=pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
                                             header=[0, 1],
                                             parse_dates=True))
 
@@ -670,7 +607,7 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
                             'gsubind']
 
         # Save constituency table to file
-        constituency_matrix.to_csv(os.path.join(folder_path, 'gics_matrix.csv'))
+        constituency_matrix.to_csv(os.path.join(ROOT_DIR, folder_path, 'gics_matrix.csv'))
 
         db.close()
         print('DB connection closed.')

@@ -1,0 +1,7 @@
+DataAcquisition module
+======================
+
+.. automodule:: DataAcquisition
+   :members:
+   :undoc-members:
+   :show-inheritance:

@@ -1,0 +1,360 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <title>core package &#8212; Financial Time Series Prediction 0.1 documentation</title>
+    <link rel="stylesheet" href="../_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <script type="text/javascript" src="../_static/language_data.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Financial Time Series Prediction 0.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="../index.html">Table of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">core package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-core.data_processor">core.data_processor module</a></li>
+<li><a class="reference internal" href="#module-core.model">core.model module</a></li>
+<li><a class="reference internal" href="#module-core">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="../_sources/_source/core.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="core-package">
+<h1>core package<a class="headerlink" href="#core-package" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</div>
+<div class="section" id="module-core.data_processor">
+<span id="core-data-processor-module"></span><h2>core.data_processor module<a class="headerlink" href="#module-core.data_processor" title="Permalink to this headline">¶</a></h2>
+<p>This module implements the class DataLoader which implements function for data preprocessing.</p>
+<dl class="class">
+<dt id="core.data_processor.DataLoader">
+<em class="property">class </em><code class="sig-prename descclassname">core.data_processor.</code><code class="sig-name descname">DataLoader</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame</em>, <em class="sig-param">cols: list = &lt;class 'list'&gt;</em>, <em class="sig-param">seq_len=None</em>, <em class="sig-param">full_date_range=None</em>, <em class="sig-param">stock_id: tuple = None</em>, <em class="sig-param">split_index: int = 0</em>, <em class="sig-param">model_type: str = ''</em>, <em class="sig-param">verbose=False</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_processor.DataLoader" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A class for loading and transforming data for the LSTM model</p>
+<dl class="method">
+<dt id="core.data_processor.DataLoader.generate_train_batch">
+<code class="sig-name descname">generate_train_batch</code><span class="sig-paren">(</span><em class="sig-param">seq_len: int</em>, <em class="sig-param">batch_size: int</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_processor.DataLoader.generate_train_batch" title="Permalink to this definition">¶</a></dt>
+<dd><p>Yield a generator of training data from filename on given list of columns split for train/test</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>seq_len</strong> – Sequence length</p></li>
+<li><p><strong>batch_size</strong> – Batch size</p></li>
+<li><p><strong>normalize</strong> – Normalize data</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+<p>Usage:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Out-of memory generative training</span>
+</pre></div>
+</div>
+<dl>
+<dt>steps_per_epoch = math.ceil(</dt><dd><p>(data.len_train - configs[‘data’][‘sequence_length’]) / configs[‘training’][‘batch_size’]
+)</p>
+</dd>
+<dt>model.train_generator(</dt><dd><dl class="simple">
+<dt>data_gen=data.generate_train_batch(</dt><dd><p>seq_len=configs[‘data’][‘sequence_length’],
+batch_size=configs[‘training’][‘batch_size’],
+normalize=configs[‘data’][‘normalize’]</p>
+</dd>
+</dl>
+<p>),
+epochs=configs[‘training’][‘epochs’],
+batch_size=configs[‘training’][‘batch_size’],
+steps_per_epoch=steps_per_epoch,
+save_dir=configs[‘model’][‘save_dir’]</p>
+</dd>
+</dl>
+<p>)</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.data_processor.DataLoader.generate_tree_features">
+<code class="sig-name descname">generate_tree_features</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#core.data_processor.DataLoader.generate_tree_features" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generate lagged multi-period returns as features for tree-based methods</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.data_processor.DataLoader.get_test_data">
+<code class="sig-name descname">get_test_data</code><span class="sig-paren">(</span><em class="sig-param">seq_len: int</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_processor.DataLoader.get_test_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create data_x, data_y test data windows</p>
+<p>Warning:: Batch method, not generative. Make sure you have enough memory to
+load data, otherwise reduce size of the training split.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>seq_len</strong> – Sequence length</p></li>
+<li><p><strong>normalize</strong> – Normalize data</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.data_processor.DataLoader.get_train_data">
+<code class="sig-name descname">get_train_data</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.data_processor.DataLoader.get_train_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create x, y training data windows</p>
+<p>Warning:: Batch method, not generative. Make sure you have enough memory to
+load data, otherwise use generate_training_window() method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-core.model">
+<span id="core-model-module"></span><h2>core.model module<a class="headerlink" href="#module-core.model" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="core.model.LSTMModel">
+<em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">LSTMModel</code><span class="sig-paren">(</span><em class="sig-param">index_name=None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>LSTM model class</p>
+<dl class="method">
+<dt id="core.model.LSTMModel.build_model">
+<code class="sig-name descname">build_model</code><span class="sig-paren">(</span><em class="sig-param">configs</em>, <em class="sig-param">verbose=2</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.build_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Build model from configuration file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>verbose</strong> – Verbosity of console output</p></li>
+<li><p><strong>configs</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.LSTMModel.get_params">
+<code class="sig-name descname">get_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.get_params" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="core.model.LSTMModel.load_model">
+<code class="sig-name descname">load_model</code><span class="sig-paren">(</span><em class="sig-param">filepath</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.load_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load model from file
+:param filepath: File name
+:return:</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.LSTMModel.predict_point_by_point">
+<code class="sig-name descname">predict_point_by_point</code><span class="sig-paren">(</span><em class="sig-param">data</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#core.model.LSTMModel.predict_point_by_point" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predict each time step given the last sequence of true data, in effect only predicting 1 step ahead each time</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>data</strong> – </p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.LSTMModel.predict_sequence_full">
+<code class="sig-name descname">predict_sequence_full</code><span class="sig-paren">(</span><em class="sig-param">data</em>, <em class="sig-param">window_size</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.predict_sequence_full" title="Permalink to this definition">¶</a></dt>
+<dd><p>Shift the window by 1 new prediction each time, re-run predictions on new window</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> – </p></li>
+<li><p><strong>window_size</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.LSTMModel.predict_sequences_multiple">
+<code class="sig-name descname">predict_sequences_multiple</code><span class="sig-paren">(</span><em class="sig-param">data</em>, <em class="sig-param">window_size</em>, <em class="sig-param">prediction_len</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.predict_sequences_multiple" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predict sequence of 50 steps before shifting prediction run forward by 50 steps</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> – </p></li>
+<li><p><strong>window_size</strong> – </p></li>
+<li><p><strong>prediction_len</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.LSTMModel.train">
+<code class="sig-name descname">train</code><span class="sig-paren">(</span><em class="sig-param">x: numpy.array</em>, <em class="sig-param">y: numpy.array</em>, <em class="sig-param">epochs: int</em>, <em class="sig-param">batch_size: int</em>, <em class="sig-param">save_dir: str</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">verbose=1</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.train" title="Permalink to this definition">¶</a></dt>
+<dd><p>Train model (in-memory)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x</strong> – Input data</p></li>
+<li><p><strong>y</strong> – Target data</p></li>
+<li><p><strong>epochs</strong> – Number of epochs</p></li>
+<li><p><strong>batch_size</strong> – Batch size</p></li>
+<li><p><strong>save_dir</strong> – Path to model directory</p></li>
+<li><p><strong>configs</strong> – Configuration dict</p></li>
+<li><p><strong>verbose</strong> – Verbosity</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Training history</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.LSTMModel.train_generator">
+<code class="sig-name descname">train_generator</code><span class="sig-paren">(</span><em class="sig-param">data_gen</em>, <em class="sig-param">epochs</em>, <em class="sig-param">batch_size</em>, <em class="sig-param">steps_per_epoch</em>, <em class="sig-param">save_dir</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.train_generator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Train model using generator</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_gen</strong> – Generator object</p></li>
+<li><p><strong>epochs</strong> – Number of epochs</p></li>
+<li><p><strong>batch_size</strong> – Batch size</p></li>
+<li><p><strong>steps_per_epoch</strong> – Steps per epoch</p></li>
+<li><p><strong>save_dir</strong> – Path to saving directory</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="core.model.RandomForestModel">
+<em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">RandomForestModel</code><span class="sig-paren">(</span><em class="sig-param">index_name</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.RandomForestModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Random Forest model class</p>
+<dl class="method">
+<dt id="core.model.RandomForestModel.build_model">
+<code class="sig-name descname">build_model</code><span class="sig-paren">(</span><em class="sig-param">verbose=2</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.RandomForestModel.build_model" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="core.model.RandomForestModel.get_params">
+<code class="sig-name descname">get_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.model.RandomForestModel.get_params" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="core.model.get_optimizer">
+<code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">get_optimizer</code><span class="sig-paren">(</span><em class="sig-param">optimizer_name: str</em>, <em class="sig-param">parameters: dict = None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.get_optimizer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Retrieve keras optimizer for a given optimizer name</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>optimizer_name</strong> – Optimizer name</p></li>
+<li><p><strong>parameters</strong> – Parameters specifying optimizer options</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Parametrized keras optimizer</p>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+<div class="section" id="module-core">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-core" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../index.html">Financial Time Series Prediction 0.1 documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2020, Sven Köpke.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 2.3.0.
+    </div>
+  </body>
+</html>

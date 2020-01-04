@@ -1,10 +1,11 @@
 """
-This utilities module implements helper functions for displaying data frames and plotting data
+This utilities module implements helper functions for displaying data frames and plotting data.
 """
 import datetime as dt
 import glob
 import json
 import os
+import pprint
 
 import matplotlib
 import matplotlib.dates as mdates
@@ -55,7 +56,7 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
     Usage::
     Plotting all rows and columns:
             >>> plot_data(data.loc[:], columns=data.columns, index_name=None, title='Indices', col_multi_index=False,
-            label_mapping=indices, export_as_png=True)
+            >>> label_mapping=indices, export_as_png=True)
     """
 
     # Initialize date locators and formatters
@@ -106,9 +107,9 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
     plt.show()
 
 
-def pretty_print(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
+def pretty_print_table(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     """
-    Prints out DataFrame in tabular format
+    Print out DataFrame in tabular format.
 
     :type headers: list or string
     :param df: DataFrame to print
@@ -117,14 +118,14 @@ def pretty_print(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     :return:
 
     Usage::
-            >>> pretty_print(db, headers=['col_1', 'col_2'])
+            >>> pretty_print_table(db, headers=['col_1', 'col_2'])
     """
     print(tabulate(df, headers, tablefmt=tablefmt, showindex=True))
 
 
 def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> None:
     """
-    Plot training and validation metrics over epochs
+    Plot training and validation metrics over epochs.
 
     :param history: Training history
     :param metrics: List of metrics to plot
@@ -145,7 +146,7 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
     ax.legend(['Training', 'Validation'], loc='upper left')
     plt.show()
     if store_png:
-        fig.savefig(os.path.join(folder_path, 'metrics.png'), dpi=600)
+        fig.savefig(os.path.join(ROOT_DIR, folder_path, 'metrics.png'), dpi=600)
 
     # Plot history for loss
     fig, ax = plt.subplots()
@@ -159,10 +160,17 @@ def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> N
 
     plt.show()
     if store_png:
-        fig.savefig(os.path.join(folder_path, 'loss.png'), dpi=600)
+        fig.savefig(os.path.join(ROOT_DIR, folder_path, 'loss.png'), dpi=600)
 
 
 def plot_results(predicted_data, true_data):
+    """
+    Plot predictions vs. true labels.
+
+    :param predicted_data:
+    :param true_data:
+    :return:
+    """
     fig = plt.figure(facecolor='white')
     ax = fig.add_subplot(111)
     ax.plot(true_data, label='True Data')
@@ -171,19 +179,13 @@ def plot_results(predicted_data, true_data):
     plt.show()
 
 
-def plot_results_multiple(predicted_data, true_data, prediction_len):
-    fig = plt.figure(facecolor='white')
-    ax = fig.add_subplot(111)
-    ax.plot(true_data, label='True Data')
-    # Pad the list of predictions to shift it in the graph to it's correct start
-    for i, data in enumerate(predicted_data):
-        padding = [None for p in range(i * prediction_len)]
-        plt.plot(padding + data, label='Prediction')
-        plt.legend()
-    plt.show()
-
-
 def get_most_recent_file(directory: str) -> str:
+    """
+    Retrieve name of most recently changed file in given directory.
+
+    :param directory: Directory to search for most recently edited file
+    :return: Name of most recently edited file
+    """
     all_files = glob.glob(directory + '/*')
     most_recent_file = max(all_files, key=os.path.getctime)
 
@@ -209,7 +211,6 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
     :param key_to_lower:
     :param reverse_lookup:
     :param dict_of_dicts: Nested dictionary with lookup dicts
-    :param data_folder: Root project folder
     :param index_id: Index ID
     :return: Tuple of [0] index_name, [1] lookup_table
     """
@@ -217,7 +218,7 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
     # Load index name dict and get index name
     for key, value in dict_of_dicts.items():
         print(f'Trying lookup in {key} ...')
-        lookup_dict = json.load(open(os.path.join('data', value.get('file_path')), 'r'))
+        lookup_dict = json.load(open(os.path.join(ROOT_DIR, 'data', value.get('file_path')), 'r'))
 
         if reverse_lookup:
             lookup_dict = {v: k for k, v in lookup_dict.items()}
@@ -242,7 +243,7 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
 def check_directory_for_file(index_name: str = '', folder_path: str = '', force_download: bool = False,
                              create_dir=True) -> bool:
     """
-    Check whether folder path already exists
+    Check whether folder path already exists.
 
     :param index_name: Name of index
     :param folder_path: Folder path to check
@@ -250,7 +251,7 @@ def check_directory_for_file(index_name: str = '', folder_path: str = '', force_
     :param create_dir: Flag indicating whether to create new directory if path does not exist
     :return: Boolean indicating whether to load from file (directory exists)
     """
-    if os.path.exists(folder_path):
+    if os.path.exists(os.path.join(ROOT_DIR, folder_path)):
         if force_download:
             load_from_file = False
             print('Downloading data from %s into existing folder: %s \n' % (index_name, folder_path))
@@ -260,30 +261,39 @@ def check_directory_for_file(index_name: str = '', folder_path: str = '', force_
     else:
         if create_dir:
             print('Creating folder for %s: %s' % (index_name, folder_path))
-            os.mkdir(folder_path)
+            os.mkdir(os.path.join(ROOT_DIR, folder_path))
         load_from_file = False
 
     return load_from_file
 
 
 def apply_batch_directory(directory_path, function=None, **func_args):
-    index_directories = [name for name in os.listdir(directory_path)
-                         if os.path.isdir(os.path.join(directory_path, name))]
+    """
+    Apply given function to all subdirectories in a given parent directory.
+
+    :param directory_path: Path of the parent directory
+    :param function: Function to apply to direct subdirectories
+    :param func_args: Optional function arguments
+    :return:
+    """
+    index_directories = [name for name in os.listdir(os.path.join(ROOT_DIR, directory_path))
+                         if os.path.isdir(os.path.join(ROOT_DIR, directory_path, name))]
 
     for index_dir in index_directories:
-        full_path = os.path.join(directory_path, index_dir)
+        full_path = os.path.join(ROOT_DIR, directory_path, index_dir)
         function(folder_path=full_path, **func_args)
 
 
 def check_data_conformity(x_train: np.array, y_train: np.array, x_test: np.array, y_test: np.array,
                           test_data_index: pd.MultiIndex):
     """
+    Check for conformity of given training and test sets (including test set index)
 
-    :param x_train:
-    :param y_train:
-    :param x_test:
-    :param y_test:
-    :param test_data_index:
+    :param x_train: Training data input
+    :param y_train: Training data labels
+    :param x_test: Test data input
+    :param y_test: Test data labels
+    :param test_data_index: Test data index
     """
 
     # JOB: Perform data size conformity checks
@@ -309,7 +319,61 @@ def check_data_conformity(x_train: np.array, y_train: np.array, x_test: np.array
     return target_mean_train, target_mean_test
 
 
+def annualize_metric(metric: float, holding_periods: int = 1) -> float:
+    """
+    Annualize metric of arbitrary periodicity
+
+    :param metric: Metric to analyze
+    :param holding_periods:
+    :return: Annualized metric
+    """
+
+    trading_days_per_year = 240
+    trans_ratio = trading_days_per_year / holding_periods
+
+    return (1 + metric) ** trans_ratio - 1
+
+
+def get_study_period_ranges(data_length: int, test_period_length: int, study_period_length: int, index_name: int,
+                            reverse=True,
+                            verbose=1) -> dict:
+    """
+    Get study period ranges, going backwards in time, as a dict
+
+    :param data_length: Number of total dates in index data
+    :param test_period_length: Length of test period
+    :param study_period_length: Length of study period
+    :param index_name: Index name
+    :param reverse:
+    :param verbose:
+    :return: Dict of study period ranges
+    """
+
+    n_full_periods = (data_length - (study_period_length - test_period_length)) // test_period_length
+    remaining_days = (data_length - (study_period_length - test_period_length)) % test_period_length
+
+    if verbose == 1:
+        print(f'Data set contains {data_length} individual dates.')
+        print(f'Available index history for {index_name} allows for {n_full_periods} overlapping study periods.')
+        print(f'{remaining_days} days are excluded from study data.')
+
+    study_period_ranges = {}
+    for period in range(n_full_periods):
+        study_period_ranges[period + 1] = (
+            - (period * test_period_length + study_period_length), -(period * test_period_length + 1))
+
+    if reverse:
+        dict_len = len(study_period_ranges.keys())
+        study_period_ranges = {dict_len - key + 1: value for key, value in study_period_ranges.items()}
+
+    return study_period_ranges
+
+
 class Timer():
+    """
+    Timer class for timing operations.
+    """
+
     def __init__(self):
         self.start_dt = None
 
@@ -322,6 +386,10 @@ class Timer():
 
 
 class CSVWriter:
+    """
+    Writer class for handling the logging of training runs into a .csv file.
+    """
+
     def __init__(self, output_path: str, field_names: list):
         self.output_path = output_path
         self.field_names = field_names
@@ -332,6 +400,12 @@ class CSVWriter:
                 writer.writeheader()
 
     def add_line(self, record: dict):
+        """
+        Add data line (dict format) to .csv file.
+
+        :param record: Dictionary of records to add to file
+        :return:
+        """
         with open(self.output_path, 'a') as f:
             writer = csv.DictWriter(f, fieldnames=self.field_names, delimiter=';', lineterminator='\n')
             writer.writerow(record)

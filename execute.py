@@ -5,8 +5,6 @@ __license__ = "MIT"
 
 import datetime
 import json
-import os
-import logging
 from typing import Tuple
 
 import matplotlib.pyplot as plt
@@ -16,17 +14,19 @@ from colorama import Fore, Back, Style
 from sklearn.metrics import accuracy_score
 from tensorflow.keras.metrics import binary_accuracy
 
-from DataCollection import generate_study_period, retrieve_index_history, create_constituency_matrix, create_gics_matrix
+from core import utils
+from core.data_collection import generate_study_period, retrieve_index_history, create_constituency_matrix, \
+    create_gics_matrix
 from config import *
 from core.data_processor import DataLoader
 from core.model import LSTMModel, RandomForestModel
-from utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
-    check_data_conformity
+from core.utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
+    check_data_conformity, annualize_metric, get_study_period_ranges
 
 
-def main(index_id='150095', cols: list = None, force_download=False, data_only=False, last_n=None,
-         load_last: bool = False, train_full=False, study_period_length=1000,
-         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning', verbose=2) -> None:
+def main(index_id='150095', columns: list = None, force_download=False, data_only=False, last_n=None,
+         load_last: bool = False, train_full=False,
+         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning', verbose=2):
     """
     Run data preparation and model training
 
@@ -34,7 +34,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     :param verbose:
     :param train_full:
     :param model_type:
-    :param cols: Relevant columns for model training and testing
+    :param columns: Relevant columns for model training and testing
     :param load_last: Flag indicating whether to load last model weights from storage
     :param index_id: Index identifier
     :param last_n: Flag indicating the number of days to consider; *None* in case whole data history is considered
@@ -50,7 +50,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     # Add 'return_index' column for feature generation in case of tree-based model
     if model_type == 'tree_based':
-        cols.append('return_index')
+        columns.append('return_index')
 
     constituency_matrix, full_data, index_name, folder_path = load_full_data(force_download=force_download,
                                                                              last_n=last_n,
@@ -65,14 +65,11 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     if data_only:
         print(f'Finished downloading data for {index_name}.')
         print(f'Data set contains {data_length} individual dates.')
-        print(full_data.head(10))
-        print(full_data.tail(10))
-        exit(0)
+        # print(full_data.head(10))
+        # print(full_data.tail(10))
 
     if train_full:
-        n_full_periods = data_length // study_period_length
-        print(f'Available index history for {index_name} allows for {n_full_periods} study periods.')
-        exit()
+        return index_name, data_length
 
     # JOB: Specify study period interval
     period_range = (start_index, end_index)
@@ -82,7 +79,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
         study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix,
                                                                full_data=full_data,
                                                                period_range=period_range,
-                                                               index_name=index_name, configs=configs, cols=cols,
+                                                               index_name=index_name, configs=configs, cols=columns,
                                                                folder_path=folder_path)
     except AssertionError as ae:
         print(ae)
@@ -97,7 +94,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
 
     # JOB: Set MultiIndex to stock identifier and select relevant columns
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
-    # ['datadate', *cols]]
+    # ['datadate', *columns]]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
@@ -105,7 +102,7 @@ def main(index_id='150095', cols: list = None, force_download=False, data_only=F
     # JOB: Obtain training and test data as well as test data index
     x_train, y_train, x_test, y_test, test_data_index = preprocess_data(study_period_data=study_period_data,
                                                                         split_index=split_index,
-                                                                        unique_indices=unique_indices, cols=cols,
+                                                                        unique_indices=unique_indices, cols=columns,
                                                                         configs=configs,
                                                                         full_date_range=full_date_range,
                                                                         model_type=model_type)
@@ -254,6 +251,25 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                study_period_data: pd.DataFrame, model_type: str = 'deep_learning', history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
                start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today()):
+    """
+    Test model on unseen data.
+
+    :param predictions:
+    :param configs:
+    :param folder_path:
+    :param test_data_index:
+    :param y_test:
+    :param study_period_data:
+    :param model_type:
+    :param history:
+    :param index_id:
+    :param index_name:
+    :param study_period_length:
+    :param model:
+    :param period_range:
+    :param start_date:
+    :param end_date:
+    """
     # JOB: Create data frame with true and predicted values
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
                                        index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
@@ -281,14 +297,14 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     print(f'Average size of cross sections: {cross_section_size}')
 
     # Define top k values
-    top_k_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, int(cross_section_size / 10), int(cross_section_size / 5),
+    top_k_list = [5, 10, int(cross_section_size / 10), int(cross_section_size / 5),
                   int(cross_section_size / 4), int(cross_section_size / 2.5),
                   int(cross_section_size / 2)]
 
     # Create empty dataframe for top-k accuracies
-    top_k_accuracies = pd.DataFrame(
-        {'Accuracy': [], 'Mean Daily Return': [], 'Short Positions': [], 'Long Positions': []})
-    top_k_accuracies.index.name = 'k'
+    top_k_metrics = pd.DataFrame(
+        {'Accuracy': [], 'Mean Daily Return': [], 'Mean Daily Return (Short)': [], 'Mean Daily Return (Long)': []})
+    top_k_metrics.index.name = 'k'
 
     for top_k in top_k_list:
         # JOB: Filter test data by top/bottom k affiliation
@@ -322,15 +338,16 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
             mean_daily_short = short_positions['daily_return'].mean()
             mean_daily_long = long_positions['daily_return'].mean()
 
-        top_k_accuracies.loc[top_k, 'Accuracy'] = accuracy
-        top_k_accuracies.loc[top_k, 'Mean Daily Return'] = mean_daily_return
-        top_k_accuracies.loc[top_k, 'Short Positions'] = mean_daily_short
-        top_k_accuracies.loc[top_k, 'Long Positions'] = mean_daily_long
+        top_k_metrics.loc[top_k, 'Accuracy'] = accuracy
+        top_k_metrics.loc[top_k, 'Mean Daily Return'] = mean_daily_return
+        top_k_metrics.loc[top_k, 'Annualized Return'] = annualize_metric(mean_daily_return)
+        top_k_metrics.loc[top_k, 'Mean Daily Return (Short)'] = mean_daily_short
+        top_k_metrics.loc[top_k, 'Mean Daily Return (Long)'] = mean_daily_long
 
-    print(top_k_accuracies)
+    print(top_k_metrics)
     # Plot accuracies and save figure to file
-    for col in top_k_accuracies.columns:
-        top_k_accuracies[col].plot(kind='line', legend=True, fontsize=14)
+    for col in top_k_metrics.columns:
+        top_k_metrics[col].plot(kind='line', legend=True, fontsize=14)
         plt.savefig(os.path.join(ROOT_DIR, folder_path, f'top_k_{col.lower()}.png'), dpi=600)
         plt.show()
 
@@ -364,8 +381,9 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                    'Number days': study_period_length,
                    'Test Set Size': len(y_test),
                    'Total Accuracy': test_score,
-                   'Top-k Accuracy Scores': top_k_accuracies['Accuracy'].to_dict(),
-                   'Top-k Mean Daily Return': top_k_accuracies['Mean Daily Return'].to_dict(),
+                   'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
+                   'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
+                   'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
                    'Model Configs': model.get_params(),
                    'Total Epochs': total_epochs,
                    'Period Range': period_range,
@@ -373,7 +391,8 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                    'End Date': end_date
                    }
 
-    logger = CSVWriter(output_path='training_log.csv', field_names=list(data_record.keys()))
+    logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'),
+                       field_names=list(data_record.keys()))
     logger.add_line(data_record)
 
 
@@ -402,7 +421,7 @@ def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd
                                               force_download=force_download)
 
     # JOB: Check if saved model folder exists and create one if not
-    if not os.path.exists(configs['model']['save_dir']):
+    if not os.path.exists(os.path.join(ROOT_DIR, configs['model']['save_dir'])):
         os.makedirs(configs['model']['save_dir'])
 
     if not load_from_file:
@@ -414,7 +433,8 @@ def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd
 
     # JOB: Load constituency matrix
     print('Loading constituency matrix ...')
-    constituency_matrix = pd.read_csv(os.path.join(folder_path, 'constituency_matrix.csv'), index_col=0, header=[0, 1],
+    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
+                                      header=[0, 1],
                                       parse_dates=True)
     print('Successfully loaded constituency matrix.\n')
 
@@ -438,17 +458,37 @@ def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd
 
 
 if __name__ == '__main__':
+
+    configs = json.load(open('config.json', 'r'))
+
     # main(load_latest_model=True)
     # index_list = ['150378']  # Dow Jones European STOXX Index
     # index_list = ['150913']  # S&P Euro Index
     # index_list = ['150928']  # Euronext 100 Index
-    index_list = ['150095']  # DAX
+    index_id = '150378'
     cols = ['above_cs_med', 'stand_d_return']
-    for index_id in index_list:
-        main(index_id=index_id, cols=cols, force_download=False,
+    study_period_length = 1000
+    test_period_length = round(study_period_length * (1 - configs['data']['train_test_split']))
+
+    index_name, data_length = main(index_id=index_id, columns=cols.copy(), force_download=False,
+                                   data_only=True,
+                                   load_last=False, train_full=True, start_index=-1001,
+                                   end_index=-1, model_type='tree_based', verbose=1)
+
+    study_period_ranges = get_study_period_ranges(data_length=data_length, test_period_length=test_period_length,
+                                                  study_period_length=study_period_length,
+                                                  index_name=index_name, reverse=True, verbose=1)
+    print('\nStudy period date index ranges:')
+    print(study_period_ranges)
+
+    for study_period_ix in list(sorted(study_period_ranges.keys())):
+        date_range = study_period_ranges.get(study_period_ix)
+        print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
+
+        main(index_id=index_id, columns=cols.copy(), force_download=False,
              data_only=False,
-             load_last=False, train_full=True, start_index=-1001,
-             end_index=-1, model_type='tree_based', verbose=1)
+             load_last=False, train_full=False, start_index=date_range[0],
+             end_index=date_range[1], model_type='tree_based', verbose=1)
 
     """
     # Out-of memory generative training
