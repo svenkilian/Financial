@@ -1,3 +1,7 @@
+import inspect
+
+from sklearn import ensemble
+
 from config import ROOT_DIR
 
 GPU_ENABLED = True
@@ -8,12 +12,14 @@ import datetime as dt
 from numpy import newaxis
 import pprint
 from tensorflow.keras import optimizers
+from colorama import Fore, Back, Style
 
 from core.utils import Timer
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
 from sklearn.ensemble import RandomForestClassifier
+import sklearn.tree
 
 
 # tf.logging.set_verbosity(tf.logging.ERROR)
@@ -122,8 +128,8 @@ class LSTMModel:
         early_stopping_patience = configs['training']['early_stopping_patience']
 
         save_fname = os.path.join(ROOT_DIR, save_dir, '%s-%s-e%s-b%s.h5' % (self.index_name,
-                                                                  dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
-                                                                  str(epochs), str(batch_size)))
+                                                                            dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
+                                                                            str(epochs), str(batch_size)))
         callbacks = [
             EarlyStopping(monitor='val_loss', patience=early_stopping_patience, restore_best_weights=True,
                           verbose=1),
@@ -184,7 +190,8 @@ class LSTMModel:
         print('[Model] Training Started')
         print('[Model] %s epochs, %s batch size, %s batches per epoch' % (epochs, batch_size, steps_per_epoch))
 
-        save_fname = os.path.join(ROOT_DIR, save_dir, '%s-e%s.h5' % (dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs)))
+        save_fname = os.path.join(ROOT_DIR, save_dir,
+                                  '%s-e%s.h5' % (dt.datetime.now().strftime('%d%m%Y-%H%M%S'), str(epochs)))
         callbacks = [
             ModelCheckpoint(filepath=save_fname, monitor='loss', save_best_only=True)
         ]
@@ -273,14 +280,15 @@ def get_optimizer(optimizer_name: str, parameters: dict = None):
     return optimizer
 
 
-class RandomForestModel:
+class TreeEnsemble:
     """
     Random Forest model class
     """
 
-    def __init__(self, index_name):
+    def __init__(self, index_name=None, model_type='RandomForestClassifier'):
 
         self.model = None
+        self.model_type = model_type
         if index_name:
             self.index_name = index_name
         else:
@@ -288,21 +296,46 @@ class RandomForestModel:
         self.parameters = None
 
     def __repr__(self):
-        return str(self.model.get_params())
+        return str(self.model)
 
     def get_params(self):
-        return self.parameters
+        return self.model.get_params()
 
-    def build_model(self, verbose=2):
-        parameters = {'n_estimators': 200,
-                      'max_depth': 10,
-                      'n_jobs': -1,
-                      'verbose': verbose,
-                      'warm_start': True}
-        # Default: 1000, 20
-        self.parameters = parameters
-        self.model = RandomForestClassifier(**parameters)
+    def build_model(self, configs: dict, verbose=2):
+
+        # Create dictionary of sklearn ensembles
+        ensemble_clfs = ensemble.__dict__['__all__']
+        ensemble_type_dict = {key.lower(): ensemble.__dict__.get(key) for key in ensemble_clfs if
+                              inspect.isclass(ensemble.__dict__.get(key))}
+
+        # Retrieve model parameters from config
+        self.parameters = configs[self.model_type]
+
+        if 'base_estimator' in self.parameters.keys():
+            base_estimator_name = self.parameters.get('base_estimator')
+            self.parameters.pop('base_estimator')
+            base_clfs = sklearn.tree.__dict__['__all__']
+            base_type_dict = {key.lower(): sklearn.tree.__dict__.get(key) for key in base_clfs if
+                              inspect.isclass(sklearn.tree.__dict__.get(key))}
+            base_estimator = base_type_dict[base_estimator_name.lower()]()
+            self.parameters['base_estimator'] = base_estimator
+
+        # Extract nested parameters
+        nested_params = {key: val for key, val in self.parameters.items() if '__' in key}
+
+        # Filter for non-nested parameters
+        for nested_parameter in nested_params.keys():
+            self.parameters.pop(nested_parameter)
+
+        # Instantiate model
+        self.model = ensemble_type_dict[self.model_type.lower()](**self.parameters)
+        self.model.set_params(**nested_params)
+
+        if 'verbose' in self.model.get_params().keys():
+            self.parameters['verbose'] = verbose
+            self.model.set_params(verbose=verbose)
+
         if verbose == 2:
             print(type(self.model).__name__)
         elif verbose == 1:
-            print(self.model)
+            print(f'{Style.BRIGHT}{Fore.LIGHTGREEN_EX}{self.model}{Style.RESET_ALL}')

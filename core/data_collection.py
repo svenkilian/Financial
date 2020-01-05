@@ -10,7 +10,7 @@ import re
 import sys
 import time
 import warnings
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -20,6 +20,7 @@ from colorama import Fore, Back, Style
 from core import utils
 # Configurations for displaying DataFrames
 from config import ROOT_DIR
+from core.utils import get_index_name, check_directory_for_file, Timer, lookup_multiple
 
 pd.set_option('precision', 4)
 pd.set_option('display.max_rows', 200)
@@ -134,8 +135,13 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
     :return: Index of company identifiers for given date
     """
 
-    lookup_dict = pd.read_json(os.path.join(ROOT_DIR, folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get(
-        'conm')
+    try:
+        lookup_dict = pd.read_json(os.path.join(ROOT_DIR, folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get(
+            'conm')
+    except ValueError as ve:
+        lookup_dict = None
+        print_constituents = False
+
     # print(lookup_dict)
     print(f'Number of constituents: {len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
     # print(
@@ -154,7 +160,7 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
 def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = None,
                            folder_path: str = '', generate_dict=False) -> pd.DataFrame:
     """
-    Download complete daily index history
+    Download complete daily index history and return as Data Frame (no date index)
 
     :return: DataFrame containing full index constituent data over full index history
     :rtype: pd.DataFrame
@@ -191,7 +197,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
               'between %s and %s ...' % (gvkeyx_lookup.get(index_id), start_date, end_date))
         start_time = time.time()
         data = get_data_table(db, sql_query=True,
-                              query_string="select datadate, gvkey, iid, trfd, ajexdi, cshtrd, prccd, divd, conm, curcdd, sedol, exchg "
+                              query_string="select datadate, gvkey, iid, trfd, ajexdi, cshtrd, prccd, divd, conm, curcdd, sedol, exchg, gsubind "
                                            "from comp.g_secd "
                                            "where gvkey in %(company_codes)s and datadate between %(start_date)s and %(end_date)s "
                                            "order by datadate asc",
@@ -203,19 +209,8 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         print('Number of observations: %s' % data.shape[0])
         print('Number of individual dates: %d' % data.index.get_level_values('datadate').drop_duplicates().size)
 
-        # JOB: Calculate Return Index Column
-        data.loc[:, 'return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
-
-        # JOB: Calculate Daily Return
-        data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
-            lambda x: x.pct_change(periods=1))
-
-        # JOB: Filter out observations with zero trading volume and zero daily return (public holidays)
-        data = data[~(data['cshtrd'].isna() & (data['daily_return'] == 0))]
-
-        # JOB: Recalculate Daily Return
-        data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
-            lambda x: x.pct_change(periods=1))
+        # JOB: Add return_index and daily_return columns
+        data = calculate_daily_return(data, save_to_file=False)
 
         # Reset index
         data.reset_index(inplace=True)
@@ -224,9 +219,11 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
         data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
     else:
-        data = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'), dtype={'gvkey': str},
-                           parse_dates=True)
-        data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'])
+        data = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'),
+                           dtype={'gvkey': str, 'gsubind': str, 'datadate': str},
+                           parse_dates=False)
+        data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'], infer_datetime_format=True).dt.date
+        print(data.loc[:, 'datadate'].head())  # TODO: Remove
 
     if generate_dict:
         generate_company_lookup_dict(folder_path=folder_path, data=data)
@@ -392,6 +389,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     try:
         constituent_indices = get_index_constituents(constituency_matrix, date=split_date,
                                                      folder_path=folder_path)
+        if len(constituent_indices) < 2:
+            raise RuntimeWarning('Period contains too few constituents. Continuing with next study period.')
     except IndexError as ie:
         print(
             f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Period index out of bounds. Choose different study period bounds.'
@@ -399,6 +398,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
         print(', '.join(ie.args))
         print('Terminating program.')
         sys.exit(1)
+
 
     full_data.reset_index(inplace=True)
 
@@ -416,6 +416,8 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # Select data from study period
     print(f'Retrieving data from {unique_dates[period_range[0]].date()} to {unique_dates[period_range[1]].date()} \n')
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
+
+    del full_data
 
     print(f'Study period length: {len(study_data.index.unique())}')
 
@@ -507,6 +509,11 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
                    }
 
     if load_from_file:
+        # JOB: In case existing gics_matrix can be loaded from file
+        print(f'Loading GICS matrix for {index_id}: {index_name}')
+        timer = Timer()
+        timer.start()
+
         if folder_path is None:
             if index_name is None:
                 index_name, lookup_table = utils.lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_id)
@@ -514,37 +521,43 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
             folder_path = os.path.join(ROOT_DIR, 'data',
                                        index_name.lower().replace(' ', '_'))  # Path to index data folder
 
-        constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'gics_matrix.csv'), index_col=0,
-                                          header=0,
-                                          parse_dates=True, dtype=str)
-        constituency_matrix.index = pd.to_datetime(constituency_matrix.index)
+        # Load from fle
+        gic_constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'gics_matrix.csv'), index_col=0,
+                                              header=0,
+                                              parse_dates=True, dtype=str)
+        gic_constituency_matrix.index = pd.to_datetime(gic_constituency_matrix.index)
+        timer.stop()
 
     else:
+        # JOB: In case gics_matrix has to be created
         if folder_path is None:
             if (index_name is None) or (lookup_table is None):
-                index_name, lookup_table = utils.lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_id)
+                index_name, lookup_table = lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_id)
 
             folder_path = os.path.join(ROOT_DIR, 'data',
                                        index_name.lower().replace(' ', '_'))  # Path to index data folder
         else:
             index_name = str.split(folder_path, '\\')[-1].replace('_', ' ')
-            print(index_name)
-            index_id, lookup_table = utils.lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_name,
-                                                           reverse_lookup=True, key_to_lower=True)
+            index_id, lookup_table = lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_name,
+                                                     reverse_lookup=True, key_to_lower=True)
 
         folder_exists = utils.check_directory_for_file(index_name=index_name, folder_path=folder_path, create_dir=False)
 
         if folder_exists:
-            print(f'Creating GICS matrix for {index_id}: {index_name}')
+            print(f'Creating GICS matrix for {index_id}: {index_name.capitalize()}')
+
+            timer = Timer().start()
+
         else:
             print(
-                f'Directory for index {index_id} ({index_name}) does not exist. \nPlease either download the '
+                f'Directory for index {index_id} ({index_name.capitalize()}) does not exist. \nPlease either download the '
                 f'necessary data or choose different index ID.')
             raise LookupError('Value not found.')
 
         # JOB: Get all historic index constituents
         gvkey_list, _ = get_all_constituents(
-            constituency_matrix=pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
+            constituency_matrix=pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'),
+                                            index_col=0,
                                             header=[0, 1],
                                             parse_dates=True))
 
@@ -581,42 +594,153 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
         relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
 
         # Create empty constituency matrix
-        constituency_matrix = pd.DataFrame(None, index=relevant_date_range,
-                                           columns=const_data.index.drop_duplicates())
+        gic_constituency_matrix = pd.DataFrame(None, index=relevant_date_range,
+                                               columns=const_data.index.drop_duplicates())
 
         # JOB: Iterate through all company stocks ever listed in index and set adjacency to 0 or 1
         for stock_index in const_data.index:
             if isinstance(const_data.loc[stock_index], pd.Series):
                 if pd.isnull(const_data.loc[stock_index, 'indthru']):
-                    constituency_matrix.loc[
+                    gic_constituency_matrix.loc[
                         pd.date_range(start=const_data.loc[stock_index, 'indfrom'],
                                       end=datetime.date.today()), stock_index] = const_data.loc[stock_index, 'gsubind']
                 else:
-                    constituency_matrix.loc[
+                    gic_constituency_matrix.loc[
                         pd.date_range(start=const_data.loc[stock_index, 'indfrom'], end=const_data.loc[
                             stock_index, 'indthru']), stock_index] = const_data.loc[stock_index, 'gsubind']
             else:
                 for row in const_data.loc[stock_index].iterrows():
                     if pd.isnull(row[1]['indthru']):
-                        constituency_matrix.loc[
+                        gic_constituency_matrix.loc[
                             pd.date_range(start=row[1]['indfrom'], end=datetime.date.today()), stock_index] = row[1][
                             'gsubind']
                     else:
-                        constituency_matrix.loc[
+                        gic_constituency_matrix.loc[
                             pd.date_range(start=row[1]['indfrom'], end=row[1]['indthru']), stock_index] = row[1][
                             'gsubind']
 
         # Save constituency table to file
-        constituency_matrix.to_csv(os.path.join(ROOT_DIR, folder_path, 'gics_matrix.csv'))
+        gic_constituency_matrix.to_csv(os.path.join(ROOT_DIR, folder_path, 'gics_matrix.csv'))
 
         db.close()
         print('DB connection closed.')
 
-    constituency_matrix = constituency_matrix.stack()
-    constituency_matrix.index.set_names(['datadate', 'gvkey'], inplace=True)
-    constituency_matrix.name = 'gics_full'
+        timer.stop()
 
-    return constituency_matrix
+    gic_constituency_matrix = gic_constituency_matrix.stack()
+    gic_constituency_matrix.index.set_names(['datadate', 'gvkey'], inplace=True)
+    gic_constituency_matrix.name = 'gics_full'
+
+    return gic_constituency_matrix
+
+
+def load_full_data(index_id: str = '150095', force_download: bool = False, last_n: int = None,
+                   merge_gics=False) -> Tuple[
+    pd.DataFrame, pd.DataFrame, str, str]:
+    """
+    Load all available records from the data for a specified index
+
+    :param merge_gics:
+    :param index_id: Index ID to load data for
+    :param force_download: Flag indicating whether to overwrite existing data
+    :param last_n: Number of last available dates to consider
+    :param configs: Dict containing model and training configurations
+    :return: Tuple of (constituency_matrix, full_data, index_name, folder_path)
+    """
+    # Load index name dict and get index name
+    index_name, lookup_table = get_index_name(index_id=index_id)
+
+    configs = json.load(open('config.json', 'r'))
+
+    folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
+
+    # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
+    load_from_file = check_directory_for_file(index_name=index_name, folder_path=folder_path,
+                                              force_download=force_download)
+
+    # JOB: Check if saved model folder exists and create one if not
+    if not os.path.exists(os.path.join(ROOT_DIR, configs['model']['save_dir'])):
+        os.makedirs(configs['model']['save_dir'])
+
+    if not load_from_file:
+        # JOB: Create or load constituency matrix
+        print('Creating constituency matrix ...')
+        timer = Timer()
+        timer.start()
+        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, lookup_table=lookup_table,
+                                   folder_path=folder_path)
+        print('Successfully created constituency matrix.')
+        timer.stop()
+
+    # JOB: Load constituency matrix
+    print('Loading constituency matrix ...')
+    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
+                                      header=[0, 1],
+                                      parse_dates=True)
+    print('Successfully loaded constituency matrix.\n')
+
+    # JOB: Load full data
+    print('Retrieving full index history ...')
+    timer = Timer().start()
+    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
+                                       folder_path=folder_path, generate_dict=False)
+    full_data.set_index('datadate', inplace=True)
+    full_data.sort_index(inplace=True)
+    full_data.reset_index(inplace=True)
+    print('Successfully loaded index history.')
+    timer.stop()
+    print()
+
+    if merge_gics:
+        # JOB: Create GICS (Global Industry Classification Standard) matrix
+        gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
+                                         load_from_file=load_from_file)
+        # JOB: Merge gics matrix with full data set
+        print('Merging GICS matrix with full data set.')
+        full_data.set_index(['datadate', 'gvkey'], inplace=True)
+        full_data = full_data.join(gics_matrix, how='left', rsuffix='merged').reset_index()
+        # Save to file
+        # full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
+
+    # Drop records with missing daily_return variable
+    # full_data.dropna(subset=['daily_return'], inplace=True)  # TODO: Uncomment
+
+    return constituency_matrix, full_data, index_name, folder_path
+
+
+def calculate_daily_return(data: pd.DataFrame, save_to_file=False, folder_path=None):
+    """
+    Add return index and daily return columns to Data Frame
+
+    :param folder_path: Path to index data folder
+    :param save_to_file: Flag indicating whether to save appended Data Frame to original file
+    :param data: Original Data Frame
+    :return: Data Frame with added columns
+    """
+    data = data.reset_index(inplace=False).set_index(keys=['datadate', 'gvkey', 'iid'], inplace=False)
+
+    # JOB: Calculate Return Index Column
+    data.loc[:, 'return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
+
+    # JOB: Calculate Daily Return
+    data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+        lambda x: x.pct_change(periods=1))
+
+    # JOB: Filter out observations with zero trading volume and zero daily return (public holidays)
+    data = data[~(data['cshtrd'].isna() & (data['daily_return'] == 0))]
+
+    # JOB: Recalculate Daily Return
+    data.loc[:, 'daily_return'] = data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+        lambda x: x.pct_change(periods=1))
+
+    if save_to_file:
+        # Reset index
+        data.reset_index(inplace=True)
+
+        # Save to file
+        data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents_test.csv'))
+
+    return data
 
 
 # Main method

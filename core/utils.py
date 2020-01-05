@@ -334,7 +334,7 @@ def annualize_metric(metric: float, holding_periods: int = 1) -> float:
     return (1 + metric) ** trans_ratio - 1
 
 
-def get_study_period_ranges(data_length: int, test_period_length: int, study_period_length: int, index_name: int,
+def get_study_period_ranges(data_length: int, test_period_length: int, study_period_length: int, index_name: str,
                             reverse=True,
                             verbose=1) -> dict:
     """
@@ -369,6 +369,28 @@ def get_study_period_ranges(data_length: int, test_period_length: int, study_per
     return study_period_ranges
 
 
+def get_index_name(index_id: str, lookup_dict: dict = None):
+    """
+    Get index name and corresponding lookup table based on index ID
+
+    :param index_id: Index ID to look up name and lookup table for
+    :param lookup_dict: Optional custom lookup dict. Defaults to standard gvkeyx lookup dict
+    :return:
+    """
+
+    if lookup_dict is None:
+        lookup_dict = {'Global Dictionary':
+                           {'file_path': 'gvkeyx_name_dict.json',
+                            'lookup_table': 'global'},
+                       'North American Dictionary':
+                           {'file_path': 'gvkeyx_name_dict_na.json',
+                            'lookup_table': 'north_america'}}
+
+    index_name, lookup_table = lookup_multiple(lookup_dict, index_id=index_id)
+
+    return index_name, lookup_table
+
+
 class Timer():
     """
     Timer class for timing operations.
@@ -379,10 +401,11 @@ class Timer():
 
     def start(self):
         self.start_dt = dt.datetime.now()
+        return self
 
     def stop(self):
         end_dt = dt.datetime.now()
-        print('Time taken: %s' % (end_dt - self.start_dt))
+        print(f'{Style.DIM}{Fore.LIGHTBLUE_EX}Time taken: %s{Style.RESET_ALL}' % (end_dt - self.start_dt))
 
 
 class CSVWriter:

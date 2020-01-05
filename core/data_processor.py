@@ -7,6 +7,8 @@ import pandas as pd
 from typing import Tuple
 from colorama import Fore, Style
 
+from core.utils import Timer
+
 
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
