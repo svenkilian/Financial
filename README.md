@@ -6,7 +6,7 @@ supervised by *Patrick Jaquart* at the chair of *Information & Market Engineerin
 The project aims to predict the excess returns for a defined asset universe by means of advanced machine learning 
 methods such as **LSTM Networks** and **Gradient-Boosted Decision Trees** and to devise derived trading strategies to capitalize on opportunities for arbitrage.
 
-This work extends the previoud work by [[1]](#1)[[2]](#2).
+This work extends the previous work by [[1]](#1)[[2]](#2).
 
 
 ## References
