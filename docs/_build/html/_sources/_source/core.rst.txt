@@ -20,6 +20,14 @@ core.data\_processor module
    :undoc-members:
    :show-inheritance:
 
+core.execute module
+-------------------
+
+.. automodule:: core.execute
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 core.model module
 -----------------
 

@@ -6,4 +6,4 @@ Financial
 
    config
    core
-   execute
+   run

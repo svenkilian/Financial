@@ -35,6 +35,7 @@
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
 <li><a class="reference internal" href="#module-core.data_collection">core.data_collection module</a></li>
 <li><a class="reference internal" href="#module-core.data_processor">core.data_processor module</a></li>
+<li><a class="reference internal" href="#module-core.execute">core.execute module</a></li>
 <li><a class="reference internal" href="#module-core.model">core.model module</a></li>
 <li><a class="reference internal" href="#module-core.utils">core.utils module</a></li>
 <li><a class="reference internal" href="#module-core">Module contents</a></li>
@@ -75,6 +76,24 @@
 <div class="section" id="module-core.data_collection">
 <span id="core-data-collection-module"></span><h2>core.data_collection module<a class="headerlink" href="#module-core.data_collection" title="Permalink to this headline">¶</a></h2>
 <p>This module implements methods to collect financial data from Wharton Research Services via the wrds package</p>
+<dl class="function">
+<dt id="core.data_collection.calculate_daily_return">
+<code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">calculate_daily_return</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame</em>, <em class="sig-param">save_to_file=False</em>, <em class="sig-param">folder_path=None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_collection.calculate_daily_return" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add return index and daily return columns to Data Frame</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>folder_path</strong> – Path to index data folder</p></li>
+<li><p><strong>save_to_file</strong> – Flag indicating whether to save appended Data Frame to original file</p></li>
+<li><p><strong>data</strong> – Original Data Frame</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Data Frame with added columns</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="function">
 <dt id="core.data_collection.create_constituency_matrix">
 <code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">create_constituency_matrix</code><span class="sig-paren">(</span><em class="sig-param">load_from_file=False</em>, <em class="sig-param">index_id='150095'</em>, <em class="sig-param">lookup_table='global'</em>, <em class="sig-param">folder_path: str = None</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#core.data_collection.create_constituency_matrix" title="Permalink to this definition">¶</a></dt>
@@ -242,9 +261,29 @@
 </dd></dl>
 
 <dl class="function">
+<dt id="core.data_collection.load_full_data">
+<code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">load_full_data</code><span class="sig-paren">(</span><em class="sig-param">index_id: str = '150095'</em>, <em class="sig-param">force_download: bool = False</em>, <em class="sig-param">last_n: int = None</em>, <em class="sig-param">merge_gics=False</em><span class="sig-paren">)</span> &#x2192; Tuple[pandas.core.frame.DataFrame, pandas.core.frame.DataFrame, str, str]<a class="headerlink" href="#core.data_collection.load_full_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load all available records from the data for a specified index</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>merge_gics</strong> – </p></li>
+<li><p><strong>index_id</strong> – Index ID to load data for</p></li>
+<li><p><strong>force_download</strong> – Flag indicating whether to overwrite existing data</p></li>
+<li><p><strong>last_n</strong> – Number of last available dates to consider</p></li>
+<li><p><strong>configs</strong> – Dict containing model and training configurations</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Tuple of (constituency_matrix, full_data, index_name, folder_path)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
 <dt id="core.data_collection.retrieve_index_history">
 <code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">retrieve_index_history</code><span class="sig-paren">(</span><em class="sig-param">index_id: str = None</em>, <em class="sig-param">from_file=False</em>, <em class="sig-param">last_n: int = None</em>, <em class="sig-param">folder_path: str = ''</em>, <em class="sig-param">generate_dict=False</em><span class="sig-paren">)</span> &#x2192; pandas.core.frame.DataFrame<a class="headerlink" href="#core.data_collection.retrieve_index_history" title="Permalink to this definition">¶</a></dt>
-<dd><p>Download complete daily index history</p>
+<dd><p>Download complete daily index history and return as Data Frame (no date index)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p>DataFrame containing full index constituent data over full index history</p>
@@ -347,6 +386,88 @@ load data, otherwise use generate_training_window() method.</p>
 </dl>
 </dd></dl>
 
+</dd></dl>
+
+</div>
+<div class="section" id="module-core.execute">
+<span id="core-execute-module"></span><h2>core.execute module<a class="headerlink" href="#module-core.execute" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="core.execute.main">
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">main</code><span class="sig-paren">(</span><em class="sig-param">index_id='150095'</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">full_data=None</em>, <em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame = None</em>, <em class="sig-param">folder_path: str = None</em>, <em class="sig-param">columns: list = None</em>, <em class="sig-param">data_only=False</em>, <em class="sig-param">load_last: bool = False</em>, <em class="sig-param">start_index: int = -1001</em>, <em class="sig-param">end_index: int = -1</em>, <em class="sig-param">model_type: str = 'deep_learning'</em>, <em class="sig-param">verbose=2</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.main" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run data preparation and model training</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>folder_path</strong> – </p></li>
+<li><p><strong>constituency_matrix</strong> – </p></li>
+<li><p><strong>full_data</strong> – </p></li>
+<li><p><strong>index_name</strong> – </p></li>
+<li><p><strong>verbose</strong> – Verbosity</p></li>
+<li><p><strong>train_full</strong> – Flag indicating whether to train and test on all study periods</p></li>
+<li><p><strong>model_type</strong> – Model type as strings: ‘deep_learning’ for LSTM, ‘tree_based’ for Random Forest</p></li>
+<li><p><strong>columns</strong> – Relevant columns for model training and testing</p></li>
+<li><p><strong>load_last</strong> – Flag indicating whether to load last model weights from storage</p></li>
+<li><p><strong>index_id</strong> – Index identifier</p></li>
+<li><p><strong>last_n</strong> – Flag indicating the number of days to consider; <em>None</em> in case whole data history is considered</p></li>
+<li><p><strong>data_only</strong> – Flag indicating whether to download data only without training the model</p></li>
+<li><p><strong>force_download</strong> – Flag indicating whether to overwrite data if index data folder already exists</p></li>
+<li><p><strong>start_index</strong> – Index of period start date</p></li>
+<li><p><strong>end_index</strong> – Index of period end date</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.execute.preprocess_data">
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">preprocess_data</code><span class="sig-paren">(</span><em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">unique_indices: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">cols: list</em>, <em class="sig-param">split_index: int</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">full_date_range: pandas.core.indexes.base.Index</em>, <em class="sig-param">model_type: str</em><span class="sig-paren">)</span> &#x2192; tuple<a class="headerlink" href="#core.execute.preprocess_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Pre-process study period data to obtain training and test sets as well as test data index</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model_type</strong> – ‘deep_learning’ or ‘tree_based’</p></li>
+<li><p><strong>study_period_data</strong> – Full data for study period</p></li>
+<li><p><strong>unique_indices</strong> – MultiIndex of unique indices in study period</p></li>
+<li><p><strong>cols</strong> – Relevant columns</p></li>
+<li><p><strong>split_index</strong> – Split index</p></li>
+<li><p><strong>configs</strong> – Configuration dict</p></li>
+<li><p><strong>full_date_range</strong> – Index of dates</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Tuple of (x_train, y_train, x_test, y_test, test_data_index)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.execute.test_model">
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">test_model</code><span class="sig-paren">(</span><em class="sig-param">predictions: pandas.core.series.Series</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">test_data_index: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">model_type: str = 'deep_learning'</em>, <em class="sig-param">history=None</em>, <em class="sig-param">index_id=''</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">study_period_length: int = 0</em>, <em class="sig-param">model=None</em>, <em class="sig-param">period_range: tuple = (0</em>, <em class="sig-param">0)</em>, <em class="sig-param">start_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">5)</em>, <em class="sig-param">end_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">5)</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.test_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Test model on unseen data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>predictions</strong> – </p></li>
+<li><p><strong>configs</strong> – </p></li>
+<li><p><strong>folder_path</strong> – </p></li>
+<li><p><strong>test_data_index</strong> – </p></li>
+<li><p><strong>y_test</strong> – </p></li>
+<li><p><strong>study_period_data</strong> – </p></li>
+<li><p><strong>model_type</strong> – </p></li>
+<li><p><strong>history</strong> – </p></li>
+<li><p><strong>index_id</strong> – </p></li>
+<li><p><strong>index_name</strong> – </p></li>
+<li><p><strong>study_period_length</strong> – </p></li>
+<li><p><strong>model</strong> – </p></li>
+<li><p><strong>period_range</strong> – </p></li>
+<li><p><strong>start_date</strong> – </p></li>
+<li><p><strong>end_date</strong> – </p></li>
+</ul>
+</dd>
+</dl>
 </dd></dl>
 
 </div>
@@ -481,18 +602,18 @@ load data, otherwise use generate_training_window() method.</p>
 </dd></dl>
 
 <dl class="class">
-<dt id="core.model.RandomForestModel">
-<em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">RandomForestModel</code><span class="sig-paren">(</span><em class="sig-param">index_name</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.RandomForestModel" title="Permalink to this definition">¶</a></dt>
+<dt id="core.model.TreeEnsemble">
+<em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">TreeEnsemble</code><span class="sig-paren">(</span><em class="sig-param">index_name=None</em>, <em class="sig-param">model_type='RandomForestClassifier'</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.TreeEnsemble" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Random Forest model class</p>
 <dl class="method">
-<dt id="core.model.RandomForestModel.build_model">
-<code class="sig-name descname">build_model</code><span class="sig-paren">(</span><em class="sig-param">verbose=2</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.RandomForestModel.build_model" title="Permalink to this definition">¶</a></dt>
+<dt id="core.model.TreeEnsemble.build_model">
+<code class="sig-name descname">build_model</code><span class="sig-paren">(</span><em class="sig-param">configs: dict</em>, <em class="sig-param">verbose=2</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.TreeEnsemble.build_model" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="method">
-<dt id="core.model.RandomForestModel.get_params">
-<code class="sig-name descname">get_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.model.RandomForestModel.get_params" title="Permalink to this definition">¶</a></dt>
+<dt id="core.model.TreeEnsemble.get_params">
+<code class="sig-name descname">get_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.model.TreeEnsemble.get_params" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
 
 </dd></dl>
@@ -628,6 +749,23 @@ load data, otherwise use generate_training_window() method.</p>
 </dd></dl>
 
 <dl class="function">
+<dt id="core.utils.get_index_name">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">get_index_name</code><span class="sig-paren">(</span><em class="sig-param">index_id: str</em>, <em class="sig-param">lookup_dict: dict = None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.get_index_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get index name and corresponding lookup table based on index ID</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index_id</strong> – Index ID to look up name and lookup table for</p></li>
+<li><p><strong>lookup_dict</strong> – Optional custom lookup dict. Defaults to standard gvkeyx lookup dict</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
 <dt id="core.utils.get_most_recent_file">
 <code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">get_most_recent_file</code><span class="sig-paren">(</span><em class="sig-param">directory: str</em><span class="sig-paren">)</span> &#x2192; str<a class="headerlink" href="#core.utils.get_most_recent_file" title="Permalink to this definition">¶</a></dt>
 <dd><p>Retrieve name of most recently changed file in given directory.</p>
@@ -643,7 +781,7 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="function">
 <dt id="core.utils.get_study_period_ranges">
-<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">get_study_period_ranges</code><span class="sig-paren">(</span><em class="sig-param">data_length: int</em>, <em class="sig-param">test_period_length: int</em>, <em class="sig-param">study_period_length: int</em>, <em class="sig-param">index_name: int</em>, <em class="sig-param">reverse=True</em>, <em class="sig-param">verbose=1</em><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#core.utils.get_study_period_ranges" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">get_study_period_ranges</code><span class="sig-paren">(</span><em class="sig-param">data_length: int</em>, <em class="sig-param">test_period_length: int</em>, <em class="sig-param">study_period_length: int</em>, <em class="sig-param">index_name: str</em>, <em class="sig-param">reverse=True</em>, <em class="sig-param">verbose=1</em><span class="sig-paren">)</span> &#x2192; dict<a class="headerlink" href="#core.utils.get_study_period_ranges" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get study period ranges, going backwards in time, as a dict</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
