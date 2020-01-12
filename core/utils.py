@@ -328,8 +328,22 @@ def annualize_metric(metric: float, holding_periods: int = 1) -> float:
     :return: Annualized metric
     """
 
-    trading_days_per_year = 240
+    trading_days_per_year = 250
     trans_ratio = trading_days_per_year / holding_periods
+
+    return (1 + metric) ** trans_ratio - 1
+
+
+def to_monthly(metric: float, holding_periods: int = 1):
+    """
+    Transform metric of arbitrary periodicity to monthly
+
+    :param metric:
+    :param holding_periods:
+    :return:
+    """
+
+    trans_ratio = 30 / holding_periods
 
     return (1 + metric) ** trans_ratio - 1
 
@@ -389,6 +403,72 @@ def get_index_name(index_id: str, lookup_dict: dict = None):
     index_name, lookup_table = lookup_multiple(lookup_dict, index_id=index_id)
 
     return index_name, lookup_table
+
+
+def calc_sharpe(return_series, annualize=True):
+    """
+    Calculate Sharpe Ratio for series of returns
+
+    :param return_series:
+    :param annualize:
+    :return:
+    """
+
+    excess_returns = calc_excess_returns(return_series)
+    std = np.std(excess_returns)
+    res = np.divide(excess_returns.mean(), std)
+
+    if annualize:
+        res = res * np.sqrt(250)
+
+    return res
+
+
+def calc_sortino(return_series, annualize=True):
+    """
+    Calculate Sortino Ratio for series of returns
+
+    :param return_series:
+    :param annualize:
+    :return:
+    """
+
+    excess_returns = calc_excess_returns(return_series)
+    semi_std = np.std(excess_returns[excess_returns < 0])
+    res = np.divide(excess_returns.mean(), semi_std)
+
+    if annualize:
+        res = res * np.sqrt(250)
+
+    return res
+
+
+def deannualize(return_series, n_periods=250):
+    """
+    Convert return in annual terms to a daily basis
+
+    :param return_series: Return series to deannualize
+    :param n_periods: Target basis (250 for daily)
+    :return:
+    """
+    return np.power(1 + return_series, 1.0 / n_periods) - 1
+
+
+def calc_excess_returns(return_series: pd.DataFrame, rf_rate_series: pd.DataFrame = None):
+    """
+    Calculate daily excess returns for a given return series and a series of the risk-free rate (annual values)
+
+    :param return_series: Return series to calculate excess returns for
+    :param rf_rate_series: Series with risk-free rate (annual percentage)
+    :return:
+    """
+    if rf_rate_series is None:
+        rf_rate_series = (pd.read_csv(os.path.join(ROOT_DIR, 'data', 'rf_rate_germany.csv'), parse_dates=True,
+                                      index_col=0) / 100).resample('D').ffill()
+    combined = return_series.join(deannualize(rf_rate_series), how='inner')
+    excess_returns = combined['daily_return'].subtract(combined['rf_rate_pct'])
+
+    return excess_returns
 
 
 class Timer():

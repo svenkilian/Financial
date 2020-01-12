@@ -39,124 +39,6 @@ warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 warnings.simplefilter(action='error', category=FutureWarning)  # TODO: Change to ignore
 
 
-def get_data_table(db: wrds.Connection, sql_query=False, query_string='', library=None, table=None, columns=None,
-                   obs=-1,
-                   index_col=None, date_cols=None, recent=False, n_recent=100, params=None,
-                   table_info=1) -> pd.DataFrame:
-    """
-    Get pandas DataFrame containing the queries data from the specified library and table.
-
-    :param db: wrds database connection
-    :param sql_query: SQL query flag
-    :param query_string: SQL query string
-    :param library: Library to use
-    :param table: Table withing library
-    :param columns: Columns to include in the DataFrame
-    :param obs: Number of observations
-    :param index_col: Index of index columns
-    :param date_cols: Index of data columns
-    :param recent: Flag indicating whether to only return recent data
-    :param n_recent: Number of recent data rows to return
-    :param table_info: Integer indicating info verbosity
-    :param params: Addition SQL query parameter
-    :return: DataFrame containing the queried table
-    """
-
-    print('Processing query ...')
-
-    # JOB: Extract library and table name from SQL query string
-    if sql_query and query_string:
-        lib_tab_string = re.search('(?:from|FROM)\s(\S*)', query_string).group(1)
-        library, table = lib_tab_string.split('.')
-
-    # JOB: Print information about the queried table
-    if table_info == 1:
-        print('Approximate number of rows in %s.%s: %d' % (library, table, db.get_row_count(library, table)))
-    elif table_info == 2:
-        print('Queried table information for %s - %s: ' % (library, table))
-        print(db.describe_table(library, table))
-
-    if not sql_query:
-        # Standard non-SQL query
-        data_table = db.get_table(library=library, table=table, columns=columns, obs=obs, index_col=index_col,
-                                  date_cols=date_cols)
-
-    else:
-        # Query via SQL string
-        data_table = db.raw_sql(query_string, index_col=index_col, date_cols=date_cols, params=params)
-
-    if recent:
-        # In case only n_recent dates are queried
-
-        # Create array of last n date indices (deduplicated)
-        last_n_indices = data_table.set_index(keys='datadate').index.drop_duplicates().sort_values(
-            ascending=True).values[
-                         -n_recent:]
-
-        data_table.set_index(keys='datadate', inplace=True)
-
-        # Query last n dates from DataFrame
-        data_table = data_table.loc[last_n_indices, :]
-
-    return data_table
-
-
-def list_tables(db, library, show_n_rows=False):
-    """
-    List all tables in a given library with optional row count information
-    :param db: Database connection
-    :param library: Queries library
-    :param show_n_rows: Show number of rows
-    :return:
-
-    Usage::
-            >>> list_tables(db, 'library_name', show_n_rows=False)
-            bank_ifndytd
-            bank_ifntq
-            ...
-    """
-    for table in db.list_tables(library):
-        if show_n_rows:
-            print(table + ': %d rows' % db.get_row_count(library, table))
-        else:
-            print(table)
-
-
-def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date, folder_path: str,
-                           print_constituents=False) -> pd.Index:
-    """
-    Return company name list of index constituents for given date
-
-    :param print_constituents: Flag indicating whether to print out index constituent names
-    :param folder_path: Path to file directory
-    :param constituency_matrix: Constituency table providing constituency information
-    :param date: Date for which to return constituency list
-
-    :return: Index of company identifiers for given date
-    """
-
-    try:
-        lookup_dict = pd.read_json(os.path.join(ROOT_DIR, folder_path, 'gvkey_name_dict.json'), typ='series').to_dict().get(
-            'conm')
-    except ValueError as ve:
-        lookup_dict = None
-        print_constituents = False
-
-    # print(lookup_dict)
-    print(f'Number of constituents: {len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
-    # print(
-    #     f"List of constituents: {constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values('gvkey').tolist()}")
-
-    if print_constituents:
-        constituent_list_names = [lookup_dict.get(key) for key in
-                                  constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values(
-                                      'gvkey').tolist()]
-        for company_name in constituent_list_names:
-            print(company_name)
-
-    return constituency_matrix.loc[date].loc[lambda x: x == 1].index
-
-
 def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = None,
                            folder_path: str = '', generate_dict=False) -> pd.DataFrame:
     """
@@ -223,12 +105,214 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
                            dtype={'gvkey': str, 'gsubind': str, 'datadate': str},
                            parse_dates=False)
         data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'], infer_datetime_format=True).dt.date
-        print(data.loc[:, 'datadate'].head())  # TODO: Remove
 
     if generate_dict:
         generate_company_lookup_dict(folder_path=folder_path, data=data)
 
     return data
+
+
+def load_full_data(index_id: str = '150095', force_download: bool = False, last_n: int = None,
+                   merge_gics=False) -> Tuple[
+    pd.DataFrame, pd.DataFrame, str, str]:
+    """
+    Load all available records from the data for a specified index
+
+    :param merge_gics:
+    :param index_id: Index ID to load data for
+    :param force_download: Flag indicating whether to overwrite existing data
+    :param last_n: Number of last available dates to consider
+    :param configs: Dict containing model and training configurations
+    :return: Tuple of (constituency_matrix, full_data, index_name, folder_path)
+    """
+    # Load index name dict and get index name
+    index_name, lookup_table = get_index_name(index_id=index_id)
+
+    configs = json.load(open('config.json', 'r'))
+
+    folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
+
+    # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
+    load_from_file = check_directory_for_file(index_name=index_name, folder_path=folder_path,
+                                              force_download=force_download)
+
+    # JOB: Check if saved model folder exists and create one if not
+    if not os.path.exists(os.path.join(ROOT_DIR, configs['model']['save_dir'])):
+        os.makedirs(configs['model']['save_dir'])
+
+    if not load_from_file:
+        # JOB: Create or load constituency matrix
+        print('Creating constituency matrix ...')
+        timer = Timer()
+        timer.start()
+        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, lookup_table=lookup_table,
+                                   folder_path=folder_path)
+        print('Successfully created constituency matrix.')
+        timer.stop()
+
+    # JOB: Load constituency matrix
+    print('Loading constituency matrix ...')
+    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
+                                      header=[0, 1],
+                                      parse_dates=True)
+    print('Successfully loaded constituency matrix.\n')
+
+    # JOB: Load full data
+    print('Retrieving full index history ...')
+    timer = Timer().start()
+    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
+                                       folder_path=folder_path, generate_dict=False)
+    full_data.set_index('datadate', inplace=True)
+    # JOB: Sort by date and reset index
+    full_data.sort_index(inplace=True)
+    full_data.reset_index(inplace=True)
+
+    if merge_gics and 'gsubind' not in full_data.columns:
+        # JOB: Create GICS (Global Industry Classification Standard) matrix
+        gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
+                                         load_from_file=load_from_file)
+        # JOB: Merge gics matrix with full data set
+        print('Merging GICS matrix with full data set.')
+        full_data.set_index(['datadate', 'gvkey'], inplace=True)
+        full_data = full_data.join(gics_matrix, how='left').reset_index()
+        # Save to file
+        full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
+
+    # JOB: Extract 2-digit GICS code
+    generate_gics_sector(full_data)
+
+    print('Successfully loaded index history.')
+    timer.stop()
+    print()
+
+    # Drop records with missing daily_return variable
+    # full_data.dropna(subset=['daily_return'], inplace=True)  # TODO: Uncomment
+    # full_data.fillna(method='ffill', inplace=True)  # TODO: Comment
+
+    return constituency_matrix, full_data, index_name, folder_path
+
+
+def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame, cols: list,
+                          period_range: tuple, index_name: str, configs: dict, folder_path: str) -> (
+        pd.DataFrame, int):
+    """
+    Generate a time-period sample for a study period
+
+    :param cols: Relevant columns
+    :param configs: Dictionary containing model and training configurations
+    :param folder_path: Path to data folder
+    :param period_range: Date index range of study period in form (start_index, end_index)
+    :type period_range: tuple
+    :param full_data: Full stock data
+    :type full_data: pd.DataFrame
+    :param constituency_matrix: Constituency matrix
+    :type constituency_matrix: pd.DataFrame
+    :param index_name: Name of index
+    :type index_name: str
+
+    :return: Tuple Study period sample and split index
+    :rtype: tuple[pd.DataFrame, int]
+    """
+
+    # Convert date columns to DatetimeIndex
+    full_data.loc[:, 'datadate'] = pd.to_datetime(full_data['datadate'])
+
+    # Set index to date column
+    full_data.set_index('datadate', inplace=True)
+
+    # Get unique dates
+    unique_dates = full_data.index.drop_duplicates()
+    split_ratio = configs['data']['train_test_split']
+    i_split = len(unique_dates[:period_range[0]]) + int(
+        len(unique_dates[period_range[0]:period_range[1]]) * split_ratio)
+    split_date = unique_dates[i_split]
+
+    # Detect potential out-of-bounds indices
+    if abs(period_range[0]) > len(unique_dates) or abs(period_range[1] > len(unique_dates)):
+        print(f'Index length is {len(unique_dates)}. Study period range ist {period_range}.')
+        raise IndexError('Period index out of bounds.')
+
+    print(f'Retrieving index constituency for {index_name} as of {split_date.date()}.')
+    try:
+        constituent_indices = get_index_constituents(constituency_matrix, date=split_date,
+                                                     folder_path=folder_path)
+        if len(constituent_indices) < 2:
+            raise RuntimeWarning('Period contains too few constituents. Continuing with next study period.')
+    except IndexError as ie:
+        print(
+            f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Period index out of bounds. Choose different study period bounds.'
+            f'{Style.RESET_ALL}')
+        print(', '.join(ie.args))
+        print('Terminating program.')
+        sys.exit(1)
+
+    full_data.reset_index(inplace=True)
+
+    # JOB: Select relevant data
+    # Select relevant stocks
+    full_data = full_data.set_index(['gvkey', 'iid'])
+    # print(f'Length of intersection: {len(constituent_indices.intersection(full_data.index))}')
+    # print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
+    assert len(constituent_indices.intersection(full_data.index)) == len(constituent_indices)
+    full_data = full_data.loc[constituent_indices, :]
+    full_data.reset_index(inplace=True)
+    full_data.set_index('datadate', inplace=True)
+    full_data.sort_index(inplace=True)
+
+    # Select data from study period
+    print(f'Retrieving data from {unique_dates[period_range[0]].date()} to {unique_dates[period_range[1]].date()} \n')
+    study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
+
+    del full_data
+
+    print(f'Study period length: {len(study_data.index.unique())}')
+
+    study_data_split_index = study_data.index.unique().get_loc(split_date, method='ffill')
+    study_data_split_date = study_data.index.unique()[study_data_split_index]
+    print(f'Study data split index: {study_data_split_index}')
+    print(f'Study data split date: {study_data_split_date.date()}')
+
+    # JOB: Calculate mean and standard deviation of daily returns for training period
+    mean_daily_return = study_data.loc[unique_dates[period_range[0]]:split_date, 'daily_return'].mean()
+    std_daily_return = study_data.loc[unique_dates[period_range[0]]:split_date, 'daily_return'].std()
+    print('Mean daily return: %g' % mean_daily_return)
+    print('Std. daily return: %g \n' % std_daily_return)
+
+    # JOB: Calculate standardized daily returns
+    study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
+
+    # JOB: Drop observations with critical n/a values
+    # TODO: Check whether operation is redundant
+    # critical_cols = ['daily_return']
+    # study_data.dropna(how='any', subset=critical_cols, inplace=True)
+
+    # JOB: Create target
+    study_data.loc[:, 'above_cs_med'] = study_data['daily_return'].gt(
+        study_data.groupby('datadate')['daily_return'].transform('median')).astype(np.int8)
+    study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
+
+    # JOB: Create cross-sectional ranking
+    # study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first', ascending=False).astype('int16')
+    # study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
+
+    # JOB: Number of securities in cross-section
+    study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
+
+    study_data.reset_index(inplace=True)
+    study_data.set_index(keys=['datadate', 'gvkey', 'iid'], inplace=True)
+    # JOB: Add 6-month (=120 days) momentum column
+    study_data.loc[:, '6m_mom'] = study_data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+        lambda x: x.pct_change(periods=120))
+
+    study_data.reset_index(inplace=True)
+    study_data.set_index('datadate', inplace=True)
+
+    # JOB: Add industry momentum column
+    study_data.loc[:, 'ind_mom'] = study_data.groupby(['gics_sector', 'datadate'])['6m_mom'].transform('mean')
+
+    # study_data.dropna(how='any', subset=['ind_mom'], inplace=True)  # TODO: Review
+
+    return study_data, study_data_split_index
 
 
 def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_table='global',
@@ -327,165 +411,6 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_t
     return None
 
 
-def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
-    """
-    Return all historical constituents' gvkeys and full date range from constituency matrix
-
-    :param constituency_matrix: Matrix to extract constituents and time frame from
-    :return: Tuple containing [0] list of historical constituent gvkeys and [1] relevant date range
-    """
-
-    # Query complete list of historic index constituents' gvkeys
-    constituent_list = constituency_matrix.columns.get_level_values('gvkey').drop_duplicates().to_list()
-
-    # Query relevant date range
-    index_starting_date = constituency_matrix.index.sort_values()[0]
-    relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
-
-    return constituent_list, relevant_date_range
-
-
-def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
-                          period_range: tuple, index_name: str, configs: dict, cols: List[str], folder_path: str) -> (
-        pd.DataFrame, int):
-    """
-    Generate a time-period sample for a study period
-
-    :param cols: Relevant columns
-    :param configs: Dictionary containing model and training configurations
-    :param folder_path: Path to data folder
-    :param period_range: Date index range of study period in form (start_index, end_index)
-    :type period_range: tuple
-    :param full_data: Full stock data
-    :type full_data: pd.DataFrame
-    :param constituency_matrix: Constituency matrix
-    :type constituency_matrix: pd.DataFrame
-    :param index_name: Name of index
-    :type index_name: str
-
-    :return: Tuple Study period sample and split index
-    :rtype: tuple[pd.DataFrame, int]
-    """
-
-    # Convert date columns to DatetimeIndex
-    full_data.loc[:, 'datadate'] = pd.to_datetime(full_data['datadate'])
-
-    # Set index to date column
-    full_data.set_index('datadate', inplace=True)
-
-    # Get unique dates
-    unique_dates = full_data.index.drop_duplicates()
-    split_ratio = configs['data']['train_test_split']
-    i_split = len(unique_dates[:period_range[0]]) + int(
-        len(unique_dates[period_range[0]:period_range[1]]) * split_ratio)
-    split_date = unique_dates[i_split]
-
-    # Detect potential out-of-bounds indices
-    if abs(period_range[0]) > len(unique_dates) or abs(period_range[1] > len(unique_dates)):
-        print(f'Index length is {len(unique_dates)}. Study period range ist {period_range}.')
-        raise IndexError('Period index out of bounds.')
-
-    print(f'Retrieving index constituency for {index_name} as of {split_date.date()}.')
-    try:
-        constituent_indices = get_index_constituents(constituency_matrix, date=split_date,
-                                                     folder_path=folder_path)
-        if len(constituent_indices) < 2:
-            raise RuntimeWarning('Period contains too few constituents. Continuing with next study period.')
-    except IndexError as ie:
-        print(
-            f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Period index out of bounds. Choose different study period bounds.'
-            f'{Style.RESET_ALL}')
-        print(', '.join(ie.args))
-        print('Terminating program.')
-        sys.exit(1)
-
-
-    full_data.reset_index(inplace=True)
-
-    # JOB: Select relevant data
-    # Select relevant stocks
-    full_data = full_data.set_index(['gvkey', 'iid'])
-    # print(f'Length of intersection: {len(constituent_indices.intersection(full_data.index))}')
-    # print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
-    assert len(constituent_indices.intersection(full_data.index)) == len(constituent_indices)
-    full_data = full_data.loc[constituent_indices, :]
-    full_data.reset_index(inplace=True)
-    full_data.set_index('datadate', inplace=True)
-    full_data.sort_index(inplace=True)
-
-    # Select data from study period
-    print(f'Retrieving data from {unique_dates[period_range[0]].date()} to {unique_dates[period_range[1]].date()} \n')
-    study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
-
-    del full_data
-
-    print(f'Study period length: {len(study_data.index.unique())}')
-
-    study_data_split_index = study_data.index.unique().get_loc(split_date, method='ffill')
-    study_data_split_date = study_data.index.unique()[study_data_split_index]
-    print(f'Study data split index: {study_data_split_index}')
-    print(f'Study data split date: {study_data_split_date.date()}')
-
-    # JOB: Calculate mean and standard deviation of daily returns for training period
-    mean_daily_return = study_data.loc[unique_dates[period_range[0]]:split_date, 'daily_return'].mean()
-    std_daily_return = study_data.loc[unique_dates[period_range[0]]:split_date, 'daily_return'].std()
-    print('Mean daily return: %g' % mean_daily_return)
-    print('Std. daily return: %g \n' % std_daily_return)
-
-    # JOB: Calculate standardized daily returns
-    study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
-
-    # JOB: Drop observations with critical n/a values
-    # TODO: Check whether operation is redundant
-    critical_cols = cols[1:]
-    study_data.dropna(how='any', subset=critical_cols, inplace=True)
-
-    # JOB: Create target
-    study_data.loc[:, 'above_cs_med'] = study_data['daily_return'].gt(
-        study_data.groupby('datadate')['daily_return'].transform('median')).astype(np.int8)
-    study_data.loc[:, 'cs_med'] = study_data.groupby('datadate')['daily_return'].transform('median')
-
-    # JOB: Create cross-sectional ranking
-    # study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first', ascending=False).astype('int16')
-    # study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
-
-    # JOB: Number of securities in cross-section
-    study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
-
-    return study_data, study_data_split_index
-
-
-def generate_index_lookup_dict() -> None:
-    """
-    Generate dictionary mapping GVKEYX (index identifier) to index name
-
-    :return:
-    """
-
-    gvkeyx_lookup = pd.read_csv(os.path.join(ROOT_DIR, 'data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
-    gvkeyx_lookup.index = gvkeyx_lookup.index.astype(str)
-    gvkeyx_lookup = gvkeyx_lookup['index_name'].to_dict()
-
-    with open(os.path.join(ROOT_DIR, 'data', 'gvkeyx_name_dict.json'), 'w') as fp:
-        json.dump(gvkeyx_lookup, fp)
-
-
-def generate_company_lookup_dict(folder_path: str, data: pd.DataFrame) -> None:
-    """
-    Generate dictionary mapping GVKEY (stock identifier) to stock name
-
-    :return:
-    """
-
-    # JOB: Create company name dictionary and save to file
-    company_name_lookup = data.reset_index()
-    company_name_lookup = company_name_lookup.loc[
-        ~company_name_lookup.duplicated(subset='gvkey', keep='first'), ['gvkey', 'conm']].set_index('gvkey')
-
-    # JOB: Save dict to json file
-    company_name_lookup.to_json(os.path.join(ROOT_DIR, folder_path, 'gvkey_name_dict.json'))
-
-
 def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, folder_path: str = None,
                        load_from_file=False) -> pd.DataFrame:
     """
@@ -526,6 +451,7 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
                                               header=0,
                                               parse_dates=True, dtype=str)
         gic_constituency_matrix.index = pd.to_datetime(gic_constituency_matrix.index)
+
         timer.stop()
 
     else:
@@ -629,83 +555,9 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
 
     gic_constituency_matrix = gic_constituency_matrix.stack()
     gic_constituency_matrix.index.set_names(['datadate', 'gvkey'], inplace=True)
-    gic_constituency_matrix.name = 'gics_full'
+    gic_constituency_matrix.name = 'gsubind'
 
     return gic_constituency_matrix
-
-
-def load_full_data(index_id: str = '150095', force_download: bool = False, last_n: int = None,
-                   merge_gics=False) -> Tuple[
-    pd.DataFrame, pd.DataFrame, str, str]:
-    """
-    Load all available records from the data for a specified index
-
-    :param merge_gics:
-    :param index_id: Index ID to load data for
-    :param force_download: Flag indicating whether to overwrite existing data
-    :param last_n: Number of last available dates to consider
-    :param configs: Dict containing model and training configurations
-    :return: Tuple of (constituency_matrix, full_data, index_name, folder_path)
-    """
-    # Load index name dict and get index name
-    index_name, lookup_table = get_index_name(index_id=index_id)
-
-    configs = json.load(open('config.json', 'r'))
-
-    folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
-
-    # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
-    load_from_file = check_directory_for_file(index_name=index_name, folder_path=folder_path,
-                                              force_download=force_download)
-
-    # JOB: Check if saved model folder exists and create one if not
-    if not os.path.exists(os.path.join(ROOT_DIR, configs['model']['save_dir'])):
-        os.makedirs(configs['model']['save_dir'])
-
-    if not load_from_file:
-        # JOB: Create or load constituency matrix
-        print('Creating constituency matrix ...')
-        timer = Timer()
-        timer.start()
-        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, lookup_table=lookup_table,
-                                   folder_path=folder_path)
-        print('Successfully created constituency matrix.')
-        timer.stop()
-
-    # JOB: Load constituency matrix
-    print('Loading constituency matrix ...')
-    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
-                                      header=[0, 1],
-                                      parse_dates=True)
-    print('Successfully loaded constituency matrix.\n')
-
-    # JOB: Load full data
-    print('Retrieving full index history ...')
-    timer = Timer().start()
-    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
-                                       folder_path=folder_path, generate_dict=False)
-    full_data.set_index('datadate', inplace=True)
-    full_data.sort_index(inplace=True)
-    full_data.reset_index(inplace=True)
-    print('Successfully loaded index history.')
-    timer.stop()
-    print()
-
-    if merge_gics:
-        # JOB: Create GICS (Global Industry Classification Standard) matrix
-        gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
-                                         load_from_file=load_from_file)
-        # JOB: Merge gics matrix with full data set
-        print('Merging GICS matrix with full data set.')
-        full_data.set_index(['datadate', 'gvkey'], inplace=True)
-        full_data = full_data.join(gics_matrix, how='left', rsuffix='merged').reset_index()
-        # Save to file
-        # full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
-
-    # Drop records with missing daily_return variable
-    # full_data.dropna(subset=['daily_return'], inplace=True)  # TODO: Uncomment
-
-    return constituency_matrix, full_data, index_name, folder_path
 
 
 def calculate_daily_return(data: pd.DataFrame, save_to_file=False, folder_path=None):
@@ -743,10 +595,179 @@ def calculate_daily_return(data: pd.DataFrame, save_to_file=False, folder_path=N
     return data
 
 
-# Main method
-if __name__ == '__main__':
-    generate_index_lookup_dict()
-    pass
-    # main()
-    # create_constituency_matrix(load_from_file=False)
-    # retrieve_index_history(index_id='150095', from_file=False, last_n=None)
+def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date, folder_path: str,
+                           print_constituents=False) -> pd.Index:
+    """
+    Return company name list of index constituents for given date
+
+    :param print_constituents: Flag indicating whether to print out index constituent names
+    :param folder_path: Path to file directory
+    :param constituency_matrix: Constituency table providing constituency information
+    :param date: Date for which to return constituency list
+
+    :return: Index of company identifiers for given date
+    """
+
+    try:
+        lookup_dict = pd.read_json(os.path.join(ROOT_DIR, folder_path, 'gvkey_name_dict.json'),
+                                   typ='series').to_dict().get(
+            'conm')
+    except ValueError as ve:
+        lookup_dict = None
+        print_constituents = False
+
+    # print(lookup_dict)
+    print(f'Number of constituents: {len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
+    # print(
+    #     f"List of constituents: {constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values('gvkey').tolist()}")
+
+    if print_constituents:
+        constituent_list_names = [lookup_dict.get(key) for key in
+                                  constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values(
+                                      'gvkey').tolist()]
+        for company_name in constituent_list_names:
+            print(company_name)
+
+    return constituency_matrix.loc[date].loc[lambda x: x == 1].index
+
+
+def get_all_constituents(constituency_matrix: pd.DataFrame) -> tuple:
+    """
+    Return all historical constituents' gvkeys and full date range from constituency matrix
+
+    :param constituency_matrix: Matrix to extract constituents and time frame from
+    :return: Tuple containing [0] list of historical constituent gvkeys and [1] relevant date range
+    """
+
+    # Query complete list of historic index constituents' gvkeys
+    constituent_list = constituency_matrix.columns.get_level_values('gvkey').drop_duplicates().to_list()
+
+    # Query relevant date range
+    index_starting_date = constituency_matrix.index.sort_values()[0]
+    relevant_date_range = pd.date_range(index_starting_date, datetime.date.today(), freq='D')
+
+    return constituent_list, relevant_date_range
+
+
+def get_data_table(db: wrds.Connection, sql_query=False, query_string='', library=None, table=None, columns=None,
+                   obs=-1,
+                   index_col=None, date_cols=None, recent=False, n_recent=100, params=None,
+                   table_info=1) -> pd.DataFrame:
+    """
+    Get pandas DataFrame containing the queries data from the specified library and table.
+
+    :param db: wrds database connection
+    :param sql_query: SQL query flag
+    :param query_string: SQL query string
+    :param library: Library to use
+    :param table: Table withing library
+    :param columns: Columns to include in the DataFrame
+    :param obs: Number of observations
+    :param index_col: Index of index columns
+    :param date_cols: Index of data columns
+    :param recent: Flag indicating whether to only return recent data
+    :param n_recent: Number of recent data rows to return
+    :param table_info: Integer indicating info verbosity
+    :param params: Addition SQL query parameter
+    :return: DataFrame containing the queried table
+    """
+
+    print('Processing query ...')
+
+    # JOB: Extract library and table name from SQL query string
+    if sql_query and query_string:
+        lib_tab_string = re.search('(?:from|FROM)\s(\S*)', query_string).group(1)
+        library, table = lib_tab_string.split('.')
+
+    # JOB: Print information about the queried table
+    if table_info == 1:
+        print('Approximate number of rows in %s.%s: %d' % (library, table, db.get_row_count(library, table)))
+    elif table_info == 2:
+        print('Queried table information for %s - %s: ' % (library, table))
+        print(db.describe_table(library, table))
+
+    if not sql_query:
+        # Standard non-SQL query
+        data_table = db.get_table(library=library, table=table, columns=columns, obs=obs, index_col=index_col,
+                                  date_cols=date_cols)
+
+    else:
+        # Query via SQL string
+        data_table = db.raw_sql(query_string, index_col=index_col, date_cols=date_cols, params=params)
+
+    if recent:
+        # In case only n_recent dates are queried
+
+        # Create array of last n date indices (deduplicated)
+        last_n_indices = data_table.set_index(keys='datadate').index.drop_duplicates().sort_values(
+            ascending=True).values[
+                         -n_recent:]
+
+        data_table.set_index(keys='datadate', inplace=True)
+
+        # Query last n dates from DataFrame
+        data_table = data_table.loc[last_n_indices, :]
+
+    return data_table
+
+
+def list_tables(db, library, show_n_rows=False):
+    """
+    List all tables in a given library with optional row count information
+    :param db: Database connection
+    :param library: Queries library
+    :param show_n_rows: Show number of rows
+    :return:
+
+    Usage::
+            >>> list_tables(db, 'library_name', show_n_rows=False)
+            bank_ifndytd
+            bank_ifntq
+            ...
+    """
+    for table in db.list_tables(library):
+        if show_n_rows:
+            print(table + ': %d rows' % db.get_row_count(library, table))
+        else:
+            print(table)
+
+
+def generate_index_lookup_dict() -> None:
+    """
+    Generate dictionary mapping GVKEYX (index identifier) to index name
+
+    :return:
+    """
+
+    gvkeyx_lookup = pd.read_csv(os.path.join(ROOT_DIR, 'data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
+    gvkeyx_lookup.index = gvkeyx_lookup.index.astype(str)
+    gvkeyx_lookup = gvkeyx_lookup['index_name'].to_dict()
+
+    with open(os.path.join(ROOT_DIR, 'data', 'gvkeyx_name_dict.json'), 'w') as fp:
+        json.dump(gvkeyx_lookup, fp)
+
+
+def generate_company_lookup_dict(folder_path: str, data: pd.DataFrame) -> None:
+    """
+    Generate dictionary mapping GVKEY (stock identifier) to stock name
+
+    :return:
+    """
+
+    # JOB: Create company name dictionary and save to file
+    company_name_lookup = data.reset_index()
+    company_name_lookup = company_name_lookup.loc[
+        ~company_name_lookup.duplicated(subset='gvkey', keep='first'), ['gvkey', 'conm']].set_index('gvkey')
+
+    # JOB: Save dict to json file
+    company_name_lookup.to_json(os.path.join(ROOT_DIR, folder_path, 'gvkey_name_dict.json'))
+
+
+def generate_gics_sector(data: pd.DataFrame):
+    """
+    Append additional column with 2-digit GICS code
+
+    :param data: Original Data Frame
+    :return:
+    """
+    data.loc[:, 'gics_sector'] = data['gsubind'].apply(lambda x: str(x)[:2])

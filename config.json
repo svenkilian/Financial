@@ -9,9 +9,9 @@
     "normalize": true
   },
   "training": {
-    "epochs": 1000,
+    "epochs": 10,
     "batch_size": 32,
-    "early_stopping_patience": 5
+    "early_stopping_patience": 4
   },
   "model": {
     "loss": "binary_crossentropy",
@@ -24,10 +24,10 @@
     "save_dir": "saved_models",
     "layers": [
       {
-        "type": "gru",
+        "type": "lstm",
         "params": {
-          "units": 30,
-          "dropout": 0.15,
+          "units": 25,
+          "dropout": 0.1,
           "recurrent_dropout": 0.0,
           "kernel_regularizer": "l2",
           "input_shape": [
@@ -47,23 +47,23 @@
     ]
   },
   "RandomForestClassifier": {
-    "n_estimators": 200,
+    "n_estimators": 1000,
     "max_depth": 20,
     "n_jobs": -1,
     "warm_start": true
   },
   "GradientBoostingClassifier": {
-    "n_estimators": 25,
+    "n_estimators": 50,
     "max_depth": 5,
     "warm_start": true
   },
   "AdaBoostClassifier": {
-    "n_estimators": 200,
+    "n_estimators": 500,
     "base_estimator": "DecisionTreeClassifier",
     "base_estimator__max_depth": 10
   },
   "ExtraTreesClassifier": {
-    "n_estimators": 200,
+    "n_estimators": 500,
     "max_depth": 20,
     "warm_start": true,
     "n_jobs": -1

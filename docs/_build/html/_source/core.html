@@ -145,6 +145,20 @@
 </dd></dl>
 
 <dl class="function">
+<dt id="core.data_collection.generate_gics_sector">
+<code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">generate_gics_sector</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_collection.generate_gics_sector" title="Permalink to this definition">¶</a></dt>
+<dd><p>Append additional column with 2-digit GICS code</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>data</strong> – Original Data Frame</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
 <dt id="core.data_collection.generate_index_lookup_dict">
 <code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">generate_index_lookup_dict</code><span class="sig-paren">(</span><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#core.data_collection.generate_index_lookup_dict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generate dictionary mapping GVKEYX (index identifier) to index name</p>
@@ -157,7 +171,7 @@
 
 <dl class="function">
 <dt id="core.data_collection.generate_study_period">
-<code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">generate_study_period</code><span class="sig-paren">(</span><em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame, full_data: pandas.core.frame.DataFrame, period_range: tuple, index_name: str, configs: dict, cols: List[str], folder_path: str) -&gt; (&lt;class 'pandas.core.frame.DataFrame'&gt;, &lt;class 'int'&gt;</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_collection.generate_study_period" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">generate_study_period</code><span class="sig-paren">(</span><em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame</em>, <em class="sig-param">full_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">cols: list</em>, <em class="sig-param">period_range: tuple</em>, <em class="sig-param">index_name: str</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str) -&gt; (&lt;class 'pandas.core.frame.DataFrame'&gt;</em>, <em class="sig-param">&lt;class 'int'&gt;</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_collection.generate_study_period" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generate a time-period sample for a study period</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -445,18 +459,19 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="function">
 <dt id="core.execute.test_model">
-<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">test_model</code><span class="sig-paren">(</span><em class="sig-param">predictions: pandas.core.series.Series</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">test_data_index: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">model_type: str = 'deep_learning'</em>, <em class="sig-param">history=None</em>, <em class="sig-param">index_id=''</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">study_period_length: int = 0</em>, <em class="sig-param">model=None</em>, <em class="sig-param">period_range: tuple = (0</em>, <em class="sig-param">0)</em>, <em class="sig-param">start_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">5)</em>, <em class="sig-param">end_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">5)</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.test_model" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">test_model</code><span class="sig-paren">(</span><em class="sig-param">predictions: pandas.core.series.Series</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">test_data_index: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">parent_model_type: str = 'deep_learning'</em>, <em class="sig-param">model_type: str = 'LSTM'</em>, <em class="sig-param">history=None</em>, <em class="sig-param">index_id=''</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">study_period_length: int = 0</em>, <em class="sig-param">model=None</em>, <em class="sig-param">period_range: tuple = (0</em>, <em class="sig-param">0)</em>, <em class="sig-param">start_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">12)</em>, <em class="sig-param">end_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">12)</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.test_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test model on unseen data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>model_type</strong> – </p></li>
 <li><p><strong>predictions</strong> – </p></li>
 <li><p><strong>configs</strong> – </p></li>
 <li><p><strong>folder_path</strong> – </p></li>
 <li><p><strong>test_data_index</strong> – </p></li>
 <li><p><strong>y_test</strong> – </p></li>
 <li><p><strong>study_period_data</strong> – </p></li>
-<li><p><strong>model_type</strong> – </p></li>
+<li><p><strong>parent_model_type</strong> – </p></li>
 <li><p><strong>history</strong> – </p></li>
 <li><p><strong>index_id</strong> – </p></li>
 <li><p><strong>index_name</strong> – </p></li>
@@ -713,6 +728,40 @@ load data, otherwise use generate_training_window() method.</p>
 </dd></dl>
 
 <dl class="function">
+<dt id="core.utils.calc_excess_returns">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">calc_excess_returns</code><span class="sig-paren">(</span><em class="sig-param">return_series: pandas.core.frame.DataFrame</em>, <em class="sig-param">rf_rate_series: pandas.core.frame.DataFrame = None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.calc_excess_returns" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate daily excess returns for a given return series and a series of the risk-free rate (annual values)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>return_series</strong> – Return series to calculate excess returns for</p></li>
+<li><p><strong>rf_rate_series</strong> – Series with risk-free rate (annual percentage)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.utils.calc_sharpe">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">calc_sharpe</code><span class="sig-paren">(</span><em class="sig-param">return_series</em>, <em class="sig-param">annualize=True</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.calc_sharpe" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate Sharpe Ratio for series of returns</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>return_series</strong> – </p></li>
+<li><p><strong>annualize</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
 <dt id="core.utils.check_data_conformity">
 <code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">check_data_conformity</code><span class="sig-paren">(</span><em class="sig-param">x_train: numpy.array</em>, <em class="sig-param">y_train: numpy.array</em>, <em class="sig-param">x_test: numpy.array</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">test_data_index: pandas.core.indexes.multi.MultiIndex</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.check_data_conformity" title="Permalink to this definition">¶</a></dt>
 <dd><p>Check for conformity of given training and test sets (including test set index)</p>
@@ -744,6 +793,23 @@ load data, otherwise use generate_training_window() method.</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>Boolean indicating whether to load from file (directory exists)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.utils.deannualize">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">deannualize</code><span class="sig-paren">(</span><em class="sig-param">return_series</em>, <em class="sig-param">n_periods=250</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.deannualize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert return in annual terms to a daily basis</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>return_series</strong> – Return series to deannualize</p></li>
+<li><p><strong>n_periods</strong> – Target basis (250 for daily)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
 </dd>
 </dl>
 </dd></dl>
@@ -914,6 +980,23 @@ Plotting all rows and columns:</p>
 <dt>Usage::</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">pretty_print_table</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;col_1&#39;</span><span class="p">,</span> <span class="s1">&#39;col_2&#39;</span><span class="p">])</span>
 </pre></div>
 </div>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.utils.to_monthly">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">to_monthly</code><span class="sig-paren">(</span><em class="sig-param">metric: float</em>, <em class="sig-param">holding_periods: int = 1</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.to_monthly" title="Permalink to this definition">¶</a></dt>
+<dd><p>Transform metric of arbitrary periodicity to monthly</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>metric</strong> – </p></li>
+<li><p><strong>holding_periods</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
 </dd>
 </dl>
 </dd></dl>

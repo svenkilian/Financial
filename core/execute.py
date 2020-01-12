@@ -21,7 +21,8 @@ from config import *
 from core.data_processor import DataLoader
 from core.model import LSTMModel, TreeEnsemble
 from core.utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
-    check_data_conformity, annualize_metric, get_study_period_ranges, get_index_name, Timer
+    check_data_conformity, annualize_metric, get_study_period_ranges, get_index_name, Timer, calc_sharpe, \
+    calc_excess_returns, calc_sortino
 
 
 def main(index_id='150095', index_name='', full_data=None, constituency_matrix: pd.DataFrame = None,
@@ -61,9 +62,11 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
     # Add 'return_index' column for feature generation in case of tree-based model
     if parent_model_type == 'tree_based':
-        columns.append('return_index')
+        columns.extend(['return_index'])
+        columns.remove('stand_d_return')
 
     full_data = full_data.get([column for column in full_data.columns if not column.startswith('Unnamed')])
+    full_data.dropna(subset=['daily_return'], inplace=True)
 
     # JOB: Query number of dates in full data set
     data_length = full_data['datadate'].drop_duplicates().shape[0]  # Number of individual dates
@@ -73,6 +76,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
         print(f'Data set contains {data_length} individual dates.')
         # print(full_data.head(10))
         # print(full_data.tail(10))
+        return full_data
 
     # JOB: Specify study period interval
     period_range = (start_index, end_index)
@@ -101,12 +105,16 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     start_date = full_date_range.min().date()
     end_date = full_date_range.max().date()
 
-    # JOB: Set MultiIndex to stock identifier and select relevant columns
+    # JOB: Set MultiIndex to stock identifier
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
-    # ['datadate', *columns]]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
+
+    # Calculate Sharpe Ratio for full index history
+    sharpe_ratio_sp = calc_sharpe(study_period_data.set_index('datadate').loc[:, ['daily_return']], annualize=True)
+
+    print(f'Annualized Sharpe Ratio: {np.round(sharpe_ratio_sp, 4)}')
 
     # JOB: Obtain training and test data as well as test data index
     x_train, y_train, x_test, y_test, test_data_index = preprocess_data(study_period_data=study_period_data,
@@ -173,7 +181,8 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
     # JOB: Test model
     test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
-               y_test=y_test, study_period_data=study_period_data, model_type=parent_model_type, history=history,
+               y_test=y_test, study_period_data=study_period_data, parent_model_type=parent_model_type,
+               model_type=model_type, history=history,
                index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
                period_range=period_range, start_date=start_date, end_date=end_date)
 
@@ -195,7 +204,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     :return: Tuple of (x_train, y_train, x_test, y_test, test_data_index)
     """
 
-    print(f'Pre-processing data ...')
+    print(f'{Style.BRIGHT}{Fore.YELLOW}Pre-processing data ...{Style.RESET_ALL}')
     timer = Timer().start()
 
     # JOB: Instantiate training and test data
@@ -263,7 +272,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
         if len(y_test) != len(test_data_index):
             raise AssertionError('Data length is not conforming.')
 
-    print('Done pre-processing data.')
+    print(f'{Style.BRIGHT}{Fore.YELLOW}Done pre-processing data.{Style.RESET_ALL}')
     timer.stop()
 
     return x_train, y_train, x_test, y_test, test_data_index
@@ -271,19 +280,21 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
 
 def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_data_index: pd.MultiIndex,
                y_test: np.array,
-               study_period_data: pd.DataFrame, model_type: str = 'deep_learning', history=None, index_id='',
+               study_period_data: pd.DataFrame, parent_model_type: str = 'deep_learning', model_type: str = 'LSTM',
+               history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
                start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today()):
     """
     Test model on unseen data.
 
+    :param model_type:
     :param predictions:
     :param configs:
     :param folder_path:
     :param test_data_index:
     :param y_test:
     :param study_period_data:
-    :param model_type:
+    :param parent_model_type:
     :param history:
     :param index_id:
     :param index_name:
@@ -306,7 +317,7 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     study_period_data.set_index('datadate', append=True, inplace=True)
 
     # JOB: Merge test set with study period data
-    test_set_comparison = test_set_comparison.merge(study_period_data, how='inner', left_index=True,
+    test_set_comparison = test_set_comparison.merge(study_period_data, how='left', left_index=True,
                                                     right_on=['datadate', 'stock_id'])
 
     # JOB: Create normalized predictions (e.g., directional prediction relative to cross-sectional median of predictions)
@@ -343,33 +354,40 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
         # print(full_portfolio.head())
         # print(full_portfolio.tail())
 
-        # print(full_portfolio.sample(10))
+        annualized_sharpe = calc_sharpe(full_portfolio.loc[:, ['daily_return']], annualize=True)
+        annualized_sortino = calc_sortino(full_portfolio.loc[:, ['daily_return']], annualize=True)
+
         accuracy = None
         mean_daily_return = None
         mean_daily_short = None
         mean_daily_long = None
 
         # JOB: Calculate accuracy score
-        if model_type == 'deep_learning':
+        if parent_model_type == 'deep_learning':
             accuracy = binary_accuracy(full_portfolio['y_test'].values,
                                        full_portfolio['norm_prediction'].values).numpy()
-            mean_daily_return = full_portfolio['daily_return'].mean()
-            mean_daily_short = short_positions['daily_return'].mean()
-            mean_daily_long = long_positions['daily_return'].mean()
 
-        elif model_type == 'tree_based':
+        elif parent_model_type == 'tree_based':
             accuracy = accuracy_score(full_portfolio['y_test'].values,
                                       full_portfolio['norm_prediction'].values)
-            mean_daily_return = full_portfolio['daily_return'].mean()
-            mean_daily_short = short_positions['daily_return'].mean()
-            mean_daily_long = long_positions['daily_return'].mean()
+
+        mean_daily_excess_return = calc_excess_returns(full_portfolio.loc[:, ['daily_return']]).mean()
+
+        mean_daily_return = full_portfolio['daily_return'].mean()
+        mean_daily_short = short_positions['daily_return'].mean()
+        mean_daily_long = long_positions['daily_return'].mean()
 
         top_k_metrics.loc[top_k, 'Accuracy'] = accuracy
         top_k_metrics.loc[top_k, 'Mean Daily Return'] = mean_daily_return
         top_k_metrics.loc[top_k, 'Annualized Return'] = annualize_metric(mean_daily_return)
+        top_k_metrics.loc[top_k, 'Mean Daily Excess Return'] = mean_daily_excess_return
+        top_k_metrics.loc[top_k, 'Annualized Excess Return'] = annualize_metric(mean_daily_excess_return)
+        top_k_metrics.loc[top_k, 'Annualized Sharpe'] = annualized_sharpe
+        top_k_metrics.loc[top_k, 'Annualized Sortino'] = annualized_sortino
         top_k_metrics.loc[top_k, 'Mean Daily Return (Short)'] = mean_daily_short
         top_k_metrics.loc[top_k, 'Mean Daily Return (Long)'] = mean_daily_long
 
+    # JOB: Display top-k metrics
     print(top_k_metrics)
 
     # Plot accuracies and save figure to file
@@ -390,19 +408,20 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
 
     # JOB: Evaluate model on full test data
     test_score = None
-    if model_type == 'deep_learning':
+    if parent_model_type == 'deep_learning':
         test_score = binary_accuracy(test_set_comparison['y_test'].values,
                                      test_set_comparison['norm_prediction'].values).numpy()
 
         print(f'\nTest score on full test set: {np.round(test_score, 4)}')
 
-    elif model_type == 'tree_based':
+    elif parent_model_type == 'tree_based':
         test_score = accuracy_score(test_set_comparison['y_test'].values,
                                     test_set_comparison['norm_prediction'].values)
         print(f'\nTest score on full test set: {np.round(test_score, 4)}')
 
     total_epochs = len(history.history['loss']) if history is not None else None
-    data_record = {'Model Type': model_type,
+    data_record = {'Parent Model Type': parent_model_type,
+                   'Model Type': model_type,
                    'Index ID': index_id,
                    'Index Name': index_name,
                    'Number days': study_period_length,

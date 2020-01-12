@@ -62,7 +62,7 @@ class DataLoader:
                 print(f'Stock data for {stock_id} does not yield any training data.')
                 self.i_split = -1
 
-        # JOB: Apply feature generation if necessary
+        # JOB: Apply feature generation, if necessary
         if model_type == 'tree_based':
             self.generate_tree_features()
 
@@ -147,8 +147,9 @@ class DataLoader:
             # JOB: Recalculate Daily Return
             self.data.loc[:, f'm_{lag}_return'] = self.data.loc[:, 'return_index'].pct_change(periods=lag)
 
-        self.data.drop(columns='return_index', inplace=True)
-        self.cols.pop()  # Remove 'return_index' column
+        self.data.drop(columns=['return_index'], inplace=True)
+        self.cols.remove('return_index')  # Remove 'return_index' column
+
         self.cols.extend(self.lag_cols)
 
     def get_test_data(self, seq_len: int):
