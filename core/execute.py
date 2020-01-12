@@ -22,14 +22,14 @@ from core.data_processor import DataLoader
 from core.model import LSTMModel, TreeEnsemble
 from core.utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
     check_data_conformity, annualize_metric, get_study_period_ranges, get_index_name, Timer, calc_sharpe, \
-    calc_excess_returns, calc_sortino
+    calc_excess_returns, calc_sortino, add_to_json
 
 
 def main(index_id='150095', index_name='', full_data=None, constituency_matrix: pd.DataFrame = None,
          folder_path: str = None,
          columns: list = None, data_only=False,
          load_last: bool = False,
-         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning', verbose=2):
+         start_index: int = -1001, end_index: int = -1, model_type: str = 'LSTM', verbose=2):
     """
     Run data preparation and model training
 
@@ -330,8 +330,13 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
         pct=True)
 
+    test_data_start_date = test_set_comparison.index.get_level_values('datadate').min().date()
+    test_data_end_date = test_set_comparison.index.get_level_values('datadate').max().date()
+    test_set_n_days = test_set_comparison.index.get_level_values('datadate').unique().size
+    test_set_n_constituents = test_set_comparison.index.get_level_values('stock_id').unique().size
+
     cross_section_size = int(round(test_set_comparison.groupby('datadate')['y_test'].count().mean()))
-    print(f'Average size of cross sections: {cross_section_size}')
+    print(f'Average size of cross sections: {int(cross_section_size)}')
 
     # Define top k values
     top_k_list = [5, 10, int(cross_section_size / 10), int(cross_section_size / 5),
@@ -412,7 +417,7 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
         test_score = binary_accuracy(test_set_comparison['y_test'].values,
                                      test_set_comparison['norm_prediction'].values).numpy()
 
-        print(f'\nTest score on full test set: {np.round(test_score, 4)}')
+        print(f'\nTest score on full test set: {float(np.round(test_score, 4))}')
 
     elif parent_model_type == 'tree_based':
         test_score = accuracy_score(test_set_comparison['y_test'].values,
@@ -420,26 +425,38 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
         print(f'\nTest score on full test set: {np.round(test_score, 4)}')
 
     total_epochs = len(history.history['loss']) if history is not None else None
-    data_record = {'Parent Model Type': parent_model_type,
+    data_record = {'Experiment Run End': datetime.datetime.now().isoformat(),
+                   'Parent Model Type': parent_model_type,
                    'Model Type': model_type,
                    'Index ID': index_id,
                    'Index Name': index_name,
-                   'Number days': study_period_length,
-                   'Test Set Size': len(y_test),
-                   'Total Accuracy': test_score,
+                   'Study Period Length': study_period_length,
+                   'Test Set Size': y_test.shape[0],
+                   'Days Test Set': test_set_n_days,
+                   'Constituent Number': test_set_n_constituents,
+                   'Average Cross Section Size': cross_section_size,
+                   'Test Set Start Date': test_data_start_date.isoformat(),
+                   'Test Set End Date': test_data_end_date.isoformat(),
+                   'Total Accuracy': float(test_score),
                    'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
                    'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
+                   'Top-k Mean Daily Excess Return': top_k_metrics['Mean Daily Excess Return'].to_dict(),
+                   'Annualized Excess Return': top_k_metrics['Annualized Excess Return'].to_dict(),
                    'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
+                   'Top-k Annualized Sharpe': top_k_metrics['Annualized Sharpe'].to_dict(),
+                   'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
                    'Model Configs': model.get_params(),
                    'Total Epochs': total_epochs,
                    'Period Range': period_range,
-                   'Start Date': start_date,
-                   'End Date': end_date
+                   'Study Period Start Date': start_date.isoformat(),
+                   'Study Period End Date': end_date.isoformat()
                    }
 
     logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'),
                        field_names=list(data_record.keys()))
     logger.add_line(data_record)
+
+    add_to_json(data_record, 'data/training_log.json')
 
     print('Done testing on unseen data.')
     timer.stop()

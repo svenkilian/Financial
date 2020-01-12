@@ -179,6 +179,27 @@ def plot_results(predicted_data, true_data):
     plt.show()
 
 
+def load_json_to_df(file_path: str) -> pd.DataFrame:
+    """
+    Load data from json file specified in path and return as pandas data frame.
+
+    :param file_path: Path to json file
+    :return: Data frame containing data from json file
+    """
+
+    # Specify path to saved data
+    path_to_data = os.path.join(ROOT_DIR, file_path)
+
+    # Load json data as dict
+    with open(path_to_data, 'r') as file:
+        data = json.load(file)
+
+    # Make DataFrame from json
+    data_frame = pd.DataFrame(data)
+
+    return data_frame
+
+
 def get_most_recent_file(directory: str) -> str:
     """
     Retrieve name of most recently changed file in given directory.
@@ -238,6 +259,34 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
         raise LookupError('Index ID not known.')
 
     return index_name, lookup_table
+
+
+def add_to_json(dict_entry: dict, file_path: str):
+    """
+    Add entry to json file
+
+    :param dict_entry: Entry to add (dict)
+    :param file_path: Path to json file
+    :return: Appended json
+    """
+
+    # Specify path to saved data
+    path_to_data = os.path.join(ROOT_DIR, file_path)
+
+    if not os.path.exists(path_to_data):
+        print(f'Creating json file: {path_to_data}')
+        with open(path_to_data, 'w') as f:
+            json.dump({}, f)
+
+    with open(path_to_data) as f:
+        data = json.load(f)
+
+    data.update(dict_entry)
+
+    with open(path_to_data, 'w') as f:
+        json.dump(data, f)
+
+    return data
 
 
 def check_directory_for_file(index_name: str = '', folder_path: str = '', force_download: bool = False,

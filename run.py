@@ -36,9 +36,9 @@ if __name__ == '__main__':
     # JOB: Specify classifier
     model_type = None
     multiple_models = None
-    model_type = 'ExtraTreesClassifier'
+    # model_type = 'ExtraTreesClassifier'
     # model_type = 'LSTM'
-    # multiple_models = ['LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier']
+    multiple_models = ['LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier']
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio
