@@ -29,7 +29,7 @@ if __name__ == '__main__':
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['DJ600']
+    index_id = index_dict['DAX']
     cols = ['above_cs_med', 'stand_d_return']
     study_period_length = 1000
 

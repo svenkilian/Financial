@@ -414,8 +414,8 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     # JOB: Evaluate model on full test data
     test_score = None
     if parent_model_type == 'deep_learning':
-        test_score = binary_accuracy(test_set_comparison['y_test'].values,
-                                     test_set_comparison['norm_prediction'].values).numpy()
+        test_score = float(binary_accuracy(test_set_comparison['y_test'].values,
+                                     test_set_comparison['norm_prediction'].values).numpy())
 
         print(f'\nTest score on full test set: {float(np.round(test_score, 4))}')
 
@@ -437,7 +437,7 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                    'Average Cross Section Size': cross_section_size,
                    'Test Set Start Date': test_data_start_date.isoformat(),
                    'Test Set End Date': test_data_end_date.isoformat(),
-                   'Total Accuracy': float(test_score),
+                   'Total Accuracy': test_score,
                    'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
                    'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
                    'Top-k Mean Daily Excess Return': top_k_metrics['Mean Daily Excess Return'].to_dict(),
