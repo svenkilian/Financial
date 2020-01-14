@@ -34,9 +34,11 @@ pd.set_option('colheader_justify', 'left')
 pd.set_option('display.width', 800)
 pd.set_option('display.html.table_schema', False)
 
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+
 pd.set_option('mode.chained_assignment', None)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
-warnings.simplefilter(action='error', category=FutureWarning)  # TODO: Change to ignore
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = None,
@@ -102,8 +104,8 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
 
     else:
         data = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'),
-                           dtype={'gvkey': str, 'gsubind': str, 'datadate': str},
-                           parse_dates=False)
+                           dtype={'gvkey': str, 'gsubind': str, 'datadate': str, 'gics_sector': str},
+                           parse_dates=False, index_col=0)
         data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'], infer_datetime_format=True).dt.date
 
     if generate_dict:
@@ -178,27 +180,36 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
         # Save to file
         full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
-    # JOB: Extract 2-digit GICS code
-    generate_gics_sector(full_data)
+    if 'gics_sector' not in full_data.columns:
+        # JOB: Extract 2-digit GICS code
+        generate_gics_sector(full_data)
+        # Save to file
+        print('Saving modified data to file ...')
+        full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
+
+    if 'gsector' in full_data.columns:
+        full_data.drop(columns=['gsector'], inplace=True)
+        # Save to file
+        print('Saving modified data to file ...')
+        full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
     print('Successfully loaded index history.')
     timer.stop()
     print()
 
     # Drop records with missing daily_return variable
-    # full_data.dropna(subset=['daily_return'], inplace=True)  # TODO: Uncomment
-    # full_data.fillna(method='ffill', inplace=True)  # TODO: Comment
+    full_data.dropna(subset=['daily_return'], inplace=True)
 
     return constituency_matrix, full_data, index_name, folder_path
 
 
-def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame, cols: list,
-                          period_range: tuple, index_name: str, configs: dict, folder_path: str) -> (
+def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataFrame,
+                          period_range: tuple, index_name: str, configs: dict, folder_path: str, columns=None) -> (
         pd.DataFrame, int):
     """
     Generate a time-period sample for a study period
 
-    :param cols: Relevant columns
+    :param columns: Feature columns
     :param configs: Dictionary containing model and training configurations
     :param folder_path: Path to data folder
     :param period_range: Date index range of study period in form (start_index, end_index)
@@ -254,14 +265,38 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # print(f'Length of intersection: {len(constituent_indices.intersection(full_data.index))}')
     # print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
     assert len(constituent_indices.intersection(full_data.index)) == len(constituent_indices)
+
+    print('Filtering by study period constituents ...')
+    timer = Timer().start()
     full_data = full_data.loc[constituent_indices, :]
+    print(f'Number of constituents: {len(constituent_indices)}')
+    print(f'Number of constituents: {full_data.index.get_level_values(level="gvkey").unique().shape[0]}')
     full_data.reset_index(inplace=True)
     full_data.set_index('datadate', inplace=True)
     full_data.sort_index(inplace=True)
+    timer.stop()
+
+    if 'ind_mom_ratio' in columns:  # TODO: Move to run.py
+        # JOB: Add 6-month (=120 days) momentum column
+        print('Adding 6-month momentum ...')
+        timer = Timer().start()
+        full_data.set_index(keys=['gvkey', 'iid'], inplace=True, append=True)
+        full_data.loc[:, '6m_mom'] = full_data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+            lambda x: x.pct_change(periods=120))
+        timer.stop()
+        full_data.reset_index(level=['gvkey', 'iid'], inplace=True)  # Reset to date index
 
     # Select data from study period
     print(f'Retrieving data from {unique_dates[period_range[0]].date()} to {unique_dates[period_range[1]].date()} \n')
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
+
+    if 'ind_mom_ratio' in columns:
+        print('Removing records without 6-month momentum ...')
+        print(study_data[study_data['6m_mom'].isna()].set_index(['gvkey', 'iid'], append=True).index.get_level_values(
+            level='gvkey').unique().shape)
+        study_data.dropna(how='any', subset=['6m_mom'], inplace=True)  # Review
+        print(study_data[study_data['6m_mom'].isna()].set_index(['gvkey', 'iid'], append=True).index.get_level_values(
+            level='gvkey').unique().shape)
 
     del full_data
 
@@ -282,7 +317,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     study_data.loc[:, 'stand_d_return'] = (study_data['daily_return'] - mean_daily_return) / std_daily_return
 
     # JOB: Drop observations with critical n/a values
-    # TODO: Check whether operation is redundant
+    # Review: Check whether operation is redundant
     # critical_cols = ['daily_return']
     # study_data.dropna(how='any', subset=critical_cols, inplace=True)
 
@@ -295,22 +330,29 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # study_data.loc[:, 'cs_rank'] = study_data.groupby('datadate')['daily_return'].rank(method='first', ascending=False).astype('int16')
     # study_data.loc[:, 'cs_percentile'] = study_data.groupby('datadate')['daily_return'].rank(pct=True)
 
-    # JOB: Number of securities in cross-section
+    # JOB: Add columns with number of securities in cross-section
     study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
-
     study_data.reset_index(inplace=True)
-    study_data.set_index(keys=['datadate', 'gvkey', 'iid'], inplace=True)
-    # JOB: Add 6-month (=120 days) momentum column
-    study_data.loc[:, '6m_mom'] = study_data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
-        lambda x: x.pct_change(periods=120))
 
     study_data.reset_index(inplace=True)
     study_data.set_index('datadate', inplace=True)
 
-    # JOB: Add industry momentum column
-    study_data.loc[:, 'ind_mom'] = study_data.groupby(['gics_sector', 'datadate'])['6m_mom'].transform('mean')
+    if 'ind_mom_ratio' in columns:
+        # JOB: Add industry momentum column
+        study_data.loc[:, 'ind_mom'] = study_data.groupby(['gics_sector', 'datadate'])['6m_mom'].transform('mean')
 
-    # study_data.dropna(how='any', subset=['ind_mom'], inplace=True)  # TODO: Review
+        study_data.dropna(how='any', subset=['ind_mom'], inplace=True)  # Review
+        # study_data = study_data[study_data['ind_mom'].ne(0)]
+
+        # JOB: Add 'ind_mom_ratio' column
+        study_data.loc[:, 'ind_mom_ratio'] = study_data.loc[:, 'daily_return'].divide(study_data.loc[:, 'ind_mom'])
+
+        # Remove data with missing industry momentum ratio
+        study_data = study_data[study_data['ind_mom_ratio'] != np.inf]
+
+        # Standardize ind_mom_ratio
+        study_data.loc[:, 'ind_mom_ratio'] = StandardScaler().fit_transform(
+            study_data.loc[:, 'ind_mom_ratio'].values.reshape(-1, 1))
 
     return study_data, study_data_split_index
 
@@ -471,7 +513,6 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
 
         if folder_exists:
             print(f'Creating GICS matrix for {index_id}: {index_name.capitalize()}')
-
             timer = Timer().start()
 
         else:
@@ -553,6 +594,7 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
 
         timer.stop()
 
+    # JOB: Stack columns onto index
     gic_constituency_matrix = gic_constituency_matrix.stack()
     gic_constituency_matrix.index.set_names(['datadate', 'gvkey'], inplace=True)
     gic_constituency_matrix.name = 'gsubind'
@@ -598,7 +640,7 @@ def calculate_daily_return(data: pd.DataFrame, save_to_file=False, folder_path=N
 def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.date, folder_path: str,
                            print_constituents=False) -> pd.Index:
     """
-    Return company name list of index constituents for given date
+    Return company name list (pd.Index) of index constituents for given date
 
     :param print_constituents: Flag indicating whether to print out index constituent names
     :param folder_path: Path to file directory
@@ -770,4 +812,59 @@ def generate_gics_sector(data: pd.DataFrame):
     :param data: Original Data Frame
     :return:
     """
-    data.loc[:, 'gics_sector'] = data['gsubind'].apply(lambda x: str(x)[:2])
+
+    print('Generating gics_sector column ...')
+    timer = Timer().start()
+    data.loc[:, 'gics_sector'] = data['gsubind'].apply(lambda x: str(x)[:2] if not pd.isna(x) else '')
+    timer.stop()
+
+
+def append_columns(data: pd.DataFrame, folder_path: str, file_name: str, column_list: list):
+    """
+
+    :param column_list:
+    :param data:
+    :param folder_path:
+    :param file_name:
+    :return:
+    """
+
+    # TODO: Make merge work
+    index_col_name = data.index.name
+    # Load DataFrame with new columns
+    new_col_df = pd.read_csv(os.path.join(ROOT_DIR, folder_path, file_name), index_col=['datadate', 'gvkey', 'iid'],
+                             header=0,
+                             parse_dates=True, infer_datetime_format=True,
+                             dtype={'gvkey': str})
+
+    new_col_df = new_col_df.loc[:, column_list]
+
+    # JOB: Merge data with new columns
+
+    timer = Timer().start()
+    if index_col_name is not None:
+        data.reset_index(inplace=True)
+        print('Resetting existing index.')
+    else:
+        data.reset_index(inplace=True, drop=True)
+        print('Resetting non-existent index.')
+
+    print('Merging full data set with new columns ...')
+    data.set_index(['datadate', 'gvkey', 'iid'], inplace=True)
+    data = data.merge(new_col_df, how='left', left_index=True, right_index=True)
+    data.reset_index(inplace=True)
+    timer.stop()
+    print(data.head())
+    print(data.tail())
+    print(data.sample(40))
+
+    # Save to file
+    print('Saving appended DataFrame to file ...')
+    timer = Timer().start()
+    data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents_test.csv'))
+    timer.stop()
+
+    if index_col_name is not None:
+        data.set_index(index_col_name, inplace=True)
+    else:
+        data.reset_index(inplace=True, drop=True)

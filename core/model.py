@@ -1,4 +1,5 @@
 import inspect
+from typing import List
 
 from sklearn import ensemble
 
@@ -313,7 +314,6 @@ class TreeEnsemble:
 
         if 'base_estimator' in self.parameters.keys():
             base_estimator_name = self.parameters.get('base_estimator')
-            self.parameters.pop('base_estimator')
             base_clfs = sklearn.tree.__dict__['__all__']
             base_type_dict = {key.lower(): sklearn.tree.__dict__.get(key) for key in base_clfs if
                               inspect.isclass(sklearn.tree.__dict__.get(key))}
@@ -339,3 +339,90 @@ class TreeEnsemble:
             print(type(self.model).__name__)
         elif verbose == 1:
             print(f'{Style.BRIGHT}{Fore.LIGHTGREEN_EX}{self.model}{Style.RESET_ALL}')
+
+        return self
+
+
+class WeightedEnsemble:
+    """
+    Class representing a weighted ensemble of individual classifiers
+    """
+
+    def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None):
+        self.classifier_types = classifier_type_list
+        self.classifiers = [TreeEnsemble(index_name=index_name, model_type=m_type).build_model(configs) for m_type in
+                            self.classifier_types]
+        self.oob_scores = list()
+
+    def __repr__(self):
+        out = []
+        for model in self.classifiers:
+            out.append(str(model))
+
+        return str(out)
+
+    def fit(self, x_train: np.array, y_train: np.array):
+        """
+        Fit individual models
+
+        :return:
+        """
+
+        for model in self.classifiers:
+            print(f'\n\nFitting {model.model_type} model ...')
+            timer = Timer().start()
+            model.model.fit(x_train, y_train)
+            self.oob_scores.append(model.model.oob_score_)
+
+            print('Feature importances:')
+            print(model.model.feature_importances_)
+            timer.stop()
+
+    def get_params(self):
+        """
+
+        :return:
+        """
+        params = []
+        for model in self.classifiers:
+            params.append(model.get_params())
+        return params
+
+    def predict_all(self, x_test: np.array) -> np.array:
+        """
+        Predict on test set, separately for each individual classifier
+
+        :param x_test: Test set
+
+        :return: Array with individual predictions in rows
+        """
+        predictions_set = []
+
+        for model in self.classifiers:
+            predictions = model.model.predict_proba(x_test)[:, 1]
+            predictions_set.append(predictions)
+
+        return np.array(predictions_set)
+
+    def predict(self, x_test: np.array, weighted=False, oob_scores: list = None, alpha=2) -> np.array:
+        """
+        Aggregate individual predictions
+
+        :param alpha: Weighting parameter for weighted average
+        :param oob_scores: Out-of-bag performance score of base classifiers
+        :param weighted: Use performance-weighted average
+        :param x_test: Test set
+        :return:
+        """
+        print('Making aggregated predictions ...')
+        timer = Timer().start()
+        if weighted:
+            print(f'Weighting with OOB scores [{", ".join([str(np.round(score, 3)) for score in oob_scores])}')
+            weights = [score ** alpha / sum([sc ** alpha for sc in oob_scores]) for score in oob_scores]
+            print(f'Weights: [{", ".join([str(weight) for weight in weights])}')
+            predictions = np.average(self.predict_all(x_test), weights=weights, axis=0)
+        else:
+            predictions = np.mean(self.predict_all(x_test), axis=0)
+        timer.stop()
+
+        return predictions

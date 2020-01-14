@@ -5,7 +5,6 @@ __license__ = "MIT"
 
 import datetime
 import json
-from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,14 +13,12 @@ from colorama import Fore, Back, Style
 from sklearn.metrics import accuracy_score
 from tensorflow.keras.metrics import binary_accuracy
 
-from core import utils
-from core.data_collection import generate_study_period, retrieve_index_history, create_constituency_matrix, \
-    create_gics_matrix, load_full_data
 from config import *
+from core.data_collection import generate_study_period
 from core.data_processor import DataLoader
-from core.model import LSTMModel, TreeEnsemble
-from core.utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
-    check_data_conformity, annualize_metric, get_study_period_ranges, get_index_name, Timer, calc_sharpe, \
+from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble
+from core.utils import plot_train_val, get_most_recent_file, CSVWriter, \
+    check_data_conformity, annualize_metric, Timer, calc_sharpe, \
     calc_excess_returns, calc_sortino, add_to_json
 
 
@@ -29,23 +26,22 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
          folder_path: str = None,
          columns: list = None, data_only=False,
          load_last: bool = False,
-         start_index: int = -1001, end_index: int = -1, model_type: str = 'LSTM', verbose=2):
+         start_index: int = -1001, end_index: int = -1, model_type: str = None, ensemble: WeightedEnsemble = None,
+         verbose=2):
     """
     Run data preparation and model training
 
+    :param ensemble:
     :param folder_path:
     :param constituency_matrix:
     :param full_data:
     :param index_name:
     :param verbose: Verbosity
-    :param train_full: Flag indicating whether to train and test on all study periods
     :param model_type: Model type as strings: 'deep_learning' for LSTM, 'tree_based' for Random Forest
     :param columns: Relevant columns for model training and testing
     :param load_last: Flag indicating whether to load last model weights from storage
     :param index_id: Index identifier
-    :param last_n: Flag indicating the number of days to consider; *None* in case whole data history is considered
     :param data_only: Flag indicating whether to download data only without training the model
-    :param force_download: Flag indicating whether to overwrite data if index data folder already exists
     :param start_index: Index of period start date
     :param end_index: Index of period end date
     :return: None
@@ -58,15 +54,23 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                                child_type in
                                configs['model_hierarchy'][parent_type]}
 
+    # Retrieve parent mode type from dict
     parent_model_type = model_type_reverse_dict.get(model_type)
 
-    # Add 'return_index' column for feature generation in case of tree-based model
+    if ensemble is not None:
+        parent_model_type = 'tree_based'
+
+    # Add 'return_index' and remove 'stand_d_return' column for feature generation in case of tree-based model
     if parent_model_type == 'tree_based':
         columns.extend(['return_index'])
         columns.remove('stand_d_return')
 
-    full_data = full_data.get([column for column in full_data.columns if not column.startswith('Unnamed')])
-    full_data.dropna(subset=['daily_return'], inplace=True)
+    # Delete columns containing 'unnamed' and save file
+    if any('unnamed' in s.lower() for s in full_data.columns):
+        full_data = full_data.get([column for column in full_data.columns if not column.startswith('Unnamed')])
+        full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
+
+    full_data.dropna(subset=['daily_return'], inplace=True)  # Drop records without daily return data
 
     # JOB: Query number of dates in full data set
     data_length = full_data['datadate'].drop_duplicates().shape[0]  # Number of individual dates
@@ -86,8 +90,8 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
         study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix,
                                                                full_data=full_data.copy(),
                                                                period_range=period_range,
-                                                               index_name=index_name, configs=configs, cols=columns,
-                                                               folder_path=folder_path)
+                                                               index_name=index_name, configs=configs,
+                                                               folder_path=folder_path, columns=columns)
     except AssertionError as ae:
         print(ae)
         print('Not all constituents in full data set. Terminating execution.')
@@ -165,23 +169,52 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
         predictions = model.predict_point_by_point(x_test)
 
     elif parent_model_type == 'tree_based':
-        model = TreeEnsemble(index_name=index_name.lower().replace(' ', '_'), model_type=model_type)
-        model.build_model(configs=configs, verbose=verbose)
+        if model_type:
+            model = TreeEnsemble(index_name=index_name.lower().replace(' ', '_'), model_type=model_type)
+            model.build_model(configs=configs, verbose=verbose)
 
-        # JOB: Fit model
-        print(f'\n\nFitting {model_type} model ...')
-        timer = Timer().start()
-        model.model.fit(x_train, y_train)
-        timer.stop()
+            # JOB: Fit model
+            print(f'\n\nFitting {model_type} model ...')
+            timer = Timer().start()
+            model.model.fit(x_train, y_train)
 
-        print(f'Making predictions on test set ...')
-        timer = Timer().start()
-        predictions = model.model.predict_proba(x_test)[:, 1]
-        timer.stop()
+            print('Feature importances:')
+            print(model.model.feature_importances_)
+            timer.stop()
+
+            print(f'Making predictions on test set ...')
+            timer = Timer().start()
+            predictions = model.model.predict_proba(x_test)[:, 1]
+            timer.stop()
+
+        elif ensemble:
+            model = ensemble
+            print('Ensemble components:')
+            print(model)
+            model_type = f'Ensemble({", ".join(ensemble.classifier_types)})'
+
+            # JOB: Fit models
+            print(f'\n\nFitting ensemble  ...')
+            model.fit(x_train, y_train)
+
+            predictions = model.predict(x_test, weighted=True, oob_scores=model.oob_scores)
+
+            print('Testing ensemble components:')
+
+            all_predictions = model.predict_all(x_test)
+            for i, base_clf in enumerate(ensemble.classifiers):
+                print(f'Testing ensemble component {i+1} ({base_clf.model_type})')
+                test_model(predictions=all_predictions[i],
+                           configs=configs, folder_path=folder_path, test_data_index=test_data_index,
+                           y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
+                           model_type=base_clf.model_type, history=history,
+                           index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
+                           model=model,
+                           period_range=period_range, start_date=start_date, end_date=end_date)
 
     # JOB: Test model
     test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
-               y_test=y_test, study_period_data=study_period_data, parent_model_type=parent_model_type,
+               y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
                model_type=model_type, history=history,
                index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
                period_range=period_range, start_date=start_date, end_date=end_date)
@@ -280,7 +313,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
 
 def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_data_index: pd.MultiIndex,
                y_test: np.array,
-               study_period_data: pd.DataFrame, parent_model_type: str = 'deep_learning', model_type: str = 'LSTM',
+               study_period_data: pd.DataFrame, parent_model_type: str = 'deep_learning', model_type: str = None,
                history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
                start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today()):
@@ -319,6 +352,8 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     # JOB: Merge test set with study period data
     test_set_comparison = test_set_comparison.merge(study_period_data, how='left', left_index=True,
                                                     right_on=['datadate', 'stock_id'])
+
+    del study_period_data
 
     # JOB: Create normalized predictions (e.g., directional prediction relative to cross-sectional median of predictions)
     test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'prediction'].gt(
@@ -415,7 +450,7 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     test_score = None
     if parent_model_type == 'deep_learning':
         test_score = float(binary_accuracy(test_set_comparison['y_test'].values,
-                                     test_set_comparison['norm_prediction'].values).numpy())
+                                           test_set_comparison['norm_prediction'].values).numpy())
 
         print(f'\nTest score on full test set: {float(np.round(test_score, 4))}')
 
@@ -445,7 +480,7 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
                    'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
                    'Top-k Annualized Sharpe': top_k_metrics['Annualized Sharpe'].to_dict(),
                    'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
-                   'Model Configs': model.get_params(),
+                   'Model Configs': str(model.get_params()),
                    'Total Epochs': total_epochs,
                    'Period Range': period_range,
                    'Study Period Start Date': start_date.isoformat(),

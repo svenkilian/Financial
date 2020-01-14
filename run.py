@@ -6,6 +6,7 @@ import json
 
 from config import ROOT_DIR
 from core.data_collection import load_full_data
+from core.model import WeightedEnsemble
 from core.utils import get_index_name, get_study_period_ranges, Timer, deannualize, calc_sharpe
 from core.execute import main
 from colorama import Fore, Style
@@ -29,16 +30,16 @@ if __name__ == '__main__':
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['DAX']
-    cols = ['above_cs_med', 'stand_d_return']
+    index_id = index_dict['DJ600']
+    cols = ['above_cs_med', *configs['data']['columns']]
     study_period_length = 1000
 
     # JOB: Specify classifier
     model_type = None
-    multiple_models = None
-    # model_type = 'ExtraTreesClassifier'
-    # model_type = 'LSTM'
-    multiple_models = ['LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier']
+    multiple_models = [['RandomForestClassifier', 'ExtraTreesClassifier']]
+    # ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
+    # multiple_models = ['RandomForestClassifier', 'ExtraTreesClassifier', 'GradientBoostingClassifier',
+    #                    'AdaBoostClassifier']
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio
@@ -78,12 +79,29 @@ if __name__ == '__main__':
 
         if multiple_models:
             for model_type in multiple_models:
+                if isinstance(model_type, list):
+                    ensemble = WeightedEnsemble(index_name=index_name.lower().replace(' ', '_'),
+                                                classifier_type_list=model_type, configs=configs)
+                    model_type = None
+                else:
+                    ensemble = None
                 main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
                      constituency_matrix=constituency_matrix,
                      columns=cols.copy(), folder_path=folder_path,
                      data_only=False,
                      load_last=False, start_index=date_range[0],
-                     end_index=date_range[1], model_type=model_type, verbose=2)
+                     end_index=date_range[1], model_type=model_type, ensemble=ensemble, verbose=2)
+
+        elif ensemble:
+            main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
+                 constituency_matrix=constituency_matrix,
+                 columns=cols.copy(), folder_path=folder_path,
+                 data_only=False,
+                 load_last=False, start_index=date_range[0],
+                 end_index=date_range[1],
+                 ensemble=WeightedEnsemble(index_name=index_name.lower().replace(' ', '_'),
+                                           classifier_type_list=ensemble, configs=configs),
+                 verbose=2)
 
         else:
             main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
