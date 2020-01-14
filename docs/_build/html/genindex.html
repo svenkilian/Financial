@@ -56,6 +56,7 @@
  | <a href="#B"><strong>B</strong></a>
  | <a href="#C"><strong>C</strong></a>
  | <a href="#D"><strong>D</strong></a>
+ | <a href="#F"><strong>F</strong></a>
  | <a href="#G"><strong>G</strong></a>
  | <a href="#L"><strong>L</strong></a>
  | <a href="#M"><strong>M</strong></a>
@@ -63,6 +64,7 @@
  | <a href="#R"><strong>R</strong></a>
  | <a href="#S"><strong>S</strong></a>
  | <a href="#T"><strong>T</strong></a>
+ | <a href="#W"><strong>W</strong></a>
  
 </div>
 <h2 id="A">A</h2>
@@ -70,9 +72,13 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="_source/core.html#core.utils.CSVWriter.add_line">add_line() (core.utils.CSVWriter method)</a>
 </li>
+      <li><a href="_source/core.html#core.utils.add_to_json">add_to_json() (in module core.utils)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="_source/core.html#core.utils.annualize_metric">annualize_metric() (in module core.utils)</a>
+</li>
+      <li><a href="_source/core.html#core.data_collection.append_columns">append_columns() (in module core.data_collection)</a>
 </li>
       <li><a href="_source/core.html#core.utils.apply_batch_directory">apply_batch_directory() (in module core.utils)</a>
 </li>
@@ -97,6 +103,8 @@
       <li><a href="_source/core.html#core.utils.calc_excess_returns">calc_excess_returns() (in module core.utils)</a>
 </li>
       <li><a href="_source/core.html#core.utils.calc_sharpe">calc_sharpe() (in module core.utils)</a>
+</li>
+      <li><a href="_source/core.html#core.utils.calc_sortino">calc_sortino() (in module core.utils)</a>
 </li>
       <li><a href="_source/core.html#core.data_collection.calculate_daily_return">calculate_daily_return() (in module core.data_collection)</a>
 </li>
@@ -141,6 +149,14 @@
   </ul></td>
 </tr></table>
 
+<h2 id="F">F</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="_source/core.html#core.model.WeightedEnsemble.fit">fit() (core.model.WeightedEnsemble method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
 <h2 id="G">G</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -160,10 +176,10 @@
 </li>
       <li><a href="_source/core.html#core.data_collection.get_data_table">get_data_table() (in module core.data_collection)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="_source/core.html#core.data_collection.get_index_constituents">get_index_constituents() (in module core.data_collection)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="_source/core.html#core.utils.get_index_name">get_index_name() (in module core.utils)</a>
 </li>
       <li><a href="_source/core.html#core.utils.get_most_recent_file">get_most_recent_file() (in module core.utils)</a>
@@ -174,6 +190,8 @@
 
       <ul>
         <li><a href="_source/core.html#core.model.TreeEnsemble.get_params">(core.model.TreeEnsemble method)</a>
+</li>
+        <li><a href="_source/core.html#core.model.WeightedEnsemble.get_params">(core.model.WeightedEnsemble method)</a>
 </li>
       </ul></li>
       <li><a href="_source/core.html#core.utils.get_study_period_ranges">get_study_period_ranges() (in module core.utils)</a>
@@ -191,6 +209,8 @@
       <li><a href="_source/core.html#core.data_collection.list_tables">list_tables() (in module core.data_collection)</a>
 </li>
       <li><a href="_source/core.html#core.data_collection.load_full_data">load_full_data() (in module core.data_collection)</a>
+</li>
+      <li><a href="_source/core.html#core.utils.load_json_to_df">load_json_to_df() (in module core.utils)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -220,10 +240,14 @@
 </li>
       <li><a href="_source/core.html#core.utils.plot_train_val">plot_train_val() (in module core.utils)</a>
 </li>
-      <li><a href="_source/core.html#core.model.LSTMModel.predict_point_by_point">predict_point_by_point() (core.model.LSTMModel method)</a>
+      <li><a href="_source/core.html#core.model.WeightedEnsemble.predict">predict() (core.model.WeightedEnsemble method)</a>
+</li>
+      <li><a href="_source/core.html#core.model.WeightedEnsemble.predict_all">predict_all() (core.model.WeightedEnsemble method)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="_source/core.html#core.model.LSTMModel.predict_point_by_point">predict_point_by_point() (core.model.LSTMModel method)</a>
+</li>
       <li><a href="_source/core.html#core.model.LSTMModel.predict_sequence_full">predict_sequence_full() (core.model.LSTMModel method)</a>
 </li>
       <li><a href="_source/core.html#core.model.LSTMModel.predict_sequences_multiple">predict_sequences_multiple() (core.model.LSTMModel method)</a>
@@ -275,6 +299,14 @@
       <li><a href="_source/core.html#core.model.LSTMModel.train_generator">train_generator() (core.model.LSTMModel method)</a>
 </li>
       <li><a href="_source/core.html#core.model.TreeEnsemble">TreeEnsemble (class in core.model)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="W">W</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="_source/core.html#core.model.WeightedEnsemble">WeightedEnsemble (class in core.model)</a>
 </li>
   </ul></td>
 </tr></table>

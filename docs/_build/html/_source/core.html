@@ -77,6 +77,24 @@
 <span id="core-data-collection-module"></span><h2>core.data_collection module<a class="headerlink" href="#module-core.data_collection" title="Permalink to this headline">¶</a></h2>
 <p>This module implements methods to collect financial data from Wharton Research Services via the wrds package</p>
 <dl class="function">
+<dt id="core.data_collection.append_columns">
+<code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">append_columns</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">file_name: str</em>, <em class="sig-param">column_list: list</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_collection.append_columns" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>column_list</strong> – </p></li>
+<li><p><strong>data</strong> – </p></li>
+<li><p><strong>folder_path</strong> – </p></li>
+<li><p><strong>file_name</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
 <dt id="core.data_collection.calculate_daily_return">
 <code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">calculate_daily_return</code><span class="sig-paren">(</span><em class="sig-param">data: pandas.core.frame.DataFrame</em>, <em class="sig-param">save_to_file=False</em>, <em class="sig-param">folder_path=None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_collection.calculate_daily_return" title="Permalink to this definition">¶</a></dt>
 <dd><p>Add return index and daily return columns to Data Frame</p>
@@ -171,12 +189,12 @@
 
 <dl class="function">
 <dt id="core.data_collection.generate_study_period">
-<code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">generate_study_period</code><span class="sig-paren">(</span><em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame</em>, <em class="sig-param">full_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">cols: list</em>, <em class="sig-param">period_range: tuple</em>, <em class="sig-param">index_name: str</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str) -&gt; (&lt;class 'pandas.core.frame.DataFrame'&gt;</em>, <em class="sig-param">&lt;class 'int'&gt;</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_collection.generate_study_period" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">generate_study_period</code><span class="sig-paren">(</span><em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame</em>, <em class="sig-param">full_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">period_range: tuple</em>, <em class="sig-param">index_name: str</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">columns=None) -&gt; (&lt;class 'pandas.core.frame.DataFrame'&gt;</em>, <em class="sig-param">&lt;class 'int'&gt;</em><span class="sig-paren">)</span><a class="headerlink" href="#core.data_collection.generate_study_period" title="Permalink to this definition">¶</a></dt>
 <dd><p>Generate a time-period sample for a study period</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>cols</strong> – Relevant columns</p></li>
+<li><p><strong>columns</strong> – Feature columns</p></li>
 <li><p><strong>configs</strong> – Dictionary containing model and training configurations</p></li>
 <li><p><strong>folder_path</strong> – Path to data folder</p></li>
 <li><p><strong>period_range</strong> (<em>tuple</em>) – Date index range of study period in form (start_index, end_index)</p></li>
@@ -239,7 +257,7 @@
 <dl class="function">
 <dt id="core.data_collection.get_index_constituents">
 <code class="sig-prename descclassname">core.data_collection.</code><code class="sig-name descname">get_index_constituents</code><span class="sig-paren">(</span><em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame</em>, <em class="sig-param">date: datetime.date</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">print_constituents=False</em><span class="sig-paren">)</span> &#x2192; pandas.core.indexes.base.Index<a class="headerlink" href="#core.data_collection.get_index_constituents" title="Permalink to this definition">¶</a></dt>
-<dd><p>Return company name list of index constituents for given date</p>
+<dd><p>Return company name list (pd.Index) of index constituents for given date</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -407,24 +425,22 @@ load data, otherwise use generate_training_window() method.</p>
 <span id="core-execute-module"></span><h2>core.execute module<a class="headerlink" href="#module-core.execute" title="Permalink to this headline">¶</a></h2>
 <dl class="function">
 <dt id="core.execute.main">
-<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">main</code><span class="sig-paren">(</span><em class="sig-param">index_id='150095'</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">full_data=None</em>, <em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame = None</em>, <em class="sig-param">folder_path: str = None</em>, <em class="sig-param">columns: list = None</em>, <em class="sig-param">data_only=False</em>, <em class="sig-param">load_last: bool = False</em>, <em class="sig-param">start_index: int = -1001</em>, <em class="sig-param">end_index: int = -1</em>, <em class="sig-param">model_type: str = 'deep_learning'</em>, <em class="sig-param">verbose=2</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.main" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">main</code><span class="sig-paren">(</span><em class="sig-param">index_id='150095'</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">full_data=None</em>, <em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame = None</em>, <em class="sig-param">folder_path: str = None</em>, <em class="sig-param">columns: list = None</em>, <em class="sig-param">data_only=False</em>, <em class="sig-param">load_last: bool = False</em>, <em class="sig-param">start_index: int = -1001</em>, <em class="sig-param">end_index: int = -1</em>, <em class="sig-param">model_type: str = None</em>, <em class="sig-param">ensemble: core.model.WeightedEnsemble = None</em>, <em class="sig-param">verbose=2</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.main" title="Permalink to this definition">¶</a></dt>
 <dd><p>Run data preparation and model training</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>ensemble</strong> – </p></li>
 <li><p><strong>folder_path</strong> – </p></li>
 <li><p><strong>constituency_matrix</strong> – </p></li>
 <li><p><strong>full_data</strong> – </p></li>
 <li><p><strong>index_name</strong> – </p></li>
 <li><p><strong>verbose</strong> – Verbosity</p></li>
-<li><p><strong>train_full</strong> – Flag indicating whether to train and test on all study periods</p></li>
 <li><p><strong>model_type</strong> – Model type as strings: ‘deep_learning’ for LSTM, ‘tree_based’ for Random Forest</p></li>
 <li><p><strong>columns</strong> – Relevant columns for model training and testing</p></li>
 <li><p><strong>load_last</strong> – Flag indicating whether to load last model weights from storage</p></li>
 <li><p><strong>index_id</strong> – Index identifier</p></li>
-<li><p><strong>last_n</strong> – Flag indicating the number of days to consider; <em>None</em> in case whole data history is considered</p></li>
 <li><p><strong>data_only</strong> – Flag indicating whether to download data only without training the model</p></li>
-<li><p><strong>force_download</strong> – Flag indicating whether to overwrite data if index data folder already exists</p></li>
 <li><p><strong>start_index</strong> – Index of period start date</p></li>
 <li><p><strong>end_index</strong> – Index of period end date</p></li>
 </ul>
@@ -459,7 +475,7 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="function">
 <dt id="core.execute.test_model">
-<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">test_model</code><span class="sig-paren">(</span><em class="sig-param">predictions: pandas.core.series.Series</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">test_data_index: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">parent_model_type: str = 'deep_learning'</em>, <em class="sig-param">model_type: str = 'LSTM'</em>, <em class="sig-param">history=None</em>, <em class="sig-param">index_id=''</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">study_period_length: int = 0</em>, <em class="sig-param">model=None</em>, <em class="sig-param">period_range: tuple = (0</em>, <em class="sig-param">0)</em>, <em class="sig-param">start_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">12)</em>, <em class="sig-param">end_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">12)</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.test_model" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">test_model</code><span class="sig-paren">(</span><em class="sig-param">predictions: pandas.core.series.Series</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">test_data_index: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">parent_model_type: str = 'deep_learning'</em>, <em class="sig-param">model_type: str = None</em>, <em class="sig-param">history=None</em>, <em class="sig-param">index_id=''</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">study_period_length: int = 0</em>, <em class="sig-param">model=None</em>, <em class="sig-param">period_range: tuple = (0</em>, <em class="sig-param">0)</em>, <em class="sig-param">start_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">14)</em>, <em class="sig-param">end_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">14)</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.test_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test model on unseen data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -633,6 +649,67 @@ load data, otherwise use generate_training_window() method.</p>
 
 </dd></dl>
 
+<dl class="class">
+<dt id="core.model.WeightedEnsemble">
+<em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">WeightedEnsemble</code><span class="sig-paren">(</span><em class="sig-param">index_name: str = ''</em>, <em class="sig-param">classifier_type_list: List[str] = None</em>, <em class="sig-param">configs: dict = None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.WeightedEnsemble" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class representing a weighted ensemble of individual classifiers</p>
+<dl class="method">
+<dt id="core.model.WeightedEnsemble.fit">
+<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param">x_train: numpy.array</em>, <em class="sig-param">y_train: numpy.array</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.WeightedEnsemble.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fit individual models</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.WeightedEnsemble.get_params">
+<code class="sig-name descname">get_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.model.WeightedEnsemble.get_params" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.WeightedEnsemble.predict">
+<code class="sig-name descname">predict</code><span class="sig-paren">(</span><em class="sig-param">x_test: numpy.array</em>, <em class="sig-param">weighted=False</em>, <em class="sig-param">oob_scores: list = None</em>, <em class="sig-param">alpha=2</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#core.model.WeightedEnsemble.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Aggregate individual predictions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>alpha</strong> – Weighting parameter for weighted average</p></li>
+<li><p><strong>oob_scores</strong> – Out-of-bag performance score of base classifiers</p></li>
+<li><p><strong>weighted</strong> – Use performance-weighted average</p></li>
+<li><p><strong>x_test</strong> – Test set</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.WeightedEnsemble.predict_all">
+<code class="sig-name descname">predict_all</code><span class="sig-paren">(</span><em class="sig-param">x_test: numpy.array</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#core.model.WeightedEnsemble.predict_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predict on test set, separately for each individual classifier</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>x_test</strong> – Test set</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Array with individual predictions in rows</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
 <dl class="function">
 <dt id="core.model.get_optimizer">
 <code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">get_optimizer</code><span class="sig-paren">(</span><em class="sig-param">optimizer_name: str</em>, <em class="sig-param">parameters: dict = None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.get_optimizer" title="Permalink to this definition">¶</a></dt>
@@ -693,6 +770,23 @@ load data, otherwise use generate_training_window() method.</p>
 </dd></dl>
 
 <dl class="function">
+<dt id="core.utils.add_to_json">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">add_to_json</code><span class="sig-paren">(</span><em class="sig-param">dict_entry: dict</em>, <em class="sig-param">file_path: str</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.add_to_json" title="Permalink to this definition">¶</a></dt>
+<dd><p>Add entry to json file</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dict_entry</strong> – Entry to add (dict)</p></li>
+<li><p><strong>file_path</strong> – Path to json file</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Appended json</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
 <dt id="core.utils.annualize_metric">
 <code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">annualize_metric</code><span class="sig-paren">(</span><em class="sig-param">metric: float</em>, <em class="sig-param">holding_periods: int = 1</em><span class="sig-paren">)</span> &#x2192; float<a class="headerlink" href="#core.utils.annualize_metric" title="Permalink to this definition">¶</a></dt>
 <dd><p>Annualize metric of arbitrary periodicity</p>
@@ -748,6 +842,23 @@ load data, otherwise use generate_training_window() method.</p>
 <dt id="core.utils.calc_sharpe">
 <code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">calc_sharpe</code><span class="sig-paren">(</span><em class="sig-param">return_series</em>, <em class="sig-param">annualize=True</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.calc_sharpe" title="Permalink to this definition">¶</a></dt>
 <dd><p>Calculate Sharpe Ratio for series of returns</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>return_series</strong> – </p></li>
+<li><p><strong>annualize</strong> – </p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.utils.calc_sortino">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">calc_sortino</code><span class="sig-paren">(</span><em class="sig-param">return_series</em>, <em class="sig-param">annualize=True</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.calc_sortino" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate Sortino Ratio for series of returns</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -862,6 +973,20 @@ load data, otherwise use generate_training_window() method.</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p>Dict of study period ranges</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.utils.load_json_to_df">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">load_json_to_df</code><span class="sig-paren">(</span><em class="sig-param">file_path: str</em><span class="sig-paren">)</span> &#x2192; pandas.core.frame.DataFrame<a class="headerlink" href="#core.utils.load_json_to_df" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load data from json file specified in path and return as pandas data frame.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>file_path</strong> – Path to json file</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Data frame containing data from json file</p>
 </dd>
 </dl>
 </dd></dl>
