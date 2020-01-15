@@ -372,7 +372,7 @@ class WeightedEnsemble:
             print(f'\n\nFitting {model.model_type} model ...')
             timer = Timer().start()
             model.model.fit(x_train, y_train)
-            self.oob_scores.append(model.model.oob_score_)
+            self.oob_scores.append(model.model.oob_score_)  # TODO: Move somewhere else
 
             print('Feature importances:')
             print(model.model.feature_importances_)

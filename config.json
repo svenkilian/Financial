@@ -32,7 +32,7 @@
           "kernel_regularizer": "l2",
           "input_shape": [
             240,
-            1
+            2
           ],
           "return_sequences": false
         }
@@ -54,7 +54,7 @@
     "warm_start": true
   },
   "GradientBoostingClassifier": {
-    "n_estimators": 20,
+    "n_estimators": 15,
     "max_depth": 5,
     "warm_start": true
   },

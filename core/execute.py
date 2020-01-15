@@ -197,16 +197,23 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
             print(f'\n\nFitting ensemble  ...')
             model.fit(x_train, y_train)
 
-            predictions = model.predict(x_test, weighted=True, oob_scores=model.oob_scores)
+            weighting_whitelist = ['RandomForestClassifier', 'ExtraTreesClassifier']
+            if all([clf_type in weighting_whitelist for clf_type in ensemble.classifier_types]):
+                weighted = True
+            else:
+                weighted = False
+
+            predictions = model.predict(x_test, weighted=weighted, oob_scores=model.oob_scores)
 
             print('Testing ensemble components:')
 
             all_predictions = model.predict_all(x_test)
             for i, base_clf in enumerate(ensemble.classifiers):
-                print(f'Testing ensemble component {i+1} ({base_clf.model_type})')
+                print(f'Testing ensemble component {i + 1} ({base_clf.model_type})')
                 test_model(predictions=all_predictions[i],
                            configs=configs, folder_path=folder_path, test_data_index=test_data_index,
-                           y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
+                           y_test=y_test, study_period_data=study_period_data.copy(),
+                           parent_model_type=parent_model_type,
                            model_type=base_clf.model_type, history=history,
                            index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
                            model=model,
