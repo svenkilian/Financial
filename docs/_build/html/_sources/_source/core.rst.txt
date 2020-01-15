@@ -4,6 +4,14 @@ core package
 Submodules
 ----------
 
+core.data\_collection module
+----------------------------
+
+.. automodule:: core.data_collection
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 core.data\_processor module
 ---------------------------
 
@@ -12,10 +20,26 @@ core.data\_processor module
    :undoc-members:
    :show-inheritance:
 
+core.execute module
+-------------------
+
+.. automodule:: core.execute
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 core.model module
 -----------------
 
 .. automodule:: core.model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+core.utils module
+-----------------
+
+.. automodule:: core.utils
    :members:
    :undoc-members:
    :show-inheritance:

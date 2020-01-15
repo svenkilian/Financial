@@ -7,6 +7,8 @@ import pandas as pd
 from typing import Tuple
 from colorama import Fore, Style
 
+from core.utils import Timer
+
 
 class DataLoader:
     """A class for loading and transforming data for the LSTM model"""
@@ -37,7 +39,6 @@ class DataLoader:
         # Handle empty data frame
         if len(self.data) == 0:
             print(f'{Fore.RED}{Style.BRIGHT}Encountered empty DataFrame for index {stock_id}.{Style.RESET_ALL}')
-            # TODO: How can this case happen?
             raise AssertionError('Empty DataFrame.')
 
         # JOB: Determine original split index and split date
@@ -60,7 +61,7 @@ class DataLoader:
                 print(f'Stock data for {stock_id} does not yield any training data.')
                 self.i_split = -1
 
-        # JOB: Apply feature generation if necessary
+        # JOB: Apply feature generation for tree types, if necessary
         if model_type == 'tree_based':
             self.generate_tree_features()
 
@@ -120,7 +121,7 @@ class DataLoader:
 
         elif self.model_type == 'tree_based':
             for i in range(self.seq_len, self.len_train):
-                x = self.data_train[i - 1, -len(self.lag_cols):]
+                x = self.data_train[i - 1, 1:]  # -len(self.lag_cols):]
                 y = self.data_train[i, 0]
                 data_x.append(x)
                 data_y.append(y)
@@ -135,19 +136,21 @@ class DataLoader:
         """
 
         # Define lags for multi-period returns
-        lags = np.concatenate(
+        lags = list(np.concatenate(
             (np.linspace(1, 20, num=20, dtype=np.int16),
-             np.linspace(40, self.seq_len - 1, num=(self.seq_len - 1 - 40) / 20 + 1, dtype=np.int16))).tolist()
+             np.linspace(40, self.seq_len - 1, num=(self.seq_len - 1 - 40) / 20 + 1, dtype=np.int16))))
 
-        self.lag_cols = [f'm_{lag}_return' for lag in lags]
+        self.lag_cols = [f'm_{lag}_return' for lag in lags]  # Define column names
 
         for lag in lags:
             # JOB: Recalculate Daily Return
             self.data.loc[:, f'm_{lag}_return'] = self.data.loc[:, 'return_index'].pct_change(periods=lag)
 
-        self.data.drop(columns='return_index', inplace=True)
-        self.cols.pop()  # Remove 'return_index' column
-        self.cols.extend(self.lag_cols)
+        self.data.drop(columns=['return_index'], inplace=True)  # Drop return_index columns (no longer needed)
+        self.cols.remove('return_index')  # Remove 'return_index' column from column list
+
+        self.cols.extend(self.lag_cols)  # Extend column list by newly created lag cols
+        # self.lag_cols.extend('ind_mom_ratio')  # Extend column list
 
     def get_test_data(self, seq_len: int):
         """
@@ -191,7 +194,7 @@ class DataLoader:
 
         elif self.model_type == 'tree_based':
             for i in range(self.seq_len - 1, self.len_test):
-                data_x.append(self.data_test[i - 1, -len(self.lag_cols):])
+                data_x.append(self.data_test[i - 1, 1:])  # -len(self.lag_cols):])
                 data_y.append(self.data_test[i, 0])
             data_x = np.array(data_x)
             data_y = np.array(data_y)

@@ -1,17 +1,17 @@
 {
   "data": {
     "columns": [
-      "Close",
-      "Volume"
+      "stand_d_return",
+      "ind_mom_ratio"
     ],
     "sequence_length": 241,
     "train_test_split": 0.75,
     "normalize": true
   },
   "training": {
-    "epochs": 1000,
+    "epochs": 10,
     "batch_size": 32,
-    "early_stopping_patience": 5
+    "early_stopping_patience": 3
   },
   "model": {
     "loss": "binary_crossentropy",
@@ -24,15 +24,15 @@
     "save_dir": "saved_models",
     "layers": [
       {
-        "type": "gru",
+        "type": "lstm",
         "params": {
-          "units": 30,
-          "dropout": 0.15,
+          "units": 25,
+          "dropout": 0.1,
           "recurrent_dropout": 0.0,
           "kernel_regularizer": "l2",
           "input_shape": [
             240,
-            1
+            2
           ],
           "return_sequences": false
         }
@@ -44,6 +44,43 @@
           "activation": "sigmoid"
         }
       }
+    ]
+  },
+  "RandomForestClassifier": {
+    "n_estimators": 500,
+    "max_depth": 20,
+    "n_jobs": -1,
+    "oob_score": true,
+    "warm_start": true
+  },
+  "GradientBoostingClassifier": {
+    "n_estimators": 15,
+    "max_depth": 5,
+    "warm_start": true
+  },
+  "AdaBoostClassifier": {
+    "n_estimators": 200,
+    "base_estimator": "DecisionTreeClassifier",
+    "base_estimator__max_depth": 10
+  },
+  "ExtraTreesClassifier": {
+    "n_estimators": 500,
+    "max_depth": 20,
+    "warm_start": true,
+    "oob_score": true,
+    "bootstrap": true,
+    "n_jobs": -1
+  },
+  "model_hierarchy": {
+    "tree_based": [
+      "AdaBoostClassifier",
+      "ExtraTreesClassifier",
+      "GradientBoostingClassifier",
+      "RandomForestClassifier"
+    ],
+    "deep_learning": [
+      "RNN",
+      "LSTM"
     ]
   }
 }

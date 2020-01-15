@@ -179,6 +179,27 @@ def plot_results(predicted_data, true_data):
     plt.show()
 
 
+def load_json_to_df(file_path: str) -> pd.DataFrame:
+    """
+    Load data from json file specified in path and return as pandas data frame.
+
+    :param file_path: Path to json file
+    :return: Data frame containing data from json file
+    """
+
+    # Specify path to saved data
+    path_to_data = os.path.join(ROOT_DIR, file_path)
+
+    # Load json data as dict
+    with open(path_to_data, 'r') as file:
+        data = json.load(file)
+
+    # Make DataFrame from json
+    data_frame = pd.DataFrame(data)
+
+    return data_frame
+
+
 def get_most_recent_file(directory: str) -> str:
     """
     Retrieve name of most recently changed file in given directory.
@@ -238,6 +259,34 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
         raise LookupError('Index ID not known.')
 
     return index_name, lookup_table
+
+
+def add_to_json(dict_entry: dict, file_path: str):
+    """
+    Add entry to json file
+
+    :param dict_entry: Entry to add (dict)
+    :param file_path: Path to json file
+    :return: Appended json
+    """
+
+    # Specify path to saved data
+    path_to_data = os.path.join(ROOT_DIR, file_path)
+
+    if not os.path.exists(path_to_data):
+        print(f'Creating json file: {path_to_data}')
+        with open(path_to_data, 'w') as f:
+            json.dump({}, f)
+
+    with open(path_to_data) as f:
+        data = json.load(f)
+
+    data.update(dict_entry)
+
+    with open(path_to_data, 'w') as f:
+        json.dump(data, f)
+
+    return data
 
 
 def check_directory_for_file(index_name: str = '', folder_path: str = '', force_download: bool = False,
@@ -328,13 +377,27 @@ def annualize_metric(metric: float, holding_periods: int = 1) -> float:
     :return: Annualized metric
     """
 
-    trading_days_per_year = 240
+    trading_days_per_year = 250
     trans_ratio = trading_days_per_year / holding_periods
 
     return (1 + metric) ** trans_ratio - 1
 
 
-def get_study_period_ranges(data_length: int, test_period_length: int, study_period_length: int, index_name: int,
+def to_monthly(metric: float, holding_periods: int = 1):
+    """
+    Transform metric of arbitrary periodicity to monthly
+
+    :param metric:
+    :param holding_periods:
+    :return:
+    """
+
+    trans_ratio = 30 / holding_periods
+
+    return (1 + metric) ** trans_ratio - 1
+
+
+def get_study_period_ranges(data_length: int, test_period_length: int, study_period_length: int, index_name: str,
                             reverse=True,
                             verbose=1) -> dict:
     """
@@ -369,6 +432,94 @@ def get_study_period_ranges(data_length: int, test_period_length: int, study_per
     return study_period_ranges
 
 
+def get_index_name(index_id: str, lookup_dict: dict = None):
+    """
+    Get index name and corresponding lookup table based on index ID
+
+    :param index_id: Index ID to look up name and lookup table for
+    :param lookup_dict: Optional custom lookup dict. Defaults to standard gvkeyx lookup dict
+    :return:
+    """
+
+    if lookup_dict is None:
+        lookup_dict = {'Global Dictionary':
+                           {'file_path': 'gvkeyx_name_dict.json',
+                            'lookup_table': 'global'},
+                       'North American Dictionary':
+                           {'file_path': 'gvkeyx_name_dict_na.json',
+                            'lookup_table': 'north_america'}}
+
+    index_name, lookup_table = lookup_multiple(lookup_dict, index_id=index_id)
+
+    return index_name, lookup_table
+
+
+def calc_sharpe(return_series, annualize=True):
+    """
+    Calculate Sharpe Ratio for series of returns
+
+    :param return_series:
+    :param annualize:
+    :return:
+    """
+
+    excess_returns = calc_excess_returns(return_series)
+    std = np.std(excess_returns)
+    res = np.divide(excess_returns.mean(), std)
+
+    if annualize:
+        res = res * np.sqrt(250)
+
+    return res
+
+
+def calc_sortino(return_series, annualize=True):
+    """
+    Calculate Sortino Ratio for series of returns
+
+    :param return_series:
+    :param annualize:
+    :return:
+    """
+
+    excess_returns = calc_excess_returns(return_series)
+    semi_std = np.std(excess_returns[excess_returns < 0])
+    res = np.divide(excess_returns.mean(), semi_std)
+
+    if annualize:
+        res = res * np.sqrt(250)
+
+    return res
+
+
+def deannualize(return_series, n_periods=250):
+    """
+    Convert return in annual terms to a daily basis
+
+    :param return_series: Return series to deannualize
+    :param n_periods: Target basis (250 for daily)
+    :return:
+    """
+    return np.power(1 + return_series, 1.0 / n_periods) - 1
+
+
+def calc_excess_returns(return_series: pd.DataFrame, rf_rate_series: pd.DataFrame = None):
+    """
+    Calculate daily excess returns for a given return series and a series of the risk-free rate (annual values)
+
+    :param return_series: Return series to calculate excess returns for
+    :param rf_rate_series: Series with risk-free rate (annual percentage)
+    :return:
+    """
+    if rf_rate_series is None:
+        rf_rate_series = (pd.read_csv(os.path.join(ROOT_DIR, 'data', 'rf_rate_germany.csv'), parse_dates=True,
+                                      index_col=0) / 100).resample('D').ffill()
+    combined = return_series.join(deannualize(rf_rate_series), how='inner')
+    excess_returns = combined['daily_return'].subtract(combined['rf_rate_pct'])
+
+    return excess_returns
+
+
 class Timer():
     """
     Timer class for timing operations.
@@ -379,10 +530,11 @@ class Timer():
 
     def start(self):
         self.start_dt = dt.datetime.now()
+        return self
 
     def stop(self):
         end_dt = dt.datetime.now()
-        print('Time taken: %s' % (end_dt - self.start_dt))
+        print(f'{Style.DIM}{Fore.LIGHTBLUE_EX}Time taken: %s{Style.RESET_ALL}' % (end_dt - self.start_dt))
 
 
 class CSVWriter:

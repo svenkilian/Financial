@@ -5,7 +5,6 @@ __license__ = "MIT"
 
 import datetime
 import json
-from typing import Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,62 +13,74 @@ from colorama import Fore, Back, Style
 from sklearn.metrics import accuracy_score
 from tensorflow.keras.metrics import binary_accuracy
 
-from core import utils
-from core.data_collection import generate_study_period, retrieve_index_history, create_constituency_matrix, \
-    create_gics_matrix
 from config import *
+from core.data_collection import generate_study_period
 from core.data_processor import DataLoader
-from core.model import LSTMModel, RandomForestModel
-from core.utils import plot_train_val, get_most_recent_file, lookup_multiple, check_directory_for_file, CSVWriter, \
-    check_data_conformity, annualize_metric, get_study_period_ranges
+from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble
+from core.utils import plot_train_val, get_most_recent_file, CSVWriter, \
+    check_data_conformity, annualize_metric, Timer, calc_sharpe, \
+    calc_excess_returns, calc_sortino, add_to_json
 
 
-def main(index_id='150095', columns: list = None, force_download=False, data_only=False, last_n=None,
-         load_last: bool = False, train_full=False,
-         start_index: int = -1001, end_index: int = -1, model_type: str = 'deep_learning', verbose=2):
+def main(index_id='150095', index_name='', full_data=None, constituency_matrix: pd.DataFrame = None,
+         folder_path: str = None,
+         columns: list = None, data_only=False,
+         load_last: bool = False,
+         start_index: int = -1001, end_index: int = -1, model_type: str = None, ensemble: WeightedEnsemble = None,
+         verbose=2):
     """
     Run data preparation and model training
 
-    :param study_period_length:
-    :param verbose:
-    :param train_full:
-    :param model_type:
+    :param ensemble:
+    :param folder_path:
+    :param constituency_matrix:
+    :param full_data:
+    :param index_name:
+    :param verbose: Verbosity
+    :param model_type: Model type as strings: 'deep_learning' for LSTM, 'tree_based' for Random Forest
     :param columns: Relevant columns for model training and testing
     :param load_last: Flag indicating whether to load last model weights from storage
     :param index_id: Index identifier
-    :param last_n: Flag indicating the number of days to consider; *None* in case whole data history is considered
     :param data_only: Flag indicating whether to download data only without training the model
-    :param force_download: Flag indicating whether to overwrite data if index data folder already exists
     :param start_index: Index of period start date
     :param end_index: Index of period end date
     :return: None
     """
 
     # JOB: Load configurations
-    configs = json.load(open('config.json', 'r'))
+    configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
 
-    # Add 'return_index' column for feature generation in case of tree-based model
-    if model_type == 'tree_based':
-        columns.append('return_index')
+    model_type_reverse_dict = {child_type: parent_type for parent_type in configs['model_hierarchy'].keys() for
+                               child_type in
+                               configs['model_hierarchy'][parent_type]}
 
-    constituency_matrix, full_data, index_name, folder_path = load_full_data(force_download=force_download,
-                                                                             last_n=last_n,
-                                                                             configs=configs)
+    # Retrieve parent mode type from dict
+    parent_model_type = model_type_reverse_dict.get(model_type)
 
-    full_data = full_data.get([column for column in full_data.columns if not column.startswith('Unnamed')])
-    full_data.dropna(subset=['daily_return'], inplace=True)
+    if ensemble is not None:
+        parent_model_type = 'tree_based'
+
+    # Add 'return_index' and remove 'stand_d_return' column for feature generation in case of tree-based model
+    if parent_model_type == 'tree_based':
+        columns.extend(['return_index'])
+        columns.remove('stand_d_return')
+
+    # Delete columns containing 'unnamed' and save file
+    if any('unnamed' in s.lower() for s in full_data.columns):
+        full_data = full_data.get([column for column in full_data.columns if not column.startswith('Unnamed')])
+        full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
+
+    full_data.dropna(subset=['daily_return'], inplace=True)  # Drop records without daily return data
 
     # JOB: Query number of dates in full data set
-    data_length = full_data['datadate'].drop_duplicates().size  # Number of individual dates
+    data_length = full_data['datadate'].drop_duplicates().shape[0]  # Number of individual dates
 
     if data_only:
         print(f'Finished downloading data for {index_name}.')
         print(f'Data set contains {data_length} individual dates.')
         # print(full_data.head(10))
         # print(full_data.tail(10))
-
-    if train_full:
-        return index_name, data_length
+        return full_data
 
     # JOB: Specify study period interval
     period_range = (start_index, end_index)
@@ -77,14 +88,20 @@ def main(index_id='150095', columns: list = None, force_download=False, data_onl
     # JOB: Get study period data and split index
     try:
         study_period_data, split_index = generate_study_period(constituency_matrix=constituency_matrix,
-                                                               full_data=full_data,
+                                                               full_data=full_data.copy(),
                                                                period_range=period_range,
-                                                               index_name=index_name, configs=configs, cols=columns,
-                                                               folder_path=folder_path)
+                                                               index_name=index_name, configs=configs,
+                                                               folder_path=folder_path, columns=columns)
     except AssertionError as ae:
         print(ae)
         print('Not all constituents in full data set. Terminating execution.')
         return
+    except RuntimeWarning as rtw:
+        print(rtw)
+        return
+
+    # Delete full data copy
+    del full_data
 
     # JOB: Get all dates in study period
     full_date_range = study_period_data.index.unique()
@@ -92,12 +109,16 @@ def main(index_id='150095', columns: list = None, force_download=False, data_onl
     start_date = full_date_range.min().date()
     end_date = full_date_range.max().date()
 
-    # JOB: Set MultiIndex to stock identifier and select relevant columns
+    # JOB: Set MultiIndex to stock identifier
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
-    # ['datadate', *columns]]
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
+
+    # Calculate Sharpe Ratio for full index history
+    sharpe_ratio_sp = calc_sharpe(study_period_data.set_index('datadate').loc[:, ['daily_return']], annualize=True)
+
+    print(f'Annualized Sharpe Ratio: {np.round(sharpe_ratio_sp, 4)}')
 
     # JOB: Obtain training and test data as well as test data index
     x_train, y_train, x_test, y_test, test_data_index = preprocess_data(study_period_data=study_period_data,
@@ -105,9 +126,9 @@ def main(index_id='150095', columns: list = None, force_download=False, data_onl
                                                                         unique_indices=unique_indices, cols=columns,
                                                                         configs=configs,
                                                                         full_date_range=full_date_range,
-                                                                        model_type=model_type)
+                                                                        model_type=parent_model_type)
 
-    print(f'Length of training data: {x_train.shape}')
+    print(f'\nLength of training data: {x_train.shape}')
     print(f'Length of test data: {x_test.shape}')
     print(f'Length of test target data: {y_test.shape}')
 
@@ -118,13 +139,13 @@ def main(index_id='150095', columns: list = None, force_download=False, data_onl
     print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
     print(f'Performance validation thresholds: \n'
           f'Training: {np.round(1 - target_mean_train, 4)}\n'
-          f'Testing: {np.round(1 - target_mean_test, 4)}')
+          f'Testing: {np.round(1 - target_mean_test, 4)}\n')
 
     history = None
     predictions = None
     model = None
     # JOB: Test model performance on test data
-    if model_type == 'deep_learning':
+    if parent_model_type == 'deep_learning':
         # JOB: Load model from storage
         if load_last:
             model = LSTMModel()
@@ -147,20 +168,65 @@ def main(index_id='150095', columns: list = None, force_download=False, data_onl
         # JOB: Make point prediction
         predictions = model.predict_point_by_point(x_test)
 
-    elif model_type == 'tree_based':
-        model = RandomForestModel(index_name.lower().replace(' ', '_'))
-        model.build_model(verbose=verbose)
+    elif parent_model_type == 'tree_based':
+        if model_type:
+            model = TreeEnsemble(index_name=index_name.lower().replace(' ', '_'), model_type=model_type)
+            model.build_model(configs=configs, verbose=verbose)
 
-        # JOB: Fit model
-        model.model.fit(x_train, y_train)
+            # JOB: Fit model
+            print(f'\n\nFitting {model_type} model ...')
+            timer = Timer().start()
+            model.model.fit(x_train, y_train)
 
-        predictions = model.model.predict_proba(x_test)[:, 1]
+            print('Feature importances:')
+            print(model.model.feature_importances_)
+            timer.stop()
+
+            print(f'Making predictions on test set ...')
+            timer = Timer().start()
+            predictions = model.model.predict_proba(x_test)[:, 1]
+            timer.stop()
+
+        elif ensemble:
+            model = ensemble
+            print('Ensemble components:')
+            print(model)
+            model_type = f'Ensemble({", ".join(ensemble.classifier_types)})'
+
+            # JOB: Fit models
+            print(f'\n\nFitting ensemble  ...')
+            model.fit(x_train, y_train)
+
+            weighting_whitelist = ['RandomForestClassifier', 'ExtraTreesClassifier']
+            if all([clf_type in weighting_whitelist for clf_type in ensemble.classifier_types]):
+                weighted = True
+            else:
+                weighted = False
+
+            predictions = model.predict(x_test, weighted=weighted, oob_scores=model.oob_scores)
+
+            print('Testing ensemble components:')
+
+            all_predictions = model.predict_all(x_test)
+            for i, base_clf in enumerate(ensemble.classifiers):
+                print(f'Testing ensemble component {i + 1} ({base_clf.model_type})')
+                test_model(predictions=all_predictions[i],
+                           configs=configs, folder_path=folder_path, test_data_index=test_data_index,
+                           y_test=y_test, study_period_data=study_period_data.copy(),
+                           parent_model_type=parent_model_type,
+                           model_type=base_clf.model_type, history=history,
+                           index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
+                           model=model,
+                           period_range=period_range, start_date=start_date, end_date=end_date)
 
     # JOB: Test model
     test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
-               y_test=y_test, study_period_data=study_period_data, model_type=model_type, history=history,
+               y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
+               model_type=model_type, history=history,
                index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
                period_range=period_range, start_date=start_date, end_date=end_date)
+
+    del study_period_data
 
 
 def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiIndex, cols: list, split_index: int,
@@ -177,6 +243,9 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     :param full_date_range: Index of dates
     :return: Tuple of (x_train, y_train, x_test, y_test, test_data_index)
     """
+
+    print(f'{Style.BRIGHT}{Fore.YELLOW}Pre-processing data ...{Style.RESET_ALL}')
+    timer = Timer().start()
 
     # JOB: Instantiate training and test data
     x_train = None
@@ -243,24 +312,29 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
         if len(y_test) != len(test_data_index):
             raise AssertionError('Data length is not conforming.')
 
+    print(f'{Style.BRIGHT}{Fore.YELLOW}Done pre-processing data.{Style.RESET_ALL}')
+    timer.stop()
+
     return x_train, y_train, x_test, y_test, test_data_index
 
 
 def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_data_index: pd.MultiIndex,
                y_test: np.array,
-               study_period_data: pd.DataFrame, model_type: str = 'deep_learning', history=None, index_id='',
+               study_period_data: pd.DataFrame, parent_model_type: str = 'deep_learning', model_type: str = None,
+               history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
                start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today()):
     """
     Test model on unseen data.
 
+    :param model_type:
     :param predictions:
     :param configs:
     :param folder_path:
     :param test_data_index:
     :param y_test:
     :param study_period_data:
-    :param model_type:
+    :param parent_model_type:
     :param history:
     :param index_id:
     :param index_name:
@@ -270,6 +344,9 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     :param start_date:
     :param end_date:
     """
+
+    print(f'\nTesting model on unseen data ...')
+    timer = Timer().start()
     # JOB: Create data frame with true and predicted values
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
                                        index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
@@ -280,8 +357,10 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     study_period_data.set_index('datadate', append=True, inplace=True)
 
     # JOB: Merge test set with study period data
-    test_set_comparison = test_set_comparison.merge(study_period_data, how='inner', left_index=True,
+    test_set_comparison = test_set_comparison.merge(study_period_data, how='left', left_index=True,
                                                     right_on=['datadate', 'stock_id'])
+
+    del study_period_data
 
     # JOB: Create normalized predictions (e.g., directional prediction relative to cross-sectional median of predictions)
     test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'prediction'].gt(
@@ -293,8 +372,13 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     test_set_comparison.loc[:, 'prediction_percentile'] = test_set_comparison.groupby('datadate')['prediction'].rank(
         pct=True)
 
+    test_data_start_date = test_set_comparison.index.get_level_values('datadate').min().date()
+    test_data_end_date = test_set_comparison.index.get_level_values('datadate').max().date()
+    test_set_n_days = test_set_comparison.index.get_level_values('datadate').unique().size
+    test_set_n_constituents = test_set_comparison.index.get_level_values('stock_id').unique().size
+
     cross_section_size = int(round(test_set_comparison.groupby('datadate')['y_test'].count().mean()))
-    print(f'Average size of cross sections: {cross_section_size}')
+    print(f'Average size of cross sections: {int(cross_section_size)}')
 
     # Define top k values
     top_k_list = [5, 10, int(cross_section_size / 10), int(cross_section_size / 5),
@@ -317,34 +401,42 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
         # print(full_portfolio.head())
         # print(full_portfolio.tail())
 
-        # print(full_portfolio.sample(10))
+        annualized_sharpe = calc_sharpe(full_portfolio.loc[:, ['daily_return']], annualize=True)
+        annualized_sortino = calc_sortino(full_portfolio.loc[:, ['daily_return']], annualize=True)
+
         accuracy = None
         mean_daily_return = None
         mean_daily_short = None
         mean_daily_long = None
 
         # JOB: Calculate accuracy score
-        if model_type == 'deep_learning':
+        if parent_model_type == 'deep_learning':
             accuracy = binary_accuracy(full_portfolio['y_test'].values,
                                        full_portfolio['norm_prediction'].values).numpy()
-            mean_daily_return = full_portfolio['daily_return'].mean()
-            mean_daily_short = short_positions['daily_return'].mean()
-            mean_daily_long = long_positions['daily_return'].mean()
 
-        elif model_type == 'tree_based':
+        elif parent_model_type == 'tree_based':
             accuracy = accuracy_score(full_portfolio['y_test'].values,
                                       full_portfolio['norm_prediction'].values)
-            mean_daily_return = full_portfolio['daily_return'].mean()
-            mean_daily_short = short_positions['daily_return'].mean()
-            mean_daily_long = long_positions['daily_return'].mean()
+
+        mean_daily_excess_return = calc_excess_returns(full_portfolio.loc[:, ['daily_return']]).mean()
+
+        mean_daily_return = full_portfolio['daily_return'].mean()
+        mean_daily_short = short_positions['daily_return'].mean()
+        mean_daily_long = long_positions['daily_return'].mean()
 
         top_k_metrics.loc[top_k, 'Accuracy'] = accuracy
         top_k_metrics.loc[top_k, 'Mean Daily Return'] = mean_daily_return
         top_k_metrics.loc[top_k, 'Annualized Return'] = annualize_metric(mean_daily_return)
+        top_k_metrics.loc[top_k, 'Mean Daily Excess Return'] = mean_daily_excess_return
+        top_k_metrics.loc[top_k, 'Annualized Excess Return'] = annualize_metric(mean_daily_excess_return)
+        top_k_metrics.loc[top_k, 'Annualized Sharpe'] = annualized_sharpe
+        top_k_metrics.loc[top_k, 'Annualized Sortino'] = annualized_sortino
         top_k_metrics.loc[top_k, 'Mean Daily Return (Short)'] = mean_daily_short
         top_k_metrics.loc[top_k, 'Mean Daily Return (Long)'] = mean_daily_long
 
+    # JOB: Display top-k metrics
     print(top_k_metrics)
+
     # Plot accuracies and save figure to file
     for col in top_k_metrics.columns:
         top_k_metrics[col].plot(kind='line', legend=True, fontsize=14)
@@ -363,148 +455,54 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
 
     # JOB: Evaluate model on full test data
     test_score = None
-    if model_type == 'deep_learning':
-        test_score = binary_accuracy(test_set_comparison['y_test'].values,
-                                     test_set_comparison['norm_prediction'].values).numpy()
+    if parent_model_type == 'deep_learning':
+        test_score = float(binary_accuracy(test_set_comparison['y_test'].values,
+                                           test_set_comparison['norm_prediction'].values).numpy())
 
-        print(f'\nTest score on full test set: {np.round(test_score, 4)}')
+        print(f'\nTest score on full test set: {float(np.round(test_score, 4))}')
 
-    elif model_type == 'tree_based':
+    elif parent_model_type == 'tree_based':
         test_score = accuracy_score(test_set_comparison['y_test'].values,
                                     test_set_comparison['norm_prediction'].values)
         print(f'\nTest score on full test set: {np.round(test_score, 4)}')
 
     total_epochs = len(history.history['loss']) if history is not None else None
-    data_record = {'Model Type': model_type,
+    data_record = {'Experiment Run End': datetime.datetime.now().isoformat(),
+                   'Parent Model Type': parent_model_type,
+                   'Model Type': model_type,
                    'Index ID': index_id,
                    'Index Name': index_name,
-                   'Number days': study_period_length,
-                   'Test Set Size': len(y_test),
+                   'Study Period Length': study_period_length,
+                   'Test Set Size': y_test.shape[0],
+                   'Days Test Set': test_set_n_days,
+                   'Constituent Number': test_set_n_constituents,
+                   'Average Cross Section Size': cross_section_size,
+                   'Test Set Start Date': test_data_start_date.isoformat(),
+                   'Test Set End Date': test_data_end_date.isoformat(),
                    'Total Accuracy': test_score,
                    'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
                    'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
+                   'Top-k Mean Daily Excess Return': top_k_metrics['Mean Daily Excess Return'].to_dict(),
+                   'Annualized Excess Return': top_k_metrics['Annualized Excess Return'].to_dict(),
                    'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
-                   'Model Configs': model.get_params(),
+                   'Top-k Annualized Sharpe': top_k_metrics['Annualized Sharpe'].to_dict(),
+                   'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
+                   'Model Configs': str(model.get_params()),
                    'Total Epochs': total_epochs,
                    'Period Range': period_range,
-                   'Start Date': start_date,
-                   'End Date': end_date
+                   'Study Period Start Date': start_date.isoformat(),
+                   'Study Period End Date': end_date.isoformat()
                    }
 
     logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'),
                        field_names=list(data_record.keys()))
     logger.add_line(data_record)
 
+    add_to_json(data_record, 'data/training_log.json')
 
-def load_full_data(force_download: bool, last_n: int, configs: dict) -> Tuple[pd.DataFrame, pd.DataFrame, str, str]:
-    """
-    Load all available records from the data for a specified index
-
-    :param force_download: Flag indicating whether to overwrite existing data
-    :param last_n: Number of last available dates to consider
-    :param configs: Dict containing model and training configurations
-    :return: Tuple of (constituency_matrix, full_data, index_name, folder_path)
-    """
-    # Load index name dict and get index name
-    index_name, lookup_table = lookup_multiple(
-        {'Global Dictionary':
-             {'file_path': 'gvkeyx_name_dict.json',
-              'lookup_table': 'global'},
-         'North American Dictionary':
-             {'file_path': 'gvkeyx_name_dict_na.json',
-              'lookup_table': 'north_america'}}, index_id=index_id)
-
-    folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
-
-    # JOB: Check whether index data already exist; create folder and set 'load_from_file' flag to false if non-existent
-    load_from_file = check_directory_for_file(index_name=index_name, folder_path=folder_path,
-                                              force_download=force_download)
-
-    # JOB: Check if saved model folder exists and create one if not
-    if not os.path.exists(os.path.join(ROOT_DIR, configs['model']['save_dir'])):
-        os.makedirs(configs['model']['save_dir'])
-
-    if not load_from_file:
-        # JOB: Create or load constituency matrix
-        print('Creating constituency matrix ...')
-        create_constituency_matrix(load_from_file=load_from_file, index_id=index_id, lookup_table=lookup_table,
-                                   folder_path=folder_path)
-        print('Successfully created constituency matrix.')
-
-    # JOB: Load constituency matrix
-    print('Loading constituency matrix ...')
-    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'), index_col=0,
-                                      header=[0, 1],
-                                      parse_dates=True)
-    print('Successfully loaded constituency matrix.\n')
-
-    # JOB: Create GICS (Global Industry Classification Standard) matrix
-    gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
-                                     load_from_file=load_from_file)
-
-    # JOB: Load full data
-    print('Retrieving full index history ...')
-    full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
-                                       folder_path=folder_path, generate_dict=True)
-    print('Successfully loaded index history.\n')
-
-    if not load_from_file:
-        # JOB: Merge gics matrix with full data set
-        print('Merging GICS matrix with full data set.')
-        full_data.set_index(['datadate', 'gvkey'], inplace=True)
-        full_data = full_data.join(gics_matrix, how='inner').reset_index()
-
-    return constituency_matrix, full_data, index_name, folder_path
+    print('Done testing on unseen data.')
+    timer.stop()
 
 
 if __name__ == '__main__':
-
-    configs = json.load(open('config.json', 'r'))
-
-    # main(load_latest_model=True)
-    # index_list = ['150378']  # Dow Jones European STOXX Index
-    # index_list = ['150913']  # S&P Euro Index
-    # index_list = ['150928']  # Euronext 100 Index
-    index_id = '150378'
-    cols = ['above_cs_med', 'stand_d_return']
-    study_period_length = 1000
-    test_period_length = round(study_period_length * (1 - configs['data']['train_test_split']))
-
-    index_name, data_length = main(index_id=index_id, columns=cols.copy(), force_download=False,
-                                   data_only=True,
-                                   load_last=False, train_full=True, start_index=-1001,
-                                   end_index=-1, model_type='tree_based', verbose=1)
-
-    study_period_ranges = get_study_period_ranges(data_length=data_length, test_period_length=test_period_length,
-                                                  study_period_length=study_period_length,
-                                                  index_name=index_name, reverse=True, verbose=1)
-    print('\nStudy period date index ranges:')
-    print(study_period_ranges)
-
-    for study_period_ix in list(sorted(study_period_ranges.keys())):
-        date_range = study_period_ranges.get(study_period_ix)
-        print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
-
-        main(index_id=index_id, columns=cols.copy(), force_download=False,
-             data_only=False,
-             load_last=False, train_full=False, start_index=date_range[0],
-             end_index=date_range[1], model_type='tree_based', verbose=1)
-
-    """
-    # Out-of memory generative training
-    steps_per_epoch = math.ceil(
-        (data.len_train - configs['data']['sequence_length']) / configs['training']['batch_size'])
-        
-    model.train_generator(
-        data_gen=data.generate_train_batch(
-            seq_len=configs['data']['sequence_length'],
-            batch_size=configs['training']['batch_size'],
-            normalize=configs['data']['normalize']
-        ),
-        epochs=configs['training']['epochs'],
-        batch_size=configs['training']['batch_size'],
-        steps_per_epoch=steps_per_epoch,
-        save_dir=configs['model']['save_dir']
-    )
-    
-    """
+    print(f'{Fore.YELLOW}{Style.BRIGHT}This module has no action on execution as \'main\'.{Style.RESET_ALL}')
