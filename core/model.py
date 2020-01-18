@@ -326,6 +326,13 @@ class TreeEnsemble:
         return f'{Style.BRIGHT}{Fore.YELLOW}{self.model}{Style.RESET_ALL}'
 
     def fit(self, x_train: np.array, y_train: np.array, **fit_args):
+        """
+        Fit TreeEnsemble to training data
+        :param x_train: Training data features
+        :param y_train: Training data targets
+        :param fit_args: Optional fitting arguments for obtaining validation score
+        :return: Validation score / OOB score, respectively
+        """
         self.model.fit(x_train, y_train)
         if fit_args.get('x_val'):
             val_score = execute.test_model(
@@ -517,6 +524,15 @@ class MixedEnsemble:
         return out
 
     def fit(self, x_train: list, y_train: list, feature_names: List[List[str]] = None, **fit_args) -> list:
+        """
+        Fit model to training data
+        :param x_train: Training features
+        :param y_train: Training target
+        :param feature_names: List of feature names
+        :param fit_args: Fitting arguments for obtaining validation scores
+
+        :return: Validation scores of fitted model
+        """
 
         for i, model in enumerate(self.classifiers):
             print(f'\n\nFitting {Style.BRIGHT}{Fore.BLUE}{model.model_type}{Style.RESET_ALL} model ...')

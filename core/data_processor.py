@@ -170,7 +170,6 @@ class DataLoader:
         load data, otherwise reduce size of the training split.
 
         :param seq_len: Sequence length
-        :param normalize: Normalize data
         :return:
         """
 
@@ -231,7 +230,6 @@ class DataLoader:
 
         :param seq_len: Sequence length
         :param batch_size: Batch size
-        :param normalize: Normalize data
         :return:
 
         Usage::
