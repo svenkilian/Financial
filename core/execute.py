@@ -5,28 +5,31 @@ __license__ = "MIT"
 
 import datetime
 import json
+from typing import Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from colorama import Fore, Back, Style
 from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
 from tensorflow.keras.metrics import binary_accuracy
 
 from config import *
 from core.data_collection import generate_study_period
 from core.data_processor import DataLoader
-from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble
+from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble, MixedEnsemble
 from core.utils import plot_train_val, get_most_recent_file, CSVWriter, \
     check_data_conformity, annualize_metric, Timer, calc_sharpe, \
-    calc_excess_returns, calc_sortino, add_to_json
+    calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type
 
 
 def main(index_id='150095', index_name='', full_data=None, constituency_matrix: pd.DataFrame = None,
          folder_path: str = None,
          columns: list = None, data_only=False,
          load_last: bool = False,
-         start_index: int = -1001, end_index: int = -1, model_type: str = None, ensemble: WeightedEnsemble = None,
+         start_index: int = -1001, end_index: int = -1, model_type: str = None,
+         ensemble: Union[WeightedEnsemble, MixedEnsemble] = None,
          verbose=2):
     """
     Run data preparation and model training
@@ -50,15 +53,13 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     # JOB: Load configurations
     configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
 
-    model_type_reverse_dict = {child_type: parent_type for parent_type in configs['model_hierarchy'].keys() for
-                               child_type in
-                               configs['model_hierarchy'][parent_type]}
-
     # Retrieve parent mode type from dict
-    parent_model_type = model_type_reverse_dict.get(model_type)
+    parent_model_type = get_model_parent_type(configs=configs, model_type=model_type)
 
-    if ensemble is not None:
+    if isinstance(ensemble, WeightedEnsemble):
         parent_model_type = 'tree_based'
+    elif isinstance(ensemble, MixedEnsemble):
+        parent_model_type = 'mixed'
 
     # Add 'return_index' and remove 'stand_d_return' column for feature generation in case of tree-based model
     if parent_model_type == 'tree_based':
@@ -120,40 +121,44 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
     print(f'Annualized Sharpe Ratio: {np.round(sharpe_ratio_sp, 4)}')
 
-    # JOB: Obtain training and test data as well as test data index
-    x_train, y_train, x_test, y_test, test_data_index = preprocess_data(study_period_data=study_period_data,
-                                                                        split_index=split_index,
-                                                                        unique_indices=unique_indices, cols=columns,
-                                                                        configs=configs,
-                                                                        full_date_range=full_date_range,
-                                                                        model_type=parent_model_type)
+    # JOB: Obtain training and test data as well as test data index and feature names
+    x_train, y_train, x_test, y_test, train_data_index, test_data_index, feature_names = preprocess_data(
+        study_period_data=study_period_data,
+        split_index=split_index,
+        unique_indices=unique_indices, cols=columns,
+        configs=configs,
+        full_date_range=full_date_range,
+        parent_model_type=parent_model_type,
+        ensemble=ensemble)
 
-    print(f'\nLength of training data: {x_train.shape}')
-    print(f'Length of test data: {x_test.shape}')
-    print(f'Length of test target data: {y_test.shape}')
+    if parent_model_type != 'mixed':
+        print(f'\nLength of training data: {x_train.shape}')
+        print(f'Length of test data: {x_test.shape}')
+        print(f'Length of test target data: {y_test.shape}')
 
-    target_mean_train, target_mean_test = check_data_conformity(x_train=x_train, y_train=y_train, x_test=x_test,
-                                                                y_test=y_test, test_data_index=test_data_index)
+        target_mean_train, target_mean_test = check_data_conformity(x_train=x_train, y_train=y_train, x_test=x_test,
+                                                                    y_test=y_test, test_data_index=test_data_index)
 
-    print(f'Average target label (training): {np.round(target_mean_train, 4)}')
-    print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
-    print(f'Performance validation thresholds: \n'
-          f'Training: {np.round(1 - target_mean_train, 4)}\n'
-          f'Testing: {np.round(1 - target_mean_test, 4)}\n')
+        print(f'Average target label (training): {np.round(target_mean_train, 4)}')
+        print(f'Average target label (test): {np.round(target_mean_test, 4)}\n')
+        print(f'Performance validation thresholds: \n'
+              f'Training: {np.round(1 - target_mean_train, 4)}\n'
+              f'Testing: {np.round(1 - target_mean_test, 4)}\n')
 
     history = None
     predictions = None
     model = None
+
     # JOB: Test model performance on test data
     if parent_model_type == 'deep_learning':
         # JOB: Load model from storage
         if load_last:
-            model = LSTMModel()
+            model: LSTMModel = LSTMModel()
             model.load_model(get_most_recent_file('saved_models'))
 
         # JOB: Build model from configs
         else:
-            model = LSTMModel(index_name=index_name.lower().replace(' ', '_'))
+            model: LSTMModel = LSTMModel(index_name=index_name.lower().replace(' ', '_'))
             model.build_model(configs, verbose=2)
 
             # JOB: In-memory training
@@ -165,37 +170,43 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                 save_dir=configs['model']['save_dir'], configs=configs, verbose=verbose
             )
 
+        best_val_accuracy = float(history.history['val_accuracy'][np.argmin(history.history['val_loss'])])
+
+        print(f'Validation accuracy of best model: {np.round(best_val_accuracy, 3)}')
+
         # JOB: Make point prediction
-        predictions = model.predict_point_by_point(x_test)
+        predictions = model.predict(x_test)
 
     elif parent_model_type == 'tree_based':
-        if model_type:
-            model = TreeEnsemble(index_name=index_name.lower().replace(' ', '_'), model_type=model_type)
+        if model_type:  # Single tree-based classifier
+            model: TreeEnsemble = TreeEnsemble(index_name=index_name.lower().replace(' ', '_'), model_type=model_type)
             model.build_model(configs=configs, verbose=verbose)
 
             # JOB: Fit model
             print(f'\n\nFitting {model_type} model ...')
             timer = Timer().start()
-            model.model.fit(x_train, y_train)
+            model.fit(x_train, y_train)
 
-            print('Feature importances:')
+            print('\nFeature importances:')
             print(model.model.feature_importances_)
             timer.stop()
 
-            print(f'Making predictions on test set ...')
+            print(f'\nMaking predictions on test set ...')
             timer = Timer().start()
             predictions = model.model.predict_proba(x_test)[:, 1]
             timer.stop()
 
-        elif ensemble:
-            model = ensemble
-            print('Ensemble components:')
+        elif ensemble:  # Ensemble of tree-based classifiers
+            model: WeightedEnsemble = ensemble
+            print('Ensemble configuration:')
             print(model)
             model_type = f'Ensemble({", ".join(ensemble.classifier_types)})'
 
             # JOB: Fit models
             print(f'\n\nFitting ensemble  ...')
-            model.fit(x_train, y_train)
+            model.fit(x_train, y_train, feature_names=feature_names)
+
+            print(f'\nOut-of-bag scores: {model.oob_scores}')
 
             weighting_whitelist = ['RandomForestClassifier', 'ExtraTreesClassifier']
             if all([clf_type in weighting_whitelist for clf_type in ensemble.classifier_types]):
@@ -205,6 +216,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
             predictions = model.predict(x_test, weighted=weighted, oob_scores=model.oob_scores)
 
+            # JOB: Testing ensemble components and ensemble performance
             print('Testing ensemble components:')
 
             all_predictions = model.predict_all(x_test)
@@ -216,8 +228,66 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                            parent_model_type=parent_model_type,
                            model_type=base_clf.model_type, history=history,
                            index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
-                           model=model,
+                           model=model.classifiers[i],
                            period_range=period_range, start_date=start_date, end_date=end_date)
+
+    elif parent_model_type == 'mixed':
+        x_train_copy = x_train.copy()
+        y_train_copy = y_train.copy()
+        train_data_index_copy = train_data_index.copy()
+        x_train = []
+        y_train = []
+        x_val = []
+        y_val = []
+        train_index = []
+        val_index = []
+
+        for i in range(len(x_train_copy)):
+            x_train_, x_val_, y_train_, y_val_, train_index_, val_index_ = train_test_split(x_train_copy[i],
+                                                                                            y_train_copy[i].ravel(),
+                                                                                            train_data_index_copy[
+                                                                                                i],
+                                                                                            test_size=0.1,
+                                                                                            random_state=1)
+            x_train.append(x_train_)
+            y_train.append(y_train_)
+            x_val.append(x_val_)
+            y_val.append(y_val_)
+            train_index.append(train_index_)
+            val_index.append(val_index_)
+
+        model: MixedEnsemble = ensemble
+        model_type = str(model)
+        print('Mixed ensemble configuration:')
+        print(model_type)
+
+        # JOB: Fit models
+        print(f'\n\nFitting ensemble  ...')
+        model.fit(x_train, y_train, feature_names=feature_names, x_val=x_val, val_index=val_index,
+                  configs=configs,
+                  folder_path=folder_path, y_test=y_val, test_data_index=val_index, study_period_data=study_period_data.copy())
+
+        print(f'\nValidation/Out-of-bag scores: {model.val_scores}')
+
+        # JOB: Testing ensemble components and ensemble performance
+        print('Testing ensemble components:')
+
+        all_predictions = model.predict_all(x_test)
+        for i, base_clf in enumerate(ensemble.classifiers):
+            print(f'Testing ensemble component {i + 1} ({base_clf.model_type})')
+            test_model(predictions=all_predictions[i],
+                       configs=configs, folder_path=folder_path, test_data_index=test_data_index[i],
+                       y_test=y_test[i], study_period_data=study_period_data.copy(),
+                       parent_model_type=base_clf.parent_model_type,
+                       model_type=base_clf.model_type, history=history,
+                       index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
+                       model=model.classifiers[i],
+                       period_range=period_range, start_date=start_date, end_date=end_date)
+
+        print('Done testing individual models.')
+
+        predictions, y_test, test_data_index = model.predict(x_test, weighted=True, test_data_index=test_data_index,
+                                                             y_test=y_test)
 
     # JOB: Test model
     test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
@@ -230,28 +300,44 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
 
 def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiIndex, cols: list, split_index: int,
-                    configs: dict, full_date_range: pd.Index, model_type: str) -> tuple:
+                    configs: dict, full_date_range: pd.Index, parent_model_type: str,
+                    ensemble: Union[WeightedEnsemble, MixedEnsemble] = None, from_mixed=False) -> tuple:
     """
     Pre-process study period data to obtain training and test sets as well as test data index
 
-    :param model_type: 'deep_learning' or 'tree_based'
+    :param from_mixed: Flag indicating that data is processed for MixedEnsemble component
+    :param ensemble: Ensemble instance
+    :param parent_model_type: 'deep_learning' or 'tree_based'
     :param study_period_data: Full data for study period
     :param unique_indices: MultiIndex of unique indices in study period
     :param cols: Relevant columns
     :param split_index: Split index
     :param configs: Configuration dict
     :param full_date_range: Index of dates
-    :return: Tuple of (x_train, y_train, x_test, y_test, test_data_index)
+    :return: Tuple of (x_train, y_train, x_test, y_test, test_data_index, data_cols)
     """
 
     print(f'{Style.BRIGHT}{Fore.YELLOW}Pre-processing data ...{Style.RESET_ALL}')
     timer = Timer().start()
 
+    if from_mixed and parent_model_type == 'tree_based':
+        cols.extend(['return_index'])
+        cols.remove('stand_d_return')
+
+    if parent_model_type == 'mixed':
+        ensemble_components_parent_types = [get_model_parent_type(configs, clf) for clf in ensemble.classifier_types]
+        return np.array([preprocess_data(
+            study_period_data=study_period_data, unique_indices=unique_indices, cols=cols, split_index=split_index,
+            configs=configs, full_date_range=full_date_range, parent_model_type=parent_model_type,
+            ensemble=None, from_mixed=True) for parent_model_type in ensemble_components_parent_types]).T.tolist()
+
     # JOB: Instantiate training and test data
+    data = None
     x_train = None
     y_train = None
     x_test = None
     y_test = None
+    train_data_index = pd.Index([])
     test_data_index = pd.Index([])
 
     # JOB: Iterate through individual stocks and generate training and test data
@@ -263,7 +349,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
             data = DataLoader(
                 id_data, cols=cols,
                 seq_len=configs['data']['sequence_length'], full_date_range=full_date_range, stock_id=stock_id,
-                split_index=split_index, model_type=model_type
+                split_index=split_index, model_type=parent_model_type
             )
         except AssertionError as ae:
             print(ae)
@@ -303,7 +389,8 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
             else:
                 pass
 
-            # JOB: Append to test data index
+            # JOB: Append to train and test data indices
+            train_data_index = train_data_index.append(data.data_train_index)
             test_data_index = test_data_index.append(data.data_test_index)
 
         # print('Length of test labels: %d' % len(y_test))
@@ -315,18 +402,20 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     print(f'{Style.BRIGHT}{Fore.YELLOW}Done pre-processing data.{Style.RESET_ALL}')
     timer.stop()
 
-    return x_train, y_train, x_test, y_test, test_data_index
+    return x_train, y_train, x_test, y_test, train_data_index, test_data_index, data.cols
 
 
-def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_data_index: pd.MultiIndex,
+def test_model(predictions: np.array, configs: dict, folder_path: str, test_data_index: pd.Index,
                y_test: np.array,
                study_period_data: pd.DataFrame, parent_model_type: str = 'deep_learning', model_type: str = None,
                history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
-               start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today()):
+               start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today(),
+               get_val_score_only=False, **kwargs):
     """
     Test model on unseen data.
 
+    :param get_val_score_only:
     :param model_type:
     :param predictions:
     :param configs:
@@ -345,7 +434,12 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
     :param end_date:
     """
 
-    print(f'\nTesting model on unseen data ...')
+    if kwargs.get('model_index') is not None:
+        y_test = y_test[kwargs['model_index']]
+        predictions = predictions[kwargs['model_index']]
+        test_data_index = test_data_index[kwargs['model_index']]
+
+    print(f'\nTesting {model} model on unseen data ...')
     timer = Timer().start()
     # JOB: Create data frame with true and predicted values
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
@@ -418,6 +512,10 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
             accuracy = accuracy_score(full_portfolio['y_test'].values,
                                       full_portfolio['norm_prediction'].values)
 
+        elif parent_model_type == 'mixed':
+            accuracy = accuracy_score(full_portfolio['y_test'].values,
+                                      full_portfolio['norm_prediction'].values)
+
         mean_daily_excess_return = calc_excess_returns(full_portfolio.loc[:, ['daily_return']]).mean()
 
         mean_daily_return = full_portfolio['daily_return'].mean()
@@ -433,6 +531,9 @@ def test_model(predictions: pd.Series, configs: dict, folder_path: str, test_dat
         top_k_metrics.loc[top_k, 'Annualized Sortino'] = annualized_sortino
         top_k_metrics.loc[top_k, 'Mean Daily Return (Short)'] = mean_daily_short
         top_k_metrics.loc[top_k, 'Mean Daily Return (Long)'] = mean_daily_long
+
+    if get_val_score_only:
+        return top_k_metrics.loc[10, 'Annualized Excess Return']
 
     # JOB: Display top-k metrics
     print(top_k_metrics)

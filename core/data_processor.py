@@ -2,12 +2,11 @@
 This module implements the class DataLoader which implements function for data preprocessing.
 """
 
+from typing import Tuple
+
 import numpy as np
 import pandas as pd
-from typing import Tuple
 from colorama import Fore, Style
-
-from core.utils import Timer
 
 
 class DataLoader:
@@ -33,6 +32,8 @@ class DataLoader:
         self.data = data.copy()
         self.cols = cols.copy()
         self.lag_cols = None
+        self.data_train_index = None
+        self.data_test_index = None
 
         self.data = self.data[self.cols]
 
@@ -76,6 +77,9 @@ class DataLoader:
             else:
                 self.data_test = self.data.values
                 target_start_index = self.i_split + abs(self.i_split - seq_len + 1)
+
+            self.data_train_index = pd.MultiIndex.from_product(
+                [self.data.get(self.cols).iloc[self.seq_len - 1:target_start_index].index, [stock_id]])
         elif model_type == 'tree_based':
             if self.len_train >= self.seq_len:
                 self.data_test = self.data.get(self.cols).iloc[self.i_split - seq_len + 2:].values  # Get test array
@@ -84,6 +88,9 @@ class DataLoader:
                 self.data_test = self.data[1:].values
                 target_start_index = self.i_split + abs(self.i_split - seq_len)
 
+            self.data_train_index = pd.MultiIndex.from_product(
+                [self.data.get(self.cols).iloc[self.seq_len:target_start_index].index, [stock_id]])
+
         self.data_test_index = pd.MultiIndex.from_product(
             [self.data.get(self.cols).iloc[target_start_index:].index, [stock_id]])
 
@@ -91,12 +98,15 @@ class DataLoader:
         self.len_train_windows = None
 
         if verbose:
-            print('Length of index: %d' % len(self.data_test_index))
+            print('Length of train index: %d' % len(self.data_train_index))
+            print('Length of test index: %d' % len(self.data_test_index))
             print('Split index: %s' % self.i_split)
             print('Number of data points: %d' % len(self.data.get(self.cols)))
             print('Number of training data: %d' % self.len_train)
             print('Number of test data: %d' % self.len_test)
             print()
+
+        self.cols = self.cols[1:]
 
     def get_train_data(self):
         """

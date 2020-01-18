@@ -4,6 +4,7 @@ from typing import List
 from sklearn import ensemble
 
 from config import ROOT_DIR
+from core import execute
 
 GPU_ENABLED = True
 
@@ -11,15 +12,16 @@ import os
 import numpy as np
 import datetime as dt
 from numpy import newaxis
+import pandas as pd
 import pprint
 from tensorflow.keras import optimizers
-from colorama import Fore, Back, Style
+from colorama import Fore, Style
+from typing import List, Tuple
 
-from core.utils import Timer
+from core.utils import Timer, get_model_parent_type
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
-from sklearn.ensemble import RandomForestClassifier
 import sklearn.tree
 
 
@@ -38,9 +40,12 @@ class LSTMModel:
         else:
             self.index_name = ''
         self.configs = None
+        self.model_type = 'LSTM'
+        self.parent_model_type = 'deep_learning'
 
     def __repr__(self):
-        return str(self.model.summary())
+        return f'{Style.BRIGHT}{Fore.RED}{self.model.__class__.__name__}' \
+               f'({", ".join([layer.__class__.__name__ for layer in self.model.layers])}){Style.RESET_ALL}'
 
     def get_params(self):
         return self.configs
@@ -105,6 +110,26 @@ class LSTMModel:
 
         print('[Model] Model Compiled')
         timer.stop()
+
+        return self
+
+    def fit(self, x_train: np.array, y_train: np.array, verbose=1, **fit_args):
+        history = self.train(
+            x_train,
+            y_train,
+            epochs=self.configs['training']['epochs'],
+            batch_size=self.configs['training']['batch_size'],
+            save_dir=self.configs['model']['save_dir'], configs=self.configs, verbose=verbose)
+
+        if fit_args.get('x_val'):
+            print(fit_args['model_index'])
+            val_score = execute.test_model(predictions=self.predict(fit_args.get('x_val')[fit_args['model_index']]),
+                                           get_val_score_only=True, **fit_args)
+            return val_score
+
+        best_val_accuracy = float(history.history['val_accuracy'][np.argmin(history.history['val_loss'])])
+
+        return best_val_accuracy
 
     def train(self, x: np.array, y: np.array, epochs: int, batch_size: int, save_dir: str, configs: dict,
               verbose=1):
@@ -207,15 +232,15 @@ class LSTMModel:
         print('[Model] Training Completed. Model saved as %s' % save_fname)
         timer.stop()
 
-    def predict_point_by_point(self, data) -> np.array:
+    def predict(self, x_test: np.array) -> np.array:
         """
         Predict each time step given the last sequence of true data, in effect only predicting 1 step ahead each time
 
-        :param data:
-        :return:
+        :param x_test: Test data
+        :return: Predictions
         """
         print('[Model] Predicting Point-by-Point ...')
-        predicted = self.model.predict(data)
+        predicted = self.model.predict(x_test)
         predicted = np.reshape(predicted, (predicted.size,))
 
         return predicted
@@ -290,6 +315,7 @@ class TreeEnsemble:
 
         self.model = None
         self.model_type = model_type
+        self.parent_model_type = 'tree_based'
         if index_name:
             self.index_name = index_name
         else:
@@ -297,7 +323,19 @@ class TreeEnsemble:
         self.parameters = None
 
     def __repr__(self):
-        return str(self.model)
+        return f'{Style.BRIGHT}{Fore.YELLOW}{self.model}{Style.RESET_ALL}'
+
+    def fit(self, x_train: np.array, y_train: np.array, **fit_args):
+        self.model.fit(x_train, y_train)
+        if fit_args.get('x_val'):
+            val_score = execute.test_model(
+                predictions=self.model.predict_proba(fit_args.get('x_val')[fit_args['model_index']]),
+                get_val_score_only=True, **fit_args)
+            return val_score
+        ret_val = None
+        if hasattr(self.model, 'oob_score_'):
+            ret_val = self.model.oob_score_
+        return ret_val
 
     def get_params(self):
         return self.model.get_params()
@@ -348,20 +386,22 @@ class WeightedEnsemble:
     Class representing a weighted ensemble of individual classifiers
     """
 
-    def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None):
+    def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None,
+                 verbose: int = 0):
         self.classifier_types = classifier_type_list
-        self.classifiers = [TreeEnsemble(index_name=index_name, model_type=m_type).build_model(configs) for m_type in
+        self.classifiers = [TreeEnsemble(index_name=index_name, model_type=m_type).build_model(configs, verbose=verbose)
+                            for m_type in
                             self.classifier_types]
+        self.model_type = str(self)
         self.oob_scores = list()
 
     def __repr__(self):
-        out = []
-        for model in self.classifiers:
-            out.append(str(model))
+        out = f'{Style.BRIGHT}{Fore.BLUE}{self.__class__.__name__}' \
+              f'({", ".join([str(clf.model_type) for clf in self.classifiers])}){Style.RESET_ALL}'
 
-        return str(out)
+        return out
 
-    def fit(self, x_train: np.array, y_train: np.array):
+    def fit(self, x_train: np.array, y_train: np.array, feature_names: List[str] = None, show_importances=True):
         """
         Fit individual models
 
@@ -369,13 +409,22 @@ class WeightedEnsemble:
         """
 
         for model in self.classifiers:
-            print(f'\n\nFitting {model.model_type} model ...')
+            print(f'\n\nFitting {Style.BRIGHT}{Fore.BLUE}{model.model_type}{Style.RESET_ALL} model ...')
             timer = Timer().start()
             model.model.fit(x_train, y_train)
-            self.oob_scores.append(model.model.oob_score_)  # TODO: Move somewhere else
+            if hasattr(model.model, 'oob_score_'):
+                self.oob_scores.append(model.model.oob_score_)
 
-            print('Feature importances:')
-            print(model.model.feature_importances_)
+            if show_importances:
+                if feature_names:
+                    feature_importances = pd.DataFrame(
+                        {'Feature Importance': model.model.feature_importances_.tolist()},
+                        index=feature_names)
+                else:
+                    feature_importances = model.model.feature_importances_
+
+                print('Feature importances:')
+                print(feature_importances)
             timer.stop()
 
     def get_params(self):
@@ -417,12 +466,156 @@ class WeightedEnsemble:
         print('Making aggregated predictions ...')
         timer = Timer().start()
         if weighted:
-            print(f'Weighting with OOB scores [{", ".join([str(np.round(score, 3)) for score in oob_scores])}')
-            weights = [score ** alpha / sum([sc ** alpha for sc in oob_scores]) for score in oob_scores]
-            print(f'Weights: [{", ".join([str(weight) for weight in weights])}')
+            print(f'Weighting with OOB scores [{", ".join([str(np.round(score, 3)) for score in oob_scores])}]')
+            weights = [max(score - .5, 0) ** alpha / sum([max(sc - .5, 0) ** alpha for sc in oob_scores]) for score in
+                       oob_scores]
+            print(f'Weights: [{", ".join([str(weight) for weight in weights])}]')
             predictions = np.average(self.predict_all(x_test), weights=weights, axis=0)
         else:
             predictions = np.mean(self.predict_all(x_test), axis=0)
         timer.stop()
 
         return predictions
+
+    @staticmethod
+    def is_weighted_ensemble(classifier_list, configs):
+        """
+        Determine whether list of classifiers qualified as weighted tree-based ensemble
+
+        :param classifier_list: List of classifier candidates
+        :param configs: Configurations
+        :return: Is mixed type
+        """
+
+        return all([clf in configs['model_hierarchy']['tree_based'] for clf in classifier_list])
+
+
+class MixedEnsemble:
+    """
+    Implements a mixed ensemble with a LSTM and a tree-based classifier
+    """
+
+    def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None,
+                 verbose: int = 0):
+        self.index_name = index_name
+        self.classifier_types = classifier_type_list
+        self.classifiers = [
+            TreeEnsemble(index_name=index_name, model_type=m_type).build_model(configs, verbose=verbose) if
+            get_model_parent_type(model_type=m_type) == 'tree_based'
+            else LSTMModel(index_name=index_name.lower().replace(' ', '_')).build_model(configs=configs,
+                                                                                        verbose=verbose) for m_type in
+            self.classifier_types]
+        self.val_scores = []
+        self.verbose = verbose
+
+        print(f'Successfully created mixed ensemble of {[clf for clf in self.classifiers]}')
+
+    def __repr__(self):
+        out = f'{Style.BRIGHT}{Fore.BLUE}{self.__class__.__name__}' \
+              f'({", ".join([str(clf.model_type) for clf in self.classifiers])}){Style.RESET_ALL}'
+
+        return out
+
+    def fit(self, x_train: list, y_train: list, feature_names: List[List[str]] = None, **fit_args) -> list:
+
+        for i, model in enumerate(self.classifiers):
+            print(f'\n\nFitting {Style.BRIGHT}{Fore.BLUE}{model.model_type}{Style.RESET_ALL} model ...')
+            timer = Timer().start()
+            val_score = model.fit(x_train[i], y_train[i], model_index=i, verbose=self.verbose, **fit_args)
+            if val_score:
+                self.val_scores.append(val_score)
+
+            timer.stop()
+
+        return self.val_scores
+
+    def get_params(self):
+        pass
+
+    def predict_all(self, x_test: np.array) -> np.array:
+        """
+        Predict on test set, separately for each individual classifier
+
+        :param x_test: Test set
+
+        :return: Array with individual predictions in rows
+        """
+        predictions_set = []
+
+        for i, model in enumerate(self.classifiers):
+            predictions = None
+            if isinstance(model, TreeEnsemble):
+                predictions = model.model.predict_proba(x_test[i])[:, 1]
+            elif isinstance(model, LSTMModel):
+                predictions = model.predict(x_test[i])
+
+            predictions_set.append(predictions)
+
+        return np.array(predictions_set)
+
+    def predict(self, x_test: np.array, test_data_index: np.array, y_test: np.array, weighted=False,
+                alpha=2) -> np.array:
+        """
+        Aggregate individual predictions
+
+        :param y_test:
+        :param test_data_index: Array of test data indices
+        :param alpha: Weighting parameter for weighted average
+        :param weighted: Use performance-weighted average
+        :param x_test: Test set
+        :return: Tuple(predictions, y_test_indexed_merged.values, pd.Index(predictions_index_merged.index)
+        """
+        print('Making aggregated predictions ...')
+
+        predictions = self.predict_all(x_test)
+        predictions_index_merged = pd.DataFrame()
+        test_sets = []
+        y_test_sets = []
+
+        for i, preds in enumerate(predictions):
+            # JOB: Create data frame with true and predicted values
+            predictions_indexed = pd.DataFrame({'predictions': preds},
+                                               index=pd.MultiIndex.from_tuples(test_data_index[i],
+                                                                               names=['datadate', 'stock_id']))
+
+            y_test_indexed = pd.DataFrame({'y_test': y_test[i].ravel()},
+                                          index=pd.MultiIndex.from_tuples(test_data_index[i],
+                                                                          names=['datadate', 'stock_id']))
+            test_sets.append(predictions_indexed)
+            y_test_sets.append(y_test_indexed)
+
+        for i in range(len(test_sets) - 1):
+            predictions_index_merged = test_sets[i].merge(test_sets[i + 1], how='inner', left_index=True,
+                                                          right_index=True, suffixes=(f'_{str(i)}', f'_{str(i + 1)}'))
+
+        y_test_indexed_merged = y_test_sets[0].loc[predictions_index_merged.index]
+
+        timer = Timer().start()
+
+        if weighted:
+            print(
+                f'Weighting with Validation/OOB scores [{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
+            weights = [(score - .5) ** alpha / sum([(sc - .5) ** alpha for sc in self.val_scores]) for score in
+                       self.val_scores]
+            print(f'Weights: [{", ".join([str(weight) for weight in weights])}]')
+            predictions = np.average(predictions_index_merged.values, weights=weights, axis=1)
+        else:
+            predictions = np.mean(predictions_index_merged.values, axis=1)
+        timer.stop()
+
+        return predictions, y_test_indexed_merged.values, pd.Index(predictions_index_merged.index)
+
+    @staticmethod
+    def is_mixed_ensemble(classifier_list, configs):
+        """
+        Determine whether list of classifiers qualified as mixed ensemble
+
+        :param classifier_list: List of classifier candidates
+        :param configs: Configurations
+        :return: Is mmixed type
+        """
+
+        has_tree_based = len(set(classifier_list).intersection(configs['model_hierarchy']['tree_based'])) > 0
+        has_lstm = len(set(classifier_list).intersection(configs['model_hierarchy']['deep_learning'])) > 0
+
+        return has_tree_based and has_lstm
