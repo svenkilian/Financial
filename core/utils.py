@@ -1,27 +1,24 @@
 """
 This utilities module implements helper functions for displaying data frames and plotting data.
 """
+import csv
 import datetime as dt
 import glob
 import json
 import os
-import pprint
 
 import matplotlib
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
-from config import ROOT_DIR
+import pandas as pd
+from colorama import Fore, Back, Style
 from matplotlib import ticker
 from matplotlib.ticker import MaxNLocator
 from pandas.plotting import register_matplotlib_converters
-from pygments.lexers import configs
 from tabulate import tabulate
-from colorama import Fore, Back, Style
-import logging
-import csv
-import io
+
+from config import ROOT_DIR
 
 # Update matplotlib setting
 plt.rcParams.update({'legend.fontsize': 8,
@@ -216,7 +213,8 @@ def get_most_recent_file(directory: str) -> str:
     return most_recent_file
 
 
-def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_lookup=False, key_to_lower=False):
+def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_lookup=False, key_to_lower=False) -> (
+        str, str):
     """
     Retrieve index name and lookup table name for given index id and collection of lookup dicts.
 
@@ -235,6 +233,14 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
     :param index_id: Index ID
     :return: Tuple of [0] index_name, [1] lookup_table
     """
+
+    if dict_of_dicts is None:
+        dict_of_dicts = {'Global Dictionary':
+                             {'file_path': 'gvkeyx_name_dict.json',
+                              'lookup_table': 'global'},
+                         'North American Dictionary':
+                             {'file_path': 'gvkeyx_name_dict_na.json',
+                              'lookup_table': 'north_america'}}
 
     # Load index name dict and get index name
     for key, value in dict_of_dicts.items():
@@ -289,27 +295,34 @@ def add_to_json(dict_entry: dict, file_path: str):
     return data
 
 
-def check_directory_for_file(index_name: str = '', folder_path: str = '', force_download: bool = False,
-                             create_dir=True) -> bool:
+def check_directory_for_file(index_name: str = None, index_id=None, folder_path: str = '', force_download: bool = False,
+                             create_dir=True, print_status=True) -> bool:
     """
     Check whether folder path already exists.
 
+    :param print_status: Whether to print status message
+    :param index_id: Index ID
     :param index_name: Name of index
     :param folder_path: Folder path to check
     :param force_download: Flag indicating whether to force download into existing folder
     :param create_dir: Flag indicating whether to create new directory if path does not exist
     :return: Boolean indicating whether to load from file (directory exists)
     """
+
+    if (index_name is None) and (index_id is not None):
+        index_name, _ = lookup_multiple(index_id=index_id)
+
     if os.path.exists(os.path.join(ROOT_DIR, folder_path)):
         if force_download:
             load_from_file = False
-            print('Downloading data from %s into existing folder: %s \n' % (index_name, folder_path))
+            print(f'Downloading data from {index_name} into existing folder: {folder_path}\n')
         else:
             load_from_file = True
-            print('Loading data from %s from folder: %s \n' % (index_name, folder_path))
+            if print_status:
+                print(f'Loading data from {index_name} from folder: {folder_path}\n')
     else:
         if create_dir:
-            print('Creating folder for %s: %s' % (index_name, folder_path))
+            print(f'Creating folder for {index_name} %s')
             os.mkdir(os.path.join(ROOT_DIR, folder_path))
         load_from_file = False
 
@@ -366,6 +379,41 @@ def check_data_conformity(x_train: np.array, y_train: np.array, x_test: np.array
     assert target_mean_test <= 1
 
     return target_mean_train, target_mean_test
+
+
+def print_study_period_ranges(full_data: pd.DataFrame, study_period_ranges: dict) -> None:
+    """
+
+    :param study_period_ranges: Dict containing the study period index and ranges
+    :param full_data:
+    """
+
+    full_date_range = full_data['datadate'].unique()
+    print('\nStudy period date index ranges:')
+    for study_period_no in list(sorted(study_period_ranges.keys())):
+        date_index_tuple = study_period_ranges.get(study_period_no)
+        date_tuple = tuple(
+            pd.to_datetime(date_full).date().isoformat() for date_full in full_date_range[list(date_index_tuple)])
+        print(
+            f'Period {Style.BRIGHT}{Fore.YELLOW}{study_period_no}{Style.RESET_ALL}: {date_index_tuple} -> {date_tuple}')
+
+
+def get_model_parent_type(configs: dict = None, model_type: str = None):
+    """
+    Get parent model type for classifier
+
+    :param configs: Configurations dict
+    :param model_type: Model type to get parent type for
+    """
+    if configs is None:
+        configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
+
+    model_type_reverse_dict = {child_type: parent_type for parent_type in configs['model_hierarchy'].keys() for
+                               child_type in
+                               configs['model_hierarchy'][parent_type]}
+
+    # Return parent model type from dict
+    return model_type_reverse_dict.get(model_type)
 
 
 def annualize_metric(metric: float, holding_periods: int = 1) -> float:
@@ -426,13 +474,14 @@ def get_study_period_ranges(data_length: int, test_period_length: int, study_per
             - (period * test_period_length + study_period_length), -(period * test_period_length + 1))
 
     if reverse:
+        # Reverse dict such that most recent period has largest index
         dict_len = len(study_period_ranges.keys())
         study_period_ranges = {dict_len - key + 1: value for key, value in study_period_ranges.items()}
 
     return study_period_ranges
 
 
-def get_index_name(index_id: str, lookup_dict: dict = None):
+def get_index_name(index_id: str, lookup_dict: dict = None) -> (str, str):
     """
     Get index name and corresponding lookup table based on index ID
 
@@ -514,7 +563,7 @@ def calc_excess_returns(return_series: pd.DataFrame, rf_rate_series: pd.DataFram
     if rf_rate_series is None:
         rf_rate_series = (pd.read_csv(os.path.join(ROOT_DIR, 'data', 'rf_rate_germany.csv'), parse_dates=True,
                                       index_col=0) / 100).resample('D').ffill()
-    combined = return_series.join(deannualize(rf_rate_series), how='inner')
+    combined = return_series.join(deannualize(rf_rate_series), how='left')
     excess_returns = combined['daily_return'].subtract(combined['rf_rate_pct'])
 
     return excess_returns

@@ -3,24 +3,22 @@ This module serves as a starting point for model training and conducting experim
 """
 
 import json
+import os
+
+import pandas as pd
+from colorama import Fore, Style
 
 from config import ROOT_DIR
 from core.data_collection import load_full_data
-from core.model import WeightedEnsemble
-from core.utils import get_index_name, get_study_period_ranges, Timer, deannualize, calc_sharpe
 from core.execute import main
-from colorama import Fore, Style
-import pandas as pd
-import os
+from core.model import WeightedEnsemble, MixedEnsemble
+from core.utils import get_study_period_ranges, Timer, print_study_period_ranges
 
 if __name__ == '__main__':
-    # JOB: Load configurations from file
+    # Load configurations from file
     configs = json.load(open('config.json', 'r'))
 
-    rf_rate_series = pd.read_csv(os.path.join(ROOT_DIR, 'data', 'rf_rate_euro.csv'), parse_dates=True,
-                                 index_col=0) / 100
-
-    # Specify dict of important indices:
+    # Specify dict of important indices
     index_dict = {
         'DJES': '150378',  # Dow Jones European STOXX Index
         'SPEURO': '150913',  # S&P Euro Index
@@ -30,16 +28,20 @@ if __name__ == '__main__':
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['DJ600']
+    index_id = index_dict['DAX']
     cols = ['above_cs_med', *configs['data']['columns']]
     study_period_length = 1000
+    verbose = 2
 
     # JOB: Specify classifier
     model_type = None
-    multiple_models = ['LSTM', ['RandomForestClassifier', 'ExtraTreesClassifier'], ['ExtraTreesClassifier', 'GradientBoostingClassifier']]
-    # ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
+    multiple_models = [['LSTM', 'RandomForestClassifier']]
+
+    ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
+
     # multiple_models = ['RandomForestClassifier', 'ExtraTreesClassifier', 'GradientBoostingClassifier',
     #                    'AdaBoostClassifier']
+
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio
@@ -58,31 +60,32 @@ if __name__ == '__main__':
     # Determine date index ranges of overlapping study periods (trading periods non-overlapping)
     study_period_ranges = get_study_period_ranges(data_length=data_length, test_period_length=test_period_length,
                                                   study_period_length=study_period_length,
-                                                  index_name=index_name, reverse=True, verbose=1)
+                                                  index_name=index_name, reverse=True, verbose=verbose)
 
     # JOB: Print all data ranges for study periods
-    full_date_range = full_data['datadate'].unique()
-    print('\nStudy period date index ranges:')
-    for study_period_no in list(sorted(study_period_ranges.keys())):
-        date_index_tuple = study_period_ranges.get(study_period_no)
-        date_tuple = tuple(
-            str(pd.to_datetime(date_full).date()) for date_full in full_date_range[list(date_index_tuple)])
-        print(
-            f'Period {Style.BRIGHT}{Fore.YELLOW}{study_period_no}{Style.RESET_ALL}: {date_index_tuple} -> {date_tuple}')
+    print_study_period_ranges(full_data, study_period_ranges)
 
     # JOB: Iteratively fit model on all study periods
     # list(sorted(study_period_ranges.keys()))
-    for study_period_ix in range(20, len(study_period_ranges) + 1):
+    for study_period_ix in range(12, len(study_period_ranges) + 1):
         date_range = study_period_ranges.get(study_period_ix)
         print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
         timer = Timer().start()
 
         if multiple_models:
+            # Run multiple models (may include ensembles)
             for model_type in multiple_models:
                 if isinstance(model_type, list):
-                    ensemble = WeightedEnsemble(index_name=index_name.lower().replace(' ', '_'),
-                                                classifier_type_list=model_type, configs=configs)
-                    model_type = None
+
+                    if MixedEnsemble.is_mixed_ensemble(model_type, configs):
+                        ensemble = MixedEnsemble(index_name=index_name.lower().replace(' ', '_'),
+                                                 classifier_type_list=model_type, configs=configs, verbose=verbose)
+                        model_type = None
+
+                    elif WeightedEnsemble.is_weighted_ensemble(model_type, configs):
+                        ensemble = WeightedEnsemble(index_name=index_name.lower().replace(' ', '_'),
+                                                    classifier_type_list=model_type, configs=configs, verbose=verbose)
+                        model_type = None
                 else:
                     ensemble = None
                 main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
@@ -90,9 +93,10 @@ if __name__ == '__main__':
                      columns=cols.copy(), folder_path=folder_path,
                      data_only=False,
                      load_last=False, start_index=date_range[0],
-                     end_index=date_range[1], model_type=model_type, ensemble=ensemble, verbose=2)
+                     end_index=date_range[1], model_type=model_type, ensemble=ensemble, verbose=verbose)
 
         elif ensemble:
+            # Run ensemble only
             main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
                  constituency_matrix=constituency_matrix,
                  columns=cols.copy(), folder_path=folder_path,
@@ -100,16 +104,17 @@ if __name__ == '__main__':
                  load_last=False, start_index=date_range[0],
                  end_index=date_range[1],
                  ensemble=WeightedEnsemble(index_name=index_name.lower().replace(' ', '_'),
-                                           classifier_type_list=ensemble, configs=configs),
+                                           classifier_type_list=ensemble, configs=configs, verbose=verbose),
                  verbose=2)
 
         else:
+            # Run single classifier
             main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
                  constituency_matrix=constituency_matrix,
                  columns=cols.copy(), folder_path=folder_path,
                  data_only=False,
                  load_last=False, start_index=date_range[0],
-                 end_index=date_range[1], model_type=model_type, verbose=2)
+                 end_index=date_range[1], model_type=model_type, verbose=verbose)
 
         print(f'\n\n{Fore.GREEN}{Style.BRIGHT}Done fitting on period {study_period_ix}.{Style.RESET_ALL}')
         timer.stop()

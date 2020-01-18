@@ -10,14 +10,13 @@ import re
 import sys
 import time
 import warnings
-from typing import List, Tuple
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
 import wrds
 from colorama import Fore, Back, Style
 
-from core import utils
 # Configurations for displaying DataFrames
 from config import ROOT_DIR
 from core.utils import get_index_name, check_directory_for_file, Timer, lookup_multiple
@@ -34,7 +33,7 @@ pd.set_option('colheader_justify', 'left')
 pd.set_option('display.width', 800)
 pd.set_option('display.html.table_schema', False)
 
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import StandardScaler
 
 pd.set_option('mode.chained_assignment', None)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
@@ -108,7 +107,8 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
                            parse_dates=False, index_col=0)
         data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'], infer_datetime_format=True).dt.date
 
-    if generate_dict:
+    if not check_directory_for_file(index_id=index_id, folder_path=os.path.join(folder_path, 'gvkey_name_dict.json'),
+                                    create_dir=False, print_status=False):
         generate_company_lookup_dict(folder_path=folder_path, data=data)
 
     return data
@@ -246,7 +246,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     print(f'Retrieving index constituency for {index_name} as of {split_date.date()}.')
     try:
         constituent_indices = get_index_constituents(constituency_matrix, date=split_date,
-                                                     folder_path=folder_path)
+                                                     folder_path=folder_path, print_constituents=False)
         if len(constituent_indices) < 2:
             raise RuntimeWarning('Period contains too few constituents. Continuing with next study period.')
     except IndexError as ie:
@@ -266,11 +266,10 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     # print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
     assert len(constituent_indices.intersection(full_data.index)) == len(constituent_indices)
 
-    print('Filtering by study period constituents ...')
+    print('\nFiltering by study period constituents ...')
     timer = Timer().start()
     full_data = full_data.loc[constituent_indices, :]
-    print(f'Number of constituents: {len(constituent_indices)}')
-    print(f'Number of constituents: {full_data.index.get_level_values(level="gvkey").unique().shape[0]}')
+    # print(f'Number of constituents (deduplicated): {full_data.index.get_level_values(level="gvkey").unique().shape[0]}')
     full_data.reset_index(inplace=True)
     full_data.set_index('datadate', inplace=True)
     full_data.sort_index(inplace=True)
@@ -292,11 +291,13 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 
     if 'ind_mom_ratio' in columns:
         print('Removing records without 6-month momentum ...')
+        print('Missing records before removal:')
         print(study_data[study_data['6m_mom'].isna()].set_index(['gvkey', 'iid'], append=True).index.get_level_values(
-            level='gvkey').unique().shape)
-        study_data.dropna(how='any', subset=['6m_mom'], inplace=True)  # Review
+            level='gvkey').unique().shape[0])
+        study_data.dropna(how='any', subset=['6m_mom'], inplace=True)
+        print('Missing records after removal:')
         print(study_data[study_data['6m_mom'].isna()].set_index(['gvkey', 'iid'], append=True).index.get_level_values(
-            level='gvkey').unique().shape)
+            level='gvkey').unique().shape[0])
 
     del full_data
 
@@ -341,14 +342,15 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
         # JOB: Add industry momentum column
         study_data.loc[:, 'ind_mom'] = study_data.groupby(['gics_sector', 'datadate'])['6m_mom'].transform('mean')
 
-        study_data.dropna(how='any', subset=['ind_mom'], inplace=True)  # Review
-        # study_data = study_data[study_data['ind_mom'].ne(0)]
+        # Drop observations with missing industry momentum
+        study_data.dropna(how='any', subset=['ind_mom'], inplace=True)
 
         # JOB: Add 'ind_mom_ratio' column
-        study_data.loc[:, 'ind_mom_ratio'] = study_data.loc[:, 'daily_return'].divide(study_data.loc[:, 'ind_mom'])
+        study_data.loc[:, 'ind_mom_ratio'] = study_data.loc[:, '6m_mom'].divide(study_data.loc[:, 'ind_mom'])
 
-        # Remove data with missing industry momentum ratio
-        study_data = study_data[study_data['ind_mom_ratio'] != np.inf]
+        # JOB: Remove data with missing or unbounded industry momentum ratio
+        study_data = study_data[study_data['ind_mom_ratio'].ne(np.inf)]
+        study_data.dropna(subset=['ind_mom_ratio'], inplace=True)
 
         # Standardize ind_mom_ratio
         study_data.loc[:, 'ind_mom_ratio'] = StandardScaler().fit_transform(
@@ -483,7 +485,7 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
 
         if folder_path is None:
             if index_name is None:
-                index_name, lookup_table = utils.lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_id)
+                index_name, lookup_table = lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_id)
 
             folder_path = os.path.join(ROOT_DIR, 'data',
                                        index_name.lower().replace(' ', '_'))  # Path to index data folder
@@ -509,7 +511,7 @@ def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, fo
             index_id, lookup_table = lookup_multiple(dict_of_dicts=lookup_dict, index_id=index_name,
                                                      reverse_lookup=True, key_to_lower=True)
 
-        folder_exists = utils.check_directory_for_file(index_name=index_name, folder_path=folder_path, create_dir=False)
+        folder_exists = check_directory_for_file(index_name=index_name, folder_path=folder_path, create_dir=False)
 
         if folder_exists:
             print(f'Creating GICS matrix for {index_id}: {index_name.capitalize()}')
@@ -659,7 +661,8 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
         print_constituents = False
 
     # print(lookup_dict)
-    print(f'Number of constituents: {len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
+    print(
+        f'Number of constituents (index constituency matrix): {len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
     # print(
     #     f"List of constituents: {constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values('gvkey').tolist()}")
 
@@ -795,6 +798,9 @@ def generate_company_lookup_dict(folder_path: str, data: pd.DataFrame) -> None:
 
     :return:
     """
+
+    if 'conm' not in data.columns:
+        data.rename(columns={'conml': 'conm'}, inplace=True)
 
     # JOB: Create company name dictionary and save to file
     company_name_lookup = data.reset_index()
