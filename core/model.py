@@ -114,15 +114,23 @@ class LSTMModel:
         return self
 
     def fit(self, x_train: np.array, y_train: np.array, verbose=1, **fit_args):
+        validation_data = None
+        if fit_args.get('x_val') is not None:
+            validation_data = (fit_args['x_val'][fit_args['model_index']], fit_args['y_test'][fit_args['model_index']])
+            validation_split = None
+        else:
+            validation_split = 0.2
+
         history = self.train(
             x_train,
             y_train,
             epochs=self.configs['training']['epochs'],
             batch_size=self.configs['training']['batch_size'],
-            save_dir=self.configs['model']['save_dir'], configs=self.configs, verbose=verbose)
+            save_dir=self.configs['model']['save_dir'], configs=self.configs, validation_data=validation_data,
+            validation_split=validation_split,
+            verbose=verbose)
 
         if fit_args.get('x_val'):
-            print(fit_args['model_index'])
             val_score = execute.test_model(predictions=self.predict(fit_args.get('x_val')[fit_args['model_index']]),
                                            get_val_score_only=True, **fit_args)
             return val_score
@@ -132,10 +140,13 @@ class LSTMModel:
         return best_val_accuracy
 
     def train(self, x: np.array, y: np.array, epochs: int, batch_size: int, save_dir: str, configs: dict,
+              validation_data: Tuple[np.array, np.array] = None, validation_split=0.2,
               verbose=1):
         """
         Train model (in-memory)
 
+        :param validation_split:
+        :param validation_data:
         :param x: Input data
         :param y: Target data
         :param epochs: Number of epochs
@@ -184,7 +195,8 @@ class LSTMModel:
                 epochs=epochs,
                 batch_size=batch_size,
                 callbacks=callbacks,
-                validation_split=0.20,
+                validation_split=validation_split,
+                validation_data=validation_data,
                 shuffle=True,
                 verbose=verbose
             )
@@ -239,7 +251,7 @@ class LSTMModel:
         :param x_test: Test data
         :return: Predictions
         """
-        print('[Model] Predicting Point-by-Point ...')
+        print('[Model] Predicting on test data ...')
         predicted = self.model.predict(x_test)
         predicted = np.reshape(predicted, (predicted.size,))
 
@@ -336,7 +348,7 @@ class TreeEnsemble:
         self.model.fit(x_train, y_train)
         if fit_args.get('x_val'):
             val_score = execute.test_model(
-                predictions=self.model.predict_proba(fit_args.get('x_val')[fit_args['model_index']]),
+                predictions=self.model.predict_proba(fit_args.get('x_val')[fit_args['model_index']])[:, 1],
                 get_val_score_only=True, **fit_args)
             return val_score
         ret_val = None
@@ -514,6 +526,7 @@ class MixedEnsemble:
             self.classifier_types]
         self.val_scores = []
         self.verbose = verbose
+        self.type = f'{self.__class__.__name__}({", ".join([str(clf.model_type) for clf in self.classifiers])})'
 
         print(f'Successfully created mixed ensemble of {[clf for clf in self.classifiers]}')
 
@@ -535,6 +548,7 @@ class MixedEnsemble:
         """
 
         for i, model in enumerate(self.classifiers):
+            # JOB: Fit each ensemble component and evaluate performance on validation data
             print(f'\n\nFitting {Style.BRIGHT}{Fore.BLUE}{model.model_type}{Style.RESET_ALL} model ...')
             timer = Timer().start()
             val_score = model.fit(x_train[i], y_train[i], model_index=i, verbose=self.verbose, **fit_args)
@@ -611,7 +625,7 @@ class MixedEnsemble:
         if weighted:
             print(
                 f'Weighting with Validation/OOB scores [{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
-            weights = [(score - .5) ** alpha / sum([(sc - .5) ** alpha for sc in self.val_scores]) for score in
+            weights = [max(score, 0) ** alpha / max(sum([max(sc, 0) ** alpha for sc in self.val_scores]), 0) for score in
                        self.val_scores]
             print(f'Weights: [{", ".join([str(weight) for weight in weights])}]')
             predictions = np.average(predictions_index_merged.values, weights=weights, axis=1)

@@ -31,7 +31,7 @@ if __name__ == '__main__':
     index_id = index_dict['DAX']
     cols = ['above_cs_med', *configs['data']['columns']]
     study_period_length = 1000
-    verbose = 2
+    verbose = 0
 
     # JOB: Specify classifier
     model_type = None
@@ -67,7 +67,7 @@ if __name__ == '__main__':
 
     # JOB: Iteratively fit model on all study periods
     # list(sorted(study_period_ranges.keys()))
-    for study_period_ix in range(12, len(study_period_ranges) + 1):
+    for study_period_ix in range(16, len(study_period_ranges) + 1):
         date_range = study_period_ranges.get(study_period_ix)
         print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
         timer = Timer().start()

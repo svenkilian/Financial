@@ -1,3 +1,5 @@
+import random
+
 __author__ = "Sven Köpke"
 __copyright__ = "Sven Köpke 2019"
 __version__ = "0.0.1"
@@ -66,6 +68,11 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
         columns.extend(['return_index'])
         columns.remove('stand_d_return')
 
+    if parent_model_type == 'mixed':
+        return_validation_data = True
+    else:
+        return_validation_data = False
+
     # Delete columns containing 'unnamed' and save file
     if any('unnamed' in s.lower() for s in full_data.columns):
         full_data = full_data.get([column for column in full_data.columns if not column.startswith('Unnamed')])
@@ -122,14 +129,14 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     print(f'Annualized Sharpe Ratio: {np.round(sharpe_ratio_sp, 4)}')
 
     # JOB: Obtain training and test data as well as test data index and feature names
-    x_train, y_train, x_test, y_test, train_data_index, test_data_index, feature_names = preprocess_data(
-        study_period_data=study_period_data,
+    x_train, y_train, x_test, y_test, train_data_index, test_data_index, feature_names, validation_data = preprocess_data(
+        study_period_data=study_period_data.copy(),
         split_index=split_index,
         unique_indices=unique_indices, cols=columns,
         configs=configs,
         full_date_range=full_date_range,
         parent_model_type=parent_model_type,
-        ensemble=ensemble)
+        ensemble=ensemble, return_validation_data=return_validation_data)
 
     if parent_model_type != 'mixed':
         print(f'\nLength of training data: {x_train.shape}')
@@ -203,7 +210,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
             model_type = f'Ensemble({", ".join(ensemble.classifier_types)})'
 
             # JOB: Fit models
-            print(f'\n\nFitting ensemble  ...')
+            print(f'\n\nFitting ensemble ...')
             model.fit(x_train, y_train, feature_names=feature_names)
 
             print(f'\nOut-of-bag scores: {model.oob_scores}')
@@ -232,40 +239,28 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                            period_range=period_range, start_date=start_date, end_date=end_date)
 
     elif parent_model_type == 'mixed':
-        x_train_copy = x_train.copy()
-        y_train_copy = y_train.copy()
-        train_data_index_copy = train_data_index.copy()
-        x_train = []
-        y_train = []
-        x_val = []
-        y_val = []
-        train_index = []
-        val_index = []
-
-        for i in range(len(x_train_copy)):
-            x_train_, x_val_, y_train_, y_val_, train_index_, val_index_ = train_test_split(x_train_copy[i],
-                                                                                            y_train_copy[i].ravel(),
-                                                                                            train_data_index_copy[
-                                                                                                i],
-                                                                                            test_size=0.1,
-                                                                                            random_state=1)
-            x_train.append(x_train_)
-            y_train.append(y_train_)
-            x_val.append(x_val_)
-            y_val.append(y_val_)
-            train_index.append(train_index_)
-            val_index.append(val_index_)
-
+        # JOB: Fitting and testing in case of mixed ensemble
         model: MixedEnsemble = ensemble
         model_type = str(model)
         print('Mixed ensemble configuration:')
         print(model_type)
 
+        x_val = []
+        y_val = []
+        val_index = []
+
+        for i in range(len(model.classifiers)):
+            x_val_i, y_val_i, val_index_i = validation_data[i]
+            x_val.append(x_val_i)
+            y_val.append(y_val_i)
+            val_index.append(val_index_i)
+
         # JOB: Fit models
         print(f'\n\nFitting ensemble  ...')
         model.fit(x_train, y_train, feature_names=feature_names, x_val=x_val, val_index=val_index,
                   configs=configs,
-                  folder_path=folder_path, y_test=y_val, test_data_index=val_index, study_period_data=study_period_data.copy())
+                  folder_path=folder_path, y_test=y_val, test_data_index=val_index,
+                  study_period_data=study_period_data.copy(), weighting_criterion='Annualized Sharpe')
 
         print(f'\nValidation/Out-of-bag scores: {model.val_scores}')
 
@@ -292,7 +287,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     # JOB: Test model
     test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
                y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
-               model_type=model_type, history=history,
+               model_type=model.type, history=history,
                index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
                period_range=period_range, start_date=start_date, end_date=end_date)
 
@@ -301,10 +296,12 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
 def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiIndex, cols: list, split_index: int,
                     configs: dict, full_date_range: pd.Index, parent_model_type: str,
-                    ensemble: Union[WeightedEnsemble, MixedEnsemble] = None, from_mixed=False) -> tuple:
+                    ensemble: Union[WeightedEnsemble, MixedEnsemble] = None, from_mixed=False,
+                    return_validation_data=False) -> tuple:
     """
     Pre-process study period data to obtain training and test sets as well as test data index
 
+    :param return_validation_data: Whether to return tuple of validation data
     :param from_mixed: Flag indicating that data is processed for MixedEnsemble component
     :param ensemble: Ensemble instance
     :param parent_model_type: 'deep_learning' or 'tree_based'
@@ -314,7 +311,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     :param split_index: Split index
     :param configs: Configuration dict
     :param full_date_range: Index of dates
-    :return: Tuple of (x_train, y_train, x_test, y_test, test_data_index, data_cols)
+    :return: Tuple of (x_train, y_train, x_test, y_test, test_data_index, data_cols, [Optional](validation data tuple))
     """
 
     print(f'{Style.BRIGHT}{Fore.YELLOW}Pre-processing data ...{Style.RESET_ALL}')
@@ -325,20 +322,32 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
         cols.remove('stand_d_return')
 
     if parent_model_type == 'mixed':
+        # JOB: Pre-process data separately for each mixed ensemble component
         ensemble_components_parent_types = [get_model_parent_type(configs, clf) for clf in ensemble.classifier_types]
         return np.array([preprocess_data(
             study_period_data=study_period_data, unique_indices=unique_indices, cols=cols, split_index=split_index,
             configs=configs, full_date_range=full_date_range, parent_model_type=parent_model_type,
-            ensemble=None, from_mixed=True) for parent_model_type in ensemble_components_parent_types]).T.tolist()
+            ensemble=None, from_mixed=True, return_validation_data=True) for parent_model_type in
+            ensemble_components_parent_types]).T.tolist()
 
     # JOB: Instantiate training and test data
     data = None
     x_train = None
     y_train = None
+    x_val = None
+    y_val = None
     x_test = None
     y_test = None
+    validation_mask = []
     train_data_index = pd.Index([])
+    validation_data_index = pd.Index([])
     test_data_index = pd.Index([])
+
+    train_range = full_date_range[configs['data']['sequence_length'] + 1:split_index + 1]
+    print(f'Last training date: {full_date_range[split_index]}')
+    validation_range = full_date_range[random.sample(range(split_index + 1), int(0.3 * split_index))]
+    print(f'Training range length: {len(train_range)}')
+    print(f'Validation range length: {len(validation_range)}')
 
     # JOB: Iterate through individual stocks and generate training and test data
     for stock_id in unique_indices:
@@ -358,40 +367,39 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
         # print('Length of data for ID %s: %d' % (stock_id, len(id_data)))
 
         # JOB: Generate training data
-        x, y = data.get_train_data()
+        x_train_i, y_train_i = data.get_train_data()
 
         # JOB: Generate test data
-        x_t, y_t = data.get_test_data(
+        x_test_i, y_test_i = data.get_test_data(
             seq_len=configs['data']['sequence_length'],
         )
 
         # JOB: In case training/test set is empty, set to first batch, otherwise append data
-        if (len(x) > 0) and (len(y) > 0):
+        if (len(x_train_i) > 0) and (len(y_train_i) > 0):
+            train_data_index = train_data_index.append(data.data_train_index)
+            mask = [date_i in validation_range for date_i in data.data_train_index.get_level_values(level=0)]
+            validation_mask.extend(mask)
             if x_train is None:
-                x_train = x
-                y_train = y
+                x_train = x_train_i
+                y_train = y_train_i
             else:
-                x_train = np.append(x_train, x, axis=0)
-                y_train = np.append(y_train, y, axis=0)
+                x_train = np.append(x_train, x_train_i, axis=0)
+                y_train = np.append(y_train, y_train_i, axis=0)
 
-        if (len(x_t) > 0) and (len(y_t) > 0):
+        if (len(x_test_i) > 0) and (len(y_test_i) > 0):
+            test_data_index = test_data_index.append(data.data_test_index)
             if x_test is None:
-                x_test = x_t
-                y_test = y_t
+                x_test = x_test_i
+                y_test = y_test_i
             else:
-                x_test = np.append(x_test, x_t, axis=0)
-                y_test = np.append(y_test, y_t, axis=0)
+                x_test = np.append(x_test, x_test_i, axis=0)
+                y_test = np.append(y_test, y_test_i, axis=0)
 
-            if len(y_t) != len(data.data_test_index):
+            if len(y_test_i) != len(data.data_test_index):
                 print(f'\nMismatch for index {stock_id}')
                 print(f'{Fore.YELLOW}{Back.RED}{Style.BRIGHT}Lengths do not conform!{Style.RESET_ALL}')
-                print(f'Target length: {len(y_t)}, index length: {len(data.data_test_index)}')
-            else:
-                pass
-
-            # JOB: Append to train and test data indices
-            train_data_index = train_data_index.append(data.data_train_index)
-            test_data_index = test_data_index.append(data.data_test_index)
+                print(f'Target length: {len(y_test_i)}, index length: {len(data.data_test_index)}')
+                raise AssertionError('Data length is not conforming.')
 
         # print('Length of test labels: %d' % len(y_test))
         # print('Length of test index: %d\n' % len(test_data_index))
@@ -399,10 +407,25 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
         if len(y_test) != len(test_data_index):
             raise AssertionError('Data length is not conforming.')
 
+    print(f'Length training data (before): {len(x_train)}')
+
+    if return_validation_data:
+        inverse_mask = [not m for m in validation_mask]
+        x_val = x_train[validation_mask]
+        y_val = y_train[validation_mask]
+        validation_data_index = train_data_index[validation_mask]
+        x_train = x_train[inverse_mask]
+        y_train = y_train[inverse_mask]
+        train_data_index = train_data_index[inverse_mask]
+
+    print(f'Length x_train: {len(x_train)}')
+    print(f'Length x_val: {len(x_val)}')
+
     print(f'{Style.BRIGHT}{Fore.YELLOW}Done pre-processing data.{Style.RESET_ALL}')
     timer.stop()
 
-    return x_train, y_train, x_test, y_test, train_data_index, test_data_index, data.cols
+    return x_train, y_train, x_test, y_test, train_data_index, test_data_index, data.cols, (
+        x_val, y_val, validation_data_index)
 
 
 def test_model(predictions: np.array, configs: dict, folder_path: str, test_data_index: pd.Index,
@@ -411,10 +434,11 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
                history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
                start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today(),
-               get_val_score_only=False, **kwargs):
+               get_val_score_only=False, weighting_criterion=None, **kwargs):
     """
     Test model on unseen data.
 
+    :param weighting_criterion:
     :param get_val_score_only:
     :param model_type:
     :param predictions:
@@ -436,8 +460,8 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
 
     if kwargs.get('model_index') is not None:
         y_test = y_test[kwargs['model_index']]
-        predictions = predictions[kwargs['model_index']]
         test_data_index = test_data_index[kwargs['model_index']]
+        study_period_data = study_period_data.copy()
 
     print(f'\nTesting {model} model on unseen data ...')
     timer = Timer().start()
@@ -533,7 +557,7 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         top_k_metrics.loc[top_k, 'Mean Daily Return (Long)'] = mean_daily_long
 
     if get_val_score_only:
-        return top_k_metrics.loc[10, 'Annualized Excess Return']
+        return top_k_metrics.loc[10, weighting_criterion]
 
     # JOB: Display top-k metrics
     print(top_k_metrics)
@@ -562,7 +586,7 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
 
         print(f'\nTest score on full test set: {float(np.round(test_score, 4))}')
 
-    elif parent_model_type == 'tree_based':
+    elif parent_model_type in ['tree_based', 'mixed']:
         test_score = accuracy_score(test_set_comparison['y_test'].values,
                                     test_set_comparison['norm_prediction'].values)
         print(f'\nTest score on full test set: {np.round(test_score, 4)}')

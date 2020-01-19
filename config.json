@@ -9,9 +9,9 @@
     "normalize": true
   },
   "training": {
-    "epochs": 10,
+    "epochs": 5,
     "batch_size": 32,
-    "early_stopping_patience": 1
+    "early_stopping_patience": 3
   },
   "model": {
     "loss": "binary_crossentropy",
@@ -24,16 +24,12 @@
     "save_dir": "saved_models",
     "layers": [
       {
-        "type": "lstm",
+        "type": "gru",
         "params": {
-          "units": 25,
+          "units": 40,
           "dropout": 0.1,
           "recurrent_dropout": 0.0,
           "kernel_regularizer": "l2",
-          "input_shape": [
-            240,
-            2
-          ],
           "return_sequences": false
         }
       },
@@ -47,7 +43,7 @@
     ]
   },
   "RandomForestClassifier": {
-    "n_estimators": 200,
+    "n_estimators": 500,
     "max_depth": 20,
     "n_jobs": -1,
     "oob_score": true,
