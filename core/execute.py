@@ -127,6 +127,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     sharpe_ratio_sp = calc_sharpe(study_period_data.set_index('datadate').loc[:, ['daily_return']], annualize=True)
 
     print(f'Annualized Sharpe Ratio: {np.round(sharpe_ratio_sp, 4)}')
+    validation_range = full_date_range[random.sample(range(split_index + 1), int(0.25 * split_index))]
 
     # JOB: Obtain training and test data as well as test data index and feature names
     x_train, y_train, x_test, y_test, train_data_index, test_data_index, feature_names, validation_data = preprocess_data(
@@ -136,7 +137,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
         configs=configs,
         full_date_range=full_date_range,
         parent_model_type=parent_model_type,
-        ensemble=ensemble, return_validation_data=return_validation_data)
+        ensemble=ensemble, return_validation_data=return_validation_data, validation_range=validation_range)
 
     if parent_model_type != 'mixed':
         print(f'\nLength of training data: {x_train.shape}')
@@ -297,10 +298,11 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiIndex, cols: list, split_index: int,
                     configs: dict, full_date_range: pd.Index, parent_model_type: str,
                     ensemble: Union[WeightedEnsemble, MixedEnsemble] = None, from_mixed=False,
-                    return_validation_data=False) -> tuple:
+                    return_validation_data=False, validation_range: list = None) -> tuple:
     """
     Pre-process study period data to obtain training and test sets as well as test data index
 
+    :param validation_range:
     :param return_validation_data: Whether to return tuple of validation data
     :param from_mixed: Flag indicating that data is processed for MixedEnsemble component
     :param ensemble: Ensemble instance
@@ -327,7 +329,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
         return np.array([preprocess_data(
             study_period_data=study_period_data, unique_indices=unique_indices, cols=cols, split_index=split_index,
             configs=configs, full_date_range=full_date_range, parent_model_type=parent_model_type,
-            ensemble=None, from_mixed=True, return_validation_data=True) for parent_model_type in
+            ensemble=None, from_mixed=True, return_validation_data=True, validation_range=validation_range) for parent_model_type in
             ensemble_components_parent_types]).T.tolist()
 
     # JOB: Instantiate training and test data
@@ -345,7 +347,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
 
     train_range = full_date_range[configs['data']['sequence_length'] + 1:split_index + 1]
     print(f'Last training date: {full_date_range[split_index]}')
-    validation_range = full_date_range[random.sample(range(split_index + 1), int(0.3 * split_index))]
+
     print(f'Training range length: {len(train_range)}')
     print(f'Validation range length: {len(validation_range)}')
 
