@@ -5,3 +5,4 @@ This module serves to provide the project's root path through the ROOT_DIR varia
 import os
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+run_id = None

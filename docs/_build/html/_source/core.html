@@ -303,7 +303,6 @@
 <li><p><strong>index_id</strong> – Index ID to load data for</p></li>
 <li><p><strong>force_download</strong> – Flag indicating whether to overwrite existing data</p></li>
 <li><p><strong>last_n</strong> – Number of last available dates to consider</p></li>
-<li><p><strong>configs</strong> – Dict containing model and training configurations</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -344,7 +343,6 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>seq_len</strong> – Sequence length</p></li>
 <li><p><strong>batch_size</strong> – Batch size</p></li>
-<li><p><strong>normalize</strong> – Normalize data</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -394,10 +392,7 @@ save_dir=configs[‘model’][‘save_dir’]</p>
 load data, otherwise reduce size of the training split.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>seq_len</strong> – Sequence length</p></li>
-<li><p><strong>normalize</strong> – Normalize data</p></li>
-</ul>
+<dd class="field-odd"><p><strong>seq_len</strong> – Sequence length</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p></p>
@@ -425,11 +420,12 @@ load data, otherwise use generate_training_window() method.</p>
 <span id="core-execute-module"></span><h2>core.execute module<a class="headerlink" href="#module-core.execute" title="Permalink to this headline">¶</a></h2>
 <dl class="function">
 <dt id="core.execute.main">
-<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">main</code><span class="sig-paren">(</span><em class="sig-param">index_id='150095'</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">full_data=None</em>, <em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame = None</em>, <em class="sig-param">folder_path: str = None</em>, <em class="sig-param">columns: list = None</em>, <em class="sig-param">data_only=False</em>, <em class="sig-param">load_last: bool = False</em>, <em class="sig-param">start_index: int = -1001</em>, <em class="sig-param">end_index: int = -1</em>, <em class="sig-param">model_type: str = None</em>, <em class="sig-param">ensemble: core.model.WeightedEnsemble = None</em>, <em class="sig-param">verbose=2</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.main" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">main</code><span class="sig-paren">(</span><em class="sig-param">index_id='150095'</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">full_data=None</em>, <em class="sig-param">constituency_matrix: pandas.core.frame.DataFrame = None</em>, <em class="sig-param">folder_path: str = None</em>, <em class="sig-param">columns: list = None</em>, <em class="sig-param">data_only=False</em>, <em class="sig-param">load_last: bool = False</em>, <em class="sig-param">start_index: int = -1001</em>, <em class="sig-param">end_index: int = -1</em>, <em class="sig-param">model_type: str = None</em>, <em class="sig-param">ensemble: Union[core.model.WeightedEnsemble</em>, <em class="sig-param">core.model.MixedEnsemble] = None</em>, <em class="sig-param">verbose=2</em>, <em class="sig-param">plotting=False</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.main" title="Permalink to this definition">¶</a></dt>
 <dd><p>Run data preparation and model training</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>plotting</strong> – </p></li>
 <li><p><strong>ensemble</strong> – </p></li>
 <li><p><strong>folder_path</strong> – </p></li>
 <li><p><strong>constituency_matrix</strong> – </p></li>
@@ -453,12 +449,16 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="function">
 <dt id="core.execute.preprocess_data">
-<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">preprocess_data</code><span class="sig-paren">(</span><em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">unique_indices: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">cols: list</em>, <em class="sig-param">split_index: int</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">full_date_range: pandas.core.indexes.base.Index</em>, <em class="sig-param">model_type: str</em><span class="sig-paren">)</span> &#x2192; tuple<a class="headerlink" href="#core.execute.preprocess_data" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">preprocess_data</code><span class="sig-paren">(</span><em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">unique_indices: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">cols: list</em>, <em class="sig-param">split_index: int</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">full_date_range: pandas.core.indexes.base.Index</em>, <em class="sig-param">parent_model_type: str</em>, <em class="sig-param">ensemble: Union[core.model.WeightedEnsemble</em>, <em class="sig-param">core.model.MixedEnsemble] = None</em>, <em class="sig-param">from_mixed=False</em>, <em class="sig-param">return_validation_data=False</em>, <em class="sig-param">validation_range: list = None</em><span class="sig-paren">)</span> &#x2192; tuple<a class="headerlink" href="#core.execute.preprocess_data" title="Permalink to this definition">¶</a></dt>
 <dd><p>Pre-process study period data to obtain training and test sets as well as test data index</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>model_type</strong> – ‘deep_learning’ or ‘tree_based’</p></li>
+<li><p><strong>validation_range</strong> – </p></li>
+<li><p><strong>return_validation_data</strong> – Whether to return tuple of validation data</p></li>
+<li><p><strong>from_mixed</strong> – Flag indicating that data is processed for MixedEnsemble component</p></li>
+<li><p><strong>ensemble</strong> – Ensemble instance</p></li>
+<li><p><strong>parent_model_type</strong> – ‘deep_learning’ or ‘tree_based’</p></li>
 <li><p><strong>study_period_data</strong> – Full data for study period</p></li>
 <li><p><strong>unique_indices</strong> – MultiIndex of unique indices in study period</p></li>
 <li><p><strong>cols</strong> – Relevant columns</p></li>
@@ -468,18 +468,21 @@ load data, otherwise use generate_training_window() method.</p>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Tuple of (x_train, y_train, x_test, y_test, test_data_index)</p>
+<dd class="field-even"><p>Tuple of (x_train, y_train, x_test, y_test, test_data_index, data_cols, [Optional](validation data tuple))</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="function">
 <dt id="core.execute.test_model">
-<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">test_model</code><span class="sig-paren">(</span><em class="sig-param">predictions: pandas.core.series.Series</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">test_data_index: pandas.core.indexes.multi.MultiIndex</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">parent_model_type: str = 'deep_learning'</em>, <em class="sig-param">model_type: str = None</em>, <em class="sig-param">history=None</em>, <em class="sig-param">index_id=''</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">study_period_length: int = 0</em>, <em class="sig-param">model=None</em>, <em class="sig-param">period_range: tuple = (0</em>, <em class="sig-param">0)</em>, <em class="sig-param">start_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">14)</em>, <em class="sig-param">end_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">14)</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.test_model" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.execute.</code><code class="sig-name descname">test_model</code><span class="sig-paren">(</span><em class="sig-param">predictions: numpy.array</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">folder_path: str</em>, <em class="sig-param">test_data_index: pandas.core.indexes.base.Index</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">study_period_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">parent_model_type: str = 'deep_learning'</em>, <em class="sig-param">model_type: str = None</em>, <em class="sig-param">history=None</em>, <em class="sig-param">index_id=''</em>, <em class="sig-param">index_name=''</em>, <em class="sig-param">study_period_length: int = 0</em>, <em class="sig-param">model=None</em>, <em class="sig-param">period_range: tuple = (0</em>, <em class="sig-param">0)</em>, <em class="sig-param">start_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">21)</em>, <em class="sig-param">end_date: datetime.date = datetime.date(2020</em>, <em class="sig-param">1</em>, <em class="sig-param">21)</em>, <em class="sig-param">get_val_score_only=False</em>, <em class="sig-param">weighting_criterion=None</em>, <em class="sig-param">plotting=False</em>, <em class="sig-param">**kwargs</em><span class="sig-paren">)</span><a class="headerlink" href="#core.execute.test_model" title="Permalink to this definition">¶</a></dt>
 <dd><p>Test model on unseen data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>plotting</strong> – </p></li>
+<li><p><strong>weighting_criterion</strong> – </p></li>
+<li><p><strong>get_val_score_only</strong> – </p></li>
 <li><p><strong>model_type</strong> – </p></li>
 <li><p><strong>predictions</strong> – </p></li>
 <li><p><strong>configs</strong> – </p></li>
@@ -527,6 +530,11 @@ load data, otherwise use generate_training_window() method.</p>
 </dd></dl>
 
 <dl class="method">
+<dt id="core.model.LSTMModel.fit">
+<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param">x_train: numpy.array</em>, <em class="sig-param">y_train: numpy.array</em>, <em class="sig-param">verbose=1</em>, <em class="sig-param">**fit_args</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.fit" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
 <dt id="core.model.LSTMModel.get_params">
 <code class="sig-name descname">get_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.get_params" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -540,15 +548,15 @@ load data, otherwise use generate_training_window() method.</p>
 </dd></dl>
 
 <dl class="method">
-<dt id="core.model.LSTMModel.predict_point_by_point">
-<code class="sig-name descname">predict</code><span class="sig-paren">(</span><em class="sig-param">data</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#core.model.LSTMModel.predict_point_by_point" title="Permalink to this definition">¶</a></dt>
+<dt id="core.model.LSTMModel.predict">
+<code class="sig-name descname">predict</code><span class="sig-paren">(</span><em class="sig-param">x_test: numpy.array</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#core.model.LSTMModel.predict" title="Permalink to this definition">¶</a></dt>
 <dd><p>Predict each time step given the last sequence of true data, in effect only predicting 1 step ahead each time</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>data</strong> – </p>
+<dd class="field-odd"><p><strong>x_test</strong> – Test data</p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p></p>
+<dd class="field-even"><p>Predictions</p>
 </dd>
 </dl>
 </dd></dl>
@@ -590,11 +598,13 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="method">
 <dt id="core.model.LSTMModel.train">
-<code class="sig-name descname">train</code><span class="sig-paren">(</span><em class="sig-param">x: numpy.array</em>, <em class="sig-param">y: numpy.array</em>, <em class="sig-param">epochs: int</em>, <em class="sig-param">batch_size: int</em>, <em class="sig-param">save_dir: str</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">verbose=1</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.train" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">train</code><span class="sig-paren">(</span><em class="sig-param">x: numpy.array</em>, <em class="sig-param">y: numpy.array</em>, <em class="sig-param">epochs: int</em>, <em class="sig-param">batch_size: int</em>, <em class="sig-param">save_dir: str</em>, <em class="sig-param">configs: dict</em>, <em class="sig-param">validation_data: Tuple[numpy.array</em>, <em class="sig-param">numpy.array] = None</em>, <em class="sig-param">validation_split=0.2</em>, <em class="sig-param">verbose=1</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.LSTMModel.train" title="Permalink to this definition">¶</a></dt>
 <dd><p>Train model (in-memory)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>validation_split</strong> – </p></li>
+<li><p><strong>validation_data</strong> – </p></li>
 <li><p><strong>x</strong> – Input data</p></li>
 <li><p><strong>y</strong> – Target data</p></li>
 <li><p><strong>epochs</strong> – Number of epochs</p></li>
@@ -633,6 +643,84 @@ load data, otherwise use generate_training_window() method.</p>
 </dd></dl>
 
 <dl class="class">
+<dt id="core.model.MixedEnsemble">
+<em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">MixedEnsemble</code><span class="sig-paren">(</span><em class="sig-param">index_name: str = ''</em>, <em class="sig-param">classifier_type_list: List[str] = None</em>, <em class="sig-param">configs: dict = None</em>, <em class="sig-param">verbose: int = 0</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.MixedEnsemble" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Implements a mixed ensemble with a LSTM and a tree-based classifier</p>
+<dl class="method">
+<dt id="core.model.MixedEnsemble.fit">
+<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param">x_train: list</em>, <em class="sig-param">y_train: list</em>, <em class="sig-param">feature_names: List[List[str]] = None</em>, <em class="sig-param">**fit_args</em><span class="sig-paren">)</span> &#x2192; list<a class="headerlink" href="#core.model.MixedEnsemble.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fit model to training data
+:param x_train: Training features
+:param y_train: Training target
+:param feature_names: List of feature names
+:param fit_args: Fitting arguments for obtaining validation scores</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Validation scores of fitted model</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.MixedEnsemble.get_params">
+<code class="sig-name descname">get_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.model.MixedEnsemble.get_params" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="core.model.MixedEnsemble.is_mixed_ensemble">
+<em class="property">static </em><code class="sig-name descname">is_mixed_ensemble</code><span class="sig-paren">(</span><em class="sig-param">classifier_list</em>, <em class="sig-param">configs</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.MixedEnsemble.is_mixed_ensemble" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine whether list of classifiers qualified as mixed ensemble</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>classifier_list</strong> – List of classifier candidates</p></li>
+<li><p><strong>configs</strong> – Configurations</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Is mmixed type</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.MixedEnsemble.predict">
+<code class="sig-name descname">predict</code><span class="sig-paren">(</span><em class="sig-param">x_test: numpy.array</em>, <em class="sig-param">test_data_index: numpy.array</em>, <em class="sig-param">y_test: numpy.array</em>, <em class="sig-param">weighted=False</em>, <em class="sig-param">alpha=2</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#core.model.MixedEnsemble.predict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Aggregate individual predictions</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>y_test</strong> – </p></li>
+<li><p><strong>test_data_index</strong> – Array of test data indices</p></li>
+<li><p><strong>alpha</strong> – Weighting parameter for weighted average</p></li>
+<li><p><strong>weighted</strong> – Use performance-weighted average</p></li>
+<li><p><strong>x_test</strong> – Test set</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Tuple(predictions, y_test_indexed_merged.values, pd.Index(predictions_index_merged.index)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.MixedEnsemble.predict_all">
+<code class="sig-name descname">predict_all</code><span class="sig-paren">(</span><em class="sig-param">x_test: numpy.array</em><span class="sig-paren">)</span> &#x2192; numpy.array<a class="headerlink" href="#core.model.MixedEnsemble.predict_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predict on test set, separately for each individual classifier</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>x_test</strong> – Test set</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Array with individual predictions in rows</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
 <dt id="core.model.TreeEnsemble">
 <em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">TreeEnsemble</code><span class="sig-paren">(</span><em class="sig-param">index_name=None</em>, <em class="sig-param">model_type='RandomForestClassifier'</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.TreeEnsemble" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
@@ -643,6 +731,16 @@ load data, otherwise use generate_training_window() method.</p>
 <dd></dd></dl>
 
 <dl class="method">
+<dt id="core.model.TreeEnsemble.fit">
+<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param">x_train: numpy.array</em>, <em class="sig-param">y_train: numpy.array</em>, <em class="sig-param">**fit_args</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.TreeEnsemble.fit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Fit TreeEnsemble to training data
+:param x_train: Training data features
+:param y_train: Training data targets
+:param fit_args: Optional fitting arguments for obtaining validation score
+:return: Validation score / OOB score, respectively</p>
+</dd></dl>
+
+<dl class="method">
 <dt id="core.model.TreeEnsemble.get_params">
 <code class="sig-name descname">get_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#core.model.TreeEnsemble.get_params" title="Permalink to this definition">¶</a></dt>
 <dd></dd></dl>
@@ -651,12 +749,12 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="class">
 <dt id="core.model.WeightedEnsemble">
-<em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">WeightedEnsemble</code><span class="sig-paren">(</span><em class="sig-param">index_name: str = ''</em>, <em class="sig-param">classifier_type_list: List[str] = None</em>, <em class="sig-param">configs: dict = None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.WeightedEnsemble" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">core.model.</code><code class="sig-name descname">WeightedEnsemble</code><span class="sig-paren">(</span><em class="sig-param">index_name: str = ''</em>, <em class="sig-param">classifier_type_list: List[str] = None</em>, <em class="sig-param">configs: dict = None</em>, <em class="sig-param">verbose: int = 0</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.WeightedEnsemble" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Class representing a weighted ensemble of individual classifiers</p>
 <dl class="method">
 <dt id="core.model.WeightedEnsemble.fit">
-<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param">x_train: numpy.array</em>, <em class="sig-param">y_train: numpy.array</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.WeightedEnsemble.fit" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">fit</code><span class="sig-paren">(</span><em class="sig-param">x_train: numpy.array</em>, <em class="sig-param">y_train: numpy.array</em>, <em class="sig-param">feature_names: List[str] = None</em>, <em class="sig-param">show_importances=True</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.WeightedEnsemble.fit" title="Permalink to this definition">¶</a></dt>
 <dd><p>Fit individual models</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
@@ -671,6 +769,23 @@ load data, otherwise use generate_training_window() method.</p>
 <dd><dl class="field-list simple">
 <dt class="field-odd">Returns</dt>
 <dd class="field-odd"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="method">
+<dt id="core.model.WeightedEnsemble.is_weighted_ensemble">
+<em class="property">static </em><code class="sig-name descname">is_weighted_ensemble</code><span class="sig-paren">(</span><em class="sig-param">classifier_list</em>, <em class="sig-param">configs</em><span class="sig-paren">)</span><a class="headerlink" href="#core.model.WeightedEnsemble.is_weighted_ensemble" title="Permalink to this definition">¶</a></dt>
+<dd><p>Determine whether list of classifiers qualified as weighted tree-based ensemble</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>classifier_list</strong> – List of classifier candidates</p></li>
+<li><p><strong>configs</strong> – Configurations</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>Is mixed type</p>
 </dd>
 </dl>
 </dd></dl>
@@ -746,6 +861,28 @@ load data, otherwise use generate_training_window() method.</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="class">
+<dt id="core.utils.ProgressBar">
+<em class="property">class </em><code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">ProgressBar</code><span class="sig-paren">(</span><em class="sig-param">total</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.ProgressBar" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class implementing a progress bar</p>
+<dl class="method">
+<dt id="core.utils.ProgressBar.print_progress">
+<code class="sig-name descname">print_progress</code><span class="sig-paren">(</span><em class="sig-param">prefix=''</em>, <em class="sig-param">decimals=1</em>, <em class="sig-param">bar_length=100</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.ProgressBar.print_progress" title="Permalink to this definition">¶</a></dt>
+<dd><p>Call in a loop to create terminal progress bar</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>prefix</strong> – Prefix string (Str)</p></li>
+<li><p><strong>decimals</strong> – Positive number of decimals in percent complete (Int)</p></li>
+<li><p><strong>bar_length</strong> – Character length of bar (Int)</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -891,11 +1028,13 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="function">
 <dt id="core.utils.check_directory_for_file">
-<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">check_directory_for_file</code><span class="sig-paren">(</span><em class="sig-param">index_name: str = ''</em>, <em class="sig-param">folder_path: str = ''</em>, <em class="sig-param">force_download: bool = False</em>, <em class="sig-param">create_dir=True</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#core.utils.check_directory_for_file" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">check_directory_for_file</code><span class="sig-paren">(</span><em class="sig-param">index_name: str = None</em>, <em class="sig-param">index_id=None</em>, <em class="sig-param">folder_path: str = ''</em>, <em class="sig-param">force_download: bool = False</em>, <em class="sig-param">create_dir=True</em>, <em class="sig-param">print_status=True</em><span class="sig-paren">)</span> &#x2192; bool<a class="headerlink" href="#core.utils.check_directory_for_file" title="Permalink to this definition">¶</a></dt>
 <dd><p>Check whether folder path already exists.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
+<li><p><strong>print_status</strong> – Whether to print status message</p></li>
+<li><p><strong>index_id</strong> – Index ID</p></li>
 <li><p><strong>index_name</strong> – Name of index</p></li>
 <li><p><strong>folder_path</strong> – Folder path to check</p></li>
 <li><p><strong>force_download</strong> – Flag indicating whether to force download into existing folder</p></li>
@@ -907,6 +1046,11 @@ load data, otherwise use generate_training_window() method.</p>
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="function">
+<dt id="core.utils.countdown">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">countdown</code><span class="sig-paren">(</span><em class="sig-param">seconds: int</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.countdown" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
 
 <dl class="function">
 <dt id="core.utils.deannualize">
@@ -927,7 +1071,7 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="function">
 <dt id="core.utils.get_index_name">
-<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">get_index_name</code><span class="sig-paren">(</span><em class="sig-param">index_id: str</em>, <em class="sig-param">lookup_dict: dict = None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.get_index_name" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">get_index_name</code><span class="sig-paren">(</span><em class="sig-param">index_id: str</em>, <em class="sig-param">lookup_dict: dict = None) -&gt; (&lt;class 'str'&gt;</em>, <em class="sig-param">&lt;class 'str'&gt;</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.get_index_name" title="Permalink to this definition">¶</a></dt>
 <dd><p>Get index name and corresponding lookup table based on index ID</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -938,6 +1082,20 @@ load data, otherwise use generate_training_window() method.</p>
 </dd>
 <dt class="field-even">Returns</dt>
 <dd class="field-even"><p></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.utils.get_model_parent_type">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">get_model_parent_type</code><span class="sig-paren">(</span><em class="sig-param">configs: dict = None</em>, <em class="sig-param">model_type: str = None</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.get_model_parent_type" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get parent model type for classifier</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>configs</strong> – Configurations dict</p></li>
+<li><p><strong>model_type</strong> – Model type to get parent type for</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>
@@ -993,7 +1151,7 @@ load data, otherwise use generate_training_window() method.</p>
 
 <dl class="function">
 <dt id="core.utils.lookup_multiple">
-<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">lookup_multiple</code><span class="sig-paren">(</span><em class="sig-param">dict_of_dicts: dict = None</em>, <em class="sig-param">index_id: str = ''</em>, <em class="sig-param">reverse_lookup=False</em>, <em class="sig-param">key_to_lower=False</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.lookup_multiple" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">lookup_multiple</code><span class="sig-paren">(</span><em class="sig-param">dict_of_dicts: dict = None</em>, <em class="sig-param">index_id: str = ''</em>, <em class="sig-param">reverse_lookup=False</em>, <em class="sig-param">key_to_lower=False) -&gt; (&lt;class 'str'&gt;</em>, <em class="sig-param">&lt;class 'str'&gt;</em><span class="sig-paren">)</span><a class="headerlink" href="#core.utils.lookup_multiple" title="Permalink to this definition">¶</a></dt>
 <dd><p>Retrieve index name and lookup table name for given index id and collection of lookup dicts.</p>
 <p>The nested dictionary “dict_of_dicts” should have the following structure:</p>
 <dl class="simple">
@@ -1105,6 +1263,19 @@ Plotting all rows and columns:</p>
 <dt>Usage::</dt><dd><div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">pretty_print_table</span><span class="p">(</span><span class="n">db</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;col_1&#39;</span><span class="p">,</span> <span class="s1">&#39;col_2&#39;</span><span class="p">])</span>
 </pre></div>
 </div>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="function">
+<dt id="core.utils.print_study_period_ranges">
+<code class="sig-prename descclassname">core.utils.</code><code class="sig-name descname">print_study_period_ranges</code><span class="sig-paren">(</span><em class="sig-param">full_data: pandas.core.frame.DataFrame</em>, <em class="sig-param">study_period_ranges: dict</em><span class="sig-paren">)</span> &#x2192; None<a class="headerlink" href="#core.utils.print_study_period_ranges" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>study_period_ranges</strong> – Dict containing the study period index and ranges</p></li>
+<li><p><strong>full_data</strong> – </p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>

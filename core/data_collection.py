@@ -114,17 +114,17 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
     return data
 
 
-def load_full_data(index_id: str = '150095', force_download: bool = False, last_n: int = None,
+def load_full_data(index_id: str = '150095', force_download: bool = False, last_n: int = None, columns: list = None,
                    merge_gics=False) -> Tuple[
     pd.DataFrame, pd.DataFrame, str, str]:
     """
     Load all available records from the data for a specified index
 
+    :param columns:
     :param merge_gics:
     :param index_id: Index ID to load data for
     :param force_download: Flag indicating whether to overwrite existing data
     :param last_n: Number of last available dates to consider
-    :param configs: Dict containing model and training configurations
     :return: Tuple of (constituency_matrix, full_data, index_name, folder_path)
     """
     # Load index name dict and get index name
@@ -192,6 +192,18 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
         # Save to file
         print('Saving modified data to file ...')
         full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
+
+    if 'ind_mom_ratio' in columns:
+        # JOB: Add 6-month (=120 days) momentum column
+        print('Adding 6-month momentum ...')
+        timer = Timer().start()
+        full_data.set_index(keys=['datadate', 'gvkey', 'iid'], inplace=True)
+        full_data.loc[:, '6m_mom'] = full_data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
+            lambda x: x.pct_change(periods=120))
+        timer.stop()
+        full_data.reset_index(level=['gvkey', 'iid'], inplace=True)  # Reset to date index
+
+        full_data.reset_index(inplace=True)
 
     print('Successfully loaded index history.')
     timer.stop()
@@ -275,21 +287,12 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     full_data.sort_index(inplace=True)
     timer.stop()
 
-    if 'ind_mom_ratio' in columns:  # TODO: Move to run.py
-        # JOB: Add 6-month (=120 days) momentum column
-        print('Adding 6-month momentum ...')
-        timer = Timer().start()
-        full_data.set_index(keys=['gvkey', 'iid'], inplace=True, append=True)
-        full_data.loc[:, '6m_mom'] = full_data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
-            lambda x: x.pct_change(periods=120))
-        timer.stop()
-        full_data.reset_index(level=['gvkey', 'iid'], inplace=True)  # Reset to date index
-
-    # Select data from study period
+    # JOB: Select data from study period
     print(f'Retrieving data from {unique_dates[period_range[0]].date()} to {unique_dates[period_range[1]].date()} \n')
     study_data = full_data.loc[unique_dates[period_range[0]]:unique_dates[period_range[1]]]
 
     if 'ind_mom_ratio' in columns:
+        # JOB: Drop records without 6 month-returns
         print('Removing records without 6-month momentum ...')
         print('Missing records before removal:')
         print(study_data[study_data['6m_mom'].isna()].set_index(['gvkey', 'iid'], append=True).index.get_level_values(

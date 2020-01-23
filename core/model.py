@@ -411,7 +411,7 @@ class WeightedEnsemble:
         self.classifiers = [TreeEnsemble(index_name=index_name, model_type=m_type).build_model(configs, verbose=verbose)
                             for m_type in
                             self.classifier_types]
-        self.model_type = str(self)
+        self.model_type = f'{self.__class__.__name__}({", ".join([str(clf.model_type) for clf in self.classifiers])})'
         self.oob_scores = list()
 
     def __repr__(self):
@@ -526,7 +526,7 @@ class MixedEnsemble:
             self.classifier_types]
         self.val_scores = []
         self.verbose = verbose
-        self.type = f'{self.__class__.__name__}({", ".join([str(clf.model_type) for clf in self.classifiers])})'
+        self.model_type = f'{self.__class__.__name__}({", ".join([str(clf.model_type) for clf in self.classifiers])})'
 
         print(f'Successfully created mixed ensemble of {[clf for clf in self.classifiers]}')
 
@@ -625,7 +625,8 @@ class MixedEnsemble:
         if weighted:
             print(
                 f'Weighting with Validation/OOB scores [{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
-            weights = [max(score, 0) ** alpha / max(sum([max(sc, 0) ** alpha for sc in self.val_scores]), 0) for score in
+            weights = [max(score, 0) ** alpha / max(sum([max(sc, 0) ** alpha for sc in self.val_scores]), 0) for score
+                       in
                        self.val_scores]
             print(f'Weights: [{", ".join([str(weight) for weight in weights])}]')
             predictions = np.average(predictions_index_merged.values, weights=weights, axis=1)

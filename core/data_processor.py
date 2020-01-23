@@ -53,7 +53,7 @@ class DataLoader:
             self.i_split = self.data.index.get_loc(self.split_date.date())
             self.split_date = self.data.index[self.i_split]
         else:
-            print(f'Original date ({self.split_date.date()}) not in index.')
+            print(f'\nOriginal date ({self.split_date.date()}) not in index.')
             print('Searching for next available split date.')
             try:
                 self.i_split = self.data.index.get_loc(self.split_date.date(), method='ffill')

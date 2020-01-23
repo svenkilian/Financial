@@ -17,13 +17,14 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from tensorflow.keras.metrics import binary_accuracy
 
+import config
 from config import *
 from core.data_collection import generate_study_period
 from core.data_processor import DataLoader
 from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble, MixedEnsemble
 from core.utils import plot_train_val, get_most_recent_file, CSVWriter, \
     check_data_conformity, annualize_metric, Timer, calc_sharpe, \
-    calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type
+    calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type, ProgressBar
 
 
 def main(index_id='150095', index_name='', full_data=None, constituency_matrix: pd.DataFrame = None,
@@ -32,10 +33,11 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
          load_last: bool = False,
          start_index: int = -1001, end_index: int = -1, model_type: str = None,
          ensemble: Union[WeightedEnsemble, MixedEnsemble] = None,
-         verbose=2):
+         verbose=2, plotting=False):
     """
     Run data preparation and model training
 
+    :param plotting:
     :param ensemble:
     :param folder_path:
     :param constituency_matrix:
@@ -212,7 +214,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
             # JOB: Fit models
             print(f'\n\nFitting ensemble ...')
-            model.fit(x_train, y_train, feature_names=feature_names)
+            model.fit(x_train, y_train, feature_names=feature_names, show_importances=False)
 
             print(f'\nOut-of-bag scores: {model.oob_scores}')
 
@@ -237,7 +239,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                            model_type=base_clf.model_type, history=history,
                            index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
                            model=model.classifiers[i],
-                           period_range=period_range, start_date=start_date, end_date=end_date)
+                           period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
 
     elif parent_model_type == 'mixed':
         # JOB: Fitting and testing in case of mixed ensemble
@@ -278,7 +280,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                        model_type=base_clf.model_type, history=history,
                        index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
                        model=model.classifiers[i],
-                       period_range=period_range, start_date=start_date, end_date=end_date)
+                       period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
 
         print('Done testing individual models.')
 
@@ -288,9 +290,9 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     # JOB: Test model
     test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
                y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
-               model_type=model.type, history=history,
+               model_type=model.model_type, history=history,
                index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
-               period_range=period_range, start_date=start_date, end_date=end_date)
+               period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
 
     del study_period_data
 
@@ -329,7 +331,8 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
         return np.array([preprocess_data(
             study_period_data=study_period_data, unique_indices=unique_indices, cols=cols, split_index=split_index,
             configs=configs, full_date_range=full_date_range, parent_model_type=parent_model_type,
-            ensemble=None, from_mixed=True, return_validation_data=True, validation_range=validation_range) for parent_model_type in
+            ensemble=None, from_mixed=True, return_validation_data=True, validation_range=validation_range) for
+            parent_model_type in
             ensemble_components_parent_types]).T.tolist()
 
     # JOB: Instantiate training and test data
@@ -349,10 +352,15 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     print(f'Last training date: {full_date_range[split_index]}')
 
     print(f'Training range length: {len(train_range)}')
-    print(f'Validation range length: {len(validation_range)}')
 
+    if return_validation_data:
+        print(f'Validation range length: {len(validation_range)}')
+
+    # Instantiate progress bar
+    progress_bar = ProgressBar(len(unique_indices))
     # JOB: Iterate through individual stocks and generate training and test data
     for stock_id in unique_indices:
+        progress_bar.print_progress()
         id_data = study_period_data.loc[stock_id].set_index('datadate')
 
         try:
@@ -412,6 +420,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     print(f'Length training data (before): {len(x_train)}')
 
     if return_validation_data:
+        # JOB: Split up training data in training and validation set if needed
         inverse_mask = [not m for m in validation_mask]
         x_val = x_train[validation_mask]
         y_val = y_train[validation_mask]
@@ -420,8 +429,10 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
         y_train = y_train[inverse_mask]
         train_data_index = train_data_index[inverse_mask]
 
+        print(f'Length x_train: {len(x_train)}')
+        print(f'Length x_val: {len(x_val)}')
+
     print(f'Length x_train: {len(x_train)}')
-    print(f'Length x_val: {len(x_val)}')
 
     print(f'{Style.BRIGHT}{Fore.YELLOW}Done pre-processing data.{Style.RESET_ALL}')
     timer.stop()
@@ -436,10 +447,11 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
                history=None, index_id='',
                index_name='', study_period_length: int = 0, model=None, period_range: tuple = (0, 0),
                start_date: datetime.date = datetime.date.today(), end_date: datetime.date = datetime.date.today(),
-               get_val_score_only=False, weighting_criterion=None, **kwargs):
+               get_val_score_only=False, weighting_criterion=None, plotting=False, **kwargs):
     """
     Test model on unseen data.
 
+    :param plotting:
     :param weighting_criterion:
     :param get_val_score_only:
     :param model_type:
@@ -501,11 +513,12 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     print(f'Average size of cross sections: {int(cross_section_size)}')
 
     # Define top k values
-    top_k_list = [5, 10, int(cross_section_size / 10), int(cross_section_size / 5),
-                  int(cross_section_size / 4), int(cross_section_size / 2.5),
-                  int(cross_section_size / 2)]
+    top_k_list = [5, 10]
 
-    # Create empty dataframe for top-k accuracies
+    if cross_section_size > 30:
+        top_k_list.extend([50, 100, 150, 200, 250])
+
+    # JOB: Create empty dataframe for recording top-k accuracies
     top_k_metrics = pd.DataFrame(
         {'Accuracy': [], 'Mean Daily Return': [], 'Mean Daily Return (Short)': [], 'Mean Daily Return (Long)': []})
     top_k_metrics.index.name = 'k'
@@ -564,21 +577,24 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     # JOB: Display top-k metrics
     print(top_k_metrics)
 
-    # Plot accuracies and save figure to file
-    for col in top_k_metrics.columns:
-        top_k_metrics[col].plot(kind='line', legend=True, fontsize=14)
-        plt.savefig(os.path.join(ROOT_DIR, folder_path, f'top_k_{col.lower()}.png'), dpi=600)
-        plt.show()
+    # JOB: Plot accuracies and save figure to file
+    if plotting:
+        for col in top_k_metrics.columns:
+            top_k_metrics[col].plot(kind='line', legend=True, fontsize=14)
+            plt.savefig(os.path.join(ROOT_DIR, folder_path, f'top_k_{col.lower()}.png'), dpi=600)
+            plt.show()
 
-    # JOB: Plot training and validation metrics
-    try:
-        plot_train_val(history, configs['model']['metrics'], store_png=True, folder_path=folder_path)
-    except AttributeError as ae:
-        print(f'{Fore.RED}{Style.BRIGHT}Plotting failed.{Style.RESET_ALL}')
-        # print(ae)
-    except UnboundLocalError as ule:
-        print(f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Plotting failed. History has not been created.{Style.RESET_ALL}')
-        # print(ule)
+        if parent_model_type == 'deep_learning':
+            # JOB: Plot training and validation metrics for LSTM
+            try:
+                plot_train_val(history, configs['model']['metrics'], store_png=True, folder_path=folder_path)
+            except AttributeError as ae:
+                print(f'{Fore.RED}{Style.BRIGHT}Plotting failed.{Style.RESET_ALL}')
+                # print(ae)
+            except UnboundLocalError as ule:
+                print(
+                    f'{Fore.RED}{Back.YELLOW}{Style.BRIGHT}Plotting failed. History has not been created.{Style.RESET_ALL}')
+                # print(ule)
 
     # JOB: Evaluate model on full test data
     test_score = None
@@ -594,38 +610,102 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         print(f'\nTest score on full test set: {np.round(test_score, 4)}')
 
     total_epochs = len(history.history['loss']) if history is not None else None
-    data_record = {'Experiment Run End': datetime.datetime.now().isoformat(),
-                   'Parent Model Type': parent_model_type,
-                   'Model Type': model_type,
-                   'Index ID': index_id,
-                   'Index Name': index_name,
-                   'Study Period Length': study_period_length,
-                   'Test Set Size': y_test.shape[0],
-                   'Days Test Set': test_set_n_days,
-                   'Constituent Number': test_set_n_constituents,
-                   'Average Cross Section Size': cross_section_size,
-                   'Test Set Start Date': test_data_start_date.isoformat(),
-                   'Test Set End Date': test_data_end_date.isoformat(),
-                   'Total Accuracy': test_score,
-                   'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
-                   'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
-                   'Top-k Mean Daily Excess Return': top_k_metrics['Mean Daily Excess Return'].to_dict(),
-                   'Annualized Excess Return': top_k_metrics['Annualized Excess Return'].to_dict(),
-                   'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
-                   'Top-k Annualized Sharpe': top_k_metrics['Annualized Sharpe'].to_dict(),
-                   'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
-                   'Model Configs': str(model.get_params()),
-                   'Total Epochs': total_epochs,
-                   'Period Range': period_range,
-                   'Study Period Start Date': start_date.isoformat(),
-                   'Study Period End Date': end_date.isoformat()
-                   }
+
+    # JOB: Fill dict for logging
+    data_record = {
+        'ID': config.run_id,
+        'Experiment Run End': datetime.datetime.now().isoformat(),
+        'Parent Model Type': parent_model_type,
+        'Model Type': model_type,
+        'Index ID': index_id,
+        'Index Name': index_name,
+        'Study Period Length': study_period_length,
+        'Test Set Size': y_test.shape[0],
+        'Days Test Set': test_set_n_days,
+        'Constituent Number': test_set_n_constituents,
+        'Average Cross Section Size': cross_section_size,
+        'Test Set Start Date': test_data_start_date.isoformat(),
+        'Test Set End Date': test_data_end_date.isoformat(),
+        'Total Accuracy': test_score,
+        'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
+        'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
+        'Top-k Mean Daily Excess Return': top_k_metrics['Mean Daily Excess Return'].to_dict(),
+        'Top-k Annualized Excess Return': top_k_metrics['Annualized Excess Return'].to_dict(),
+        'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
+        'Top-k Annualized Sharpe': top_k_metrics['Annualized Sharpe'].to_dict(),
+        'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
+        'Model Configs': model.get_params(),
+        'Total Epochs': total_epochs,
+        'Period Range': period_range,
+        'Study Period Start Date': start_date.isoformat(),
+        'Study Period End Date': end_date.isoformat()
+    }
+
+    data_record_json = {
+        'ID': config.run_id,
+        'Experiment Run End': datetime.datetime.now().isoformat(),
+        'Parent Model Type': parent_model_type,
+        'Model Type': model_type,
+        'Index ID': index_id,
+        'Index Name': index_name,
+        'Study Period Length': study_period_length,
+        'Test Set Size': y_test.shape[0],
+        'Days Test Set': test_set_n_days,
+        'Constituent Number': test_set_n_constituents,
+        'Average Cross Section Size': cross_section_size,
+        'Test Set Start Date': test_data_start_date.isoformat(),
+        'Test Set End Date': test_data_end_date.isoformat(),
+        'Total Accuracy': test_score,
+        'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
+        'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
+        'Top-k Mean Daily Excess Return': top_k_metrics['Mean Daily Excess Return'].to_dict(),
+        'Top-k Annualized Excess Return': top_k_metrics['Annualized Excess Return'].to_dict(),
+        'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
+        'Top-k Annualized Sharpe': top_k_metrics['Annualized Sharpe'].to_dict(),
+        'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
+        'Model Configs': model.get_params(),
+        'Total Epochs': total_epochs,
+        'Period Range': period_range,
+        'Study Period Start Date': start_date.isoformat(),
+        'Study Period End Date': end_date.isoformat()
+    }
+
+    forest_record = {'Experiment Run End': datetime.datetime.now().isoformat(),
+                     'Parent Model Type': parent_model_type,
+                     'Model Type': model_type,
+                     'Index ID': index_id,
+                     'Index Name': index_name,
+                     'Study Period Length': study_period_length,
+                     'Test Set Size': y_test.shape[0],
+                     'Days Test Set': test_set_n_days,
+                     'Constituent Number': test_set_n_constituents,
+                     'Average Cross Section Size': cross_section_size,
+                     'Test Set Start Date': test_data_start_date.isoformat(),
+                     'Test Set End Date': test_data_end_date.isoformat(),
+                     'Total Accuracy': test_score,
+                     'Top-k Accuracy Scores': top_k_metrics.loc[10, 'Accuracy'],
+                     'Top-k Mean Daily Return': top_k_metrics.loc[10, 'Mean Daily Return'],
+                     'Top-k Mean Daily Excess Return': top_k_metrics.loc[10, 'Mean Daily Excess Return'],
+                     'Top-k Annualized Excess Return': top_k_metrics.loc[10, 'Annualized Excess Return'],
+                     'Top-k Annualized Return': top_k_metrics.loc[10, 'Annualized Return'],
+                     'Top-k Annualized Sharpe': top_k_metrics.loc[10, 'Annualized Sharpe'],
+                     'Top-k Annualized Sortino': top_k_metrics.loc[10, 'Annualized Sortino'],
+                     'Model Configs': str(model.get_params()),
+                     'Period Range': period_range,
+                     'Study Period Start Date': start_date.isoformat(),
+                     'Study Period End Date': end_date.isoformat()
+                     }
 
     logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'),
                        field_names=list(data_record.keys()))
     logger.add_line(data_record)
 
-    add_to_json(data_record, 'data/training_log.json')
+    add_to_json(data_record_json, 'data/training_log.json')
+
+    # JOB: RandomForest experiment logging
+    # logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'rf_training_log.csv'),
+    #                    field_names=list(forest_record.keys()))
+    # logger.add_line(forest_record)
 
     print('Done testing on unseen data.')
     timer.stop()

@@ -2,10 +2,15 @@
 This utilities module implements helper functions for displaying data frames and plotting data.
 """
 import csv
+import datetime
 import datetime as dt
 import glob
 import json
 import os
+import sys
+import time
+from collections import deque
+from pydoc import locate
 
 import matplotlib
 import matplotlib.dates as mdates
@@ -18,6 +23,7 @@ from matplotlib.ticker import MaxNLocator
 from pandas.plotting import register_matplotlib_converters
 from tabulate import tabulate
 
+import config
 from config import ROOT_DIR
 
 # Update matplotlib setting
@@ -287,7 +293,8 @@ def add_to_json(dict_entry: dict, file_path: str):
     with open(path_to_data) as f:
         data = json.load(f)
 
-    data.update(dict_entry)
+    id = int(datetime.datetime.today().timestamp())
+    data.update({id: dict_entry})
 
     with open(path_to_data, 'w') as f:
         json.dump(data, f)
@@ -327,6 +334,26 @@ def check_directory_for_file(index_name: str = None, index_id=None, folder_path:
         load_from_file = False
 
     return load_from_file
+
+
+def get_run_number():
+    """
+    Get number ('ID') of current run from log file.
+
+    :return:
+    """
+    try:
+        # config.run_id = CSVReader(os.path.join(ROOT_DIR, 'data', 'training_log.csv')).get_last_row_value('ID',
+        #                                                                                                  cast_type='int') + 1
+
+        with open(os.path.join(ROOT_DIR, 'data', 'training_log.json'), 'r') as f:
+            data = json.load(f)
+            last_item = deque(data.items(), maxlen=1).pop()[1]
+            run_id = last_item.get('ID') + 1
+    except FileNotFoundError:
+        run_id = 1
+
+    return run_id
 
 
 def apply_batch_directory(directory_path, function=None, **func_args):
@@ -569,7 +596,65 @@ def calc_excess_returns(return_series: pd.DataFrame, rf_rate_series: pd.DataFram
     return excess_returns
 
 
-class Timer():
+def countdown(seconds: int):
+    while seconds >= 0:
+        sys.stdout.flush()
+        mins, secs = divmod(seconds, 60)
+        time_remaining = 'Trying again in {:02d}:{:02d}'.format(mins, secs)
+        sys.stdout.write(f'\r{time_remaining}')
+        time.sleep(1)
+        seconds -= 1
+    sys.stdout.write('\r ')
+    sys.stdout.flush()
+
+
+def get_run_id(logfile_name: str):
+    file_path = os.path.join(ROOT_DIR, 'data', logfile_name, '.csv')
+    reader = CSVReader(file_path)
+
+
+class ProgressBar:
+    """
+    Class implementing a progress bar
+    """
+
+    def __init__(self, total):
+        self.start_time = time.time()
+        self.total = total
+        self.lapsed_time = 0.0
+        self.iteration = 0
+
+    def print_progress(self, prefix='', decimals=1, bar_length=100):
+        """
+        Call in a loop to create terminal progress bar
+
+        :param prefix: Prefix string (Str)
+        :param decimals: Positive number of decimals in percent complete (Int)
+        :param bar_length: Character length of bar (Int)
+        """
+
+        self.iteration += 1
+        self.lapsed_time = time.time() - self.start_time
+        str_format = "{0:." + str(decimals) + "f}"
+        percents = str_format.format(100 * (self.iteration / float(self.total)))
+        filled_length = int(round(bar_length * self.iteration / float(self.total)))
+        bar = u'\u258B' * filled_length + '-' * (bar_length - filled_length)
+        pending_time = (self.lapsed_time / self.iteration) * (self.total - self.iteration)
+        minutes, seconds = divmod(pending_time, 60)
+        suffix = f'{int(minutes)} mins, {str_format.format(seconds)} secs remaining'
+        sys.stdout.write(
+            '\r%s |%s| %s%s - Processing stock %d of %d - %s' % (
+                prefix, bar, percents, '%', self.iteration, self.total, suffix)),
+
+        if self.iteration == self.total:
+            minutes, seconds = divmod(time.time() - self.start_time, 60)
+            sys.stdout.write(f'\nTime taken: {int(minutes)} mins, {str_format.format(seconds)} secs')
+            sys.stdout.write('\n')
+
+        sys.stdout.flush()
+
+
+class Timer:
     """
     Timer class for timing operations.
     """
@@ -594,10 +679,14 @@ class CSVWriter:
     def __init__(self, output_path: str, field_names: list):
         self.output_path = output_path
         self.field_names = field_names
+        self.delimiter = ';'
+        self.lineterminator = '\n'
+        self.access_delay = 5
 
         if not os.path.exists(os.path.join(ROOT_DIR, output_path)):
             with open(self.output_path, 'a') as f:
-                writer = csv.DictWriter(f, fieldnames=self.field_names, delimiter=';', lineterminator='\n')
+                writer = csv.DictWriter(f, fieldnames=self.field_names, delimiter=self.delimiter,
+                                        lineterminator=self.lineterminator)
                 writer.writeheader()
 
     def add_line(self, record: dict):
@@ -607,6 +696,79 @@ class CSVWriter:
         :param record: Dictionary of records to add to file
         :return:
         """
-        with open(self.output_path, 'a') as f:
-            writer = csv.DictWriter(f, fieldnames=self.field_names, delimiter=';', lineterminator='\n')
-            writer.writerow(record)
+
+        try:
+            with open(self.output_path, 'a') as f:
+                writer = csv.DictWriter(f, fieldnames=self.field_names, delimiter=self.delimiter,
+                                        lineterminator=self.lineterminator)
+
+                # Append current record
+                writer.writerow(record)
+        except PermissionError as pe:
+            print(f'{Style.BRIGHT}{Fore.RED}File access to {pe.filename} denied. \n'
+                  f'Make sure the file is closed to enable logging.')
+
+            # Pause execution for specified time
+            countdown(self.access_delay)
+            print(f'{Style.RESET_ALL}')
+            # Try again
+            print('Trying again ...')
+            self.add_line(record)
+
+
+class CSVReader:
+    """
+    Reader class for handling the logging of training runs into a .csv file.
+    """
+
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.delimiter = ';'
+        self.lineterminator = '\n'
+        self.access_delay = 5
+
+    @property
+    def field_names(self):
+        try:
+            with open(self.file_path, 'r') as f:
+                reader = csv.DictReader(f, delimiter=self.delimiter,
+                                        lineterminator=self.lineterminator)
+                return reader.fieldnames
+
+        except BaseException as be:
+            print(be.args)
+
+    def get_last_row(self):
+        try:
+            with open(self.file_path, 'r') as f:
+                reader = csv.DictReader(f, delimiter=self.delimiter,
+                                        lineterminator=self.lineterminator)
+
+                d = deque(reader, maxlen=1)
+                return d.pop()
+
+        except BaseException as be:
+            print(be.args)
+
+    def get_last_row_value(self, key, cast_type=None):
+        if self.path_exists():
+            try:
+                with open(self.file_path, 'r') as f:
+                    reader = csv.DictReader(f, delimiter=self.delimiter,
+                                            lineterminator=self.lineterminator)
+
+                    d = deque(reader, maxlen=1)
+                    ret_val = d.pop().get(key, None)
+                    if cast_type:
+                        ret_val = locate(cast_type)(ret_val)
+                    return ret_val
+
+            except BaseException as be:
+                print(be.args)
+
+        else:
+            # print(f'File path {self.file_path} does not exist.')
+            raise FileNotFoundError(f'{Style.BRIGHT}{Fore.RED}File does not exist.{Style.RESET_ALL}')
+
+    def path_exists(self):
+        return os.path.exists(os.path.join(ROOT_DIR, self.file_path))

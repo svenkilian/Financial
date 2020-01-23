@@ -4,19 +4,25 @@ This module serves as a starting point for model training and conducting experim
 
 import json
 import os
+from collections import deque
 
 import pandas as pd
 from colorama import Fore, Style
 
+import config
 from config import ROOT_DIR
+from core.analysis import StatsReport
 from core.data_collection import load_full_data
 from core.execute import main
 from core.model import WeightedEnsemble, MixedEnsemble
-from core.utils import get_study_period_ranges, Timer, print_study_period_ranges
+from core.utils import get_study_period_ranges, Timer, print_study_period_ranges, CSVReader, get_run_number
 
 if __name__ == '__main__':
     # Load configurations from file
     configs = json.load(open('config.json', 'r'))
+    model_type = None
+    multiple_models = None
+    ensemble = None
 
     # Specify dict of important indices
     index_dict = {
@@ -28,19 +34,27 @@ if __name__ == '__main__':
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['DJ600']
+    index_id = index_dict['DAX']
     cols = ['above_cs_med', *configs['data']['columns']]
     study_period_length = 1000
-    verbose = 0
+    verbose = 1
+    plotting = False
+
+    config.run_id = get_run_number()
+
+    report = StatsReport()
+    report.summary(last_only=True, score_list=['Top-k Annualized Sharpe'], k=10, by_model_type=True)
+    report.to_html()
+
+    exit()
 
     # JOB: Specify classifier
-    model_type = None
-    multiple_models = [['LSTM', 'RandomForestClassifier']]
 
-    ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
+    # multiple_models = ['RandomForestClassifier']
 
-    # multiple_models = ['RandomForestClassifier', 'ExtraTreesClassifier', 'GradientBoostingClassifier',
-    #                    'AdaBoostClassifier']
+    # ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
+
+    multiple_models = ['RandomForestClassifier', ['ExtraTreesClassifier', 'GradientBoostingClassifier']]
 
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
@@ -50,7 +64,7 @@ if __name__ == '__main__':
     # Load full index data
     constituency_matrix, full_data, index_name, folder_path = load_full_data(index_id=index_id,
                                                                              force_download=False,
-                                                                             last_n=None,
+                                                                             last_n=None, columns=cols.copy(),
                                                                              merge_gics=True)
 
     # Determine length of full data
@@ -65,6 +79,8 @@ if __name__ == '__main__':
     # JOB: Print all data ranges for study periods
     print_study_period_ranges(full_data, study_period_ranges)
 
+    total_runtime_timer = Timer().start()
+
     # JOB: Iteratively fit model on all study periods
     # list(sorted(study_period_ranges.keys()))
     for study_period_ix in range(6, len(study_period_ranges) + 1):
@@ -73,7 +89,7 @@ if __name__ == '__main__':
         timer = Timer().start()
 
         if multiple_models:
-            # Run multiple models (may include ensembles)
+            # JOB: Run multiple models (may include ensembles)
             for model_type in multiple_models:
                 if isinstance(model_type, list):
 
@@ -93,10 +109,11 @@ if __name__ == '__main__':
                      columns=cols.copy(), folder_path=folder_path,
                      data_only=False,
                      load_last=False, start_index=date_range[0],
-                     end_index=date_range[1], model_type=model_type, ensemble=ensemble, verbose=verbose)
+                     end_index=date_range[1], model_type=model_type, ensemble=ensemble, verbose=verbose,
+                     plotting=plotting)
 
         elif ensemble:
-            # Run ensemble only
+            # JOB: Run tree-based ensemble only
             main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
                  constituency_matrix=constituency_matrix,
                  columns=cols.copy(), folder_path=folder_path,
@@ -105,19 +122,21 @@ if __name__ == '__main__':
                  end_index=date_range[1],
                  ensemble=WeightedEnsemble(index_name=index_name.lower().replace(' ', '_'),
                                            classifier_type_list=ensemble, configs=configs, verbose=verbose),
-                 verbose=2)
+                 verbose=verbose, plotting=plotting)
 
         else:
-            # Run single classifier
+            # JOB: Run single classifier
             main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
                  constituency_matrix=constituency_matrix,
                  columns=cols.copy(), folder_path=folder_path,
                  data_only=False,
                  load_last=False, start_index=date_range[0],
-                 end_index=date_range[1], model_type=model_type, verbose=verbose)
+                 end_index=date_range[1], model_type=model_type, verbose=verbose, plotting=plotting)
 
         print(f'\n\n{Fore.GREEN}{Style.BRIGHT}Done fitting on period {study_period_ix}.{Style.RESET_ALL}')
         timer.stop()
+
+    total_runtime_timer.stop()
 
     """
     # Out-of memory generative training
