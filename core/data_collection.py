@@ -24,7 +24,7 @@ from core.utils import get_index_name, check_directory_for_file, Timer, lookup_m
 pd.set_option('precision', 4)
 pd.set_option('display.max_rows', 200)
 pd.set_option('display.max_columns', 40)
-pd.set_option('max_colwidth', 25)
+pd.set_option('max_colwidth', 60)
 pd.set_option('mode.sim_interactive', True)
 pd.set_option('expand_frame_repr', True)
 pd.set_option('large_repr', 'truncate')
@@ -130,7 +130,7 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
     # Load index name dict and get index name
     index_name, lookup_table = get_index_name(index_id=index_id)
 
-    configs = json.load(open('config.json', 'r'))
+    configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
 
     folder_path = os.path.join(ROOT_DIR, 'data', index_name.lower().replace(' ', '_'))  # Path to index data folder
 
@@ -201,9 +201,13 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
         full_data.loc[:, '6m_mom'] = full_data.groupby(level=['gvkey', 'iid'])['return_index'].apply(
             lambda x: x.pct_change(periods=120))
         timer.stop()
-        full_data.reset_index(level=['gvkey', 'iid'], inplace=True)  # Reset to date index
 
         full_data.reset_index(inplace=True)
+
+    gics_map = pd.read_json(os.path.join(ROOT_DIR, 'data', 'gics_code_dict.json'), orient='records',
+                            typ='series').rename('gics_sec')
+    gics_map = {str(key): val for key, val in gics_map.to_dict().items()}
+    full_data['gics_sec'] = full_data.loc[:, 'gics_sector'].replace(gics_map, inplace=True)
 
     print('Successfully loaded index history.')
     timer.stop()
@@ -665,7 +669,8 @@ def get_index_constituents(constituency_matrix: pd.DataFrame, date: datetime.dat
 
     # print(lookup_dict)
     print(
-        f'Number of constituents (index constituency matrix): {len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
+        f'Number of constituents (index constituency matrix): '
+        f'{len(constituency_matrix.loc[date].loc[lambda x: x == 1])}')
     # print(
     #     f"List of constituents: {constituency_matrix.loc[date].loc[lambda x: x == 1].index.get_level_values('gvkey').tolist()}")
 
@@ -766,12 +771,6 @@ def list_tables(db, library, show_n_rows=False):
     :param library: Queries library
     :param show_n_rows: Show number of rows
     :return:
-
-    Usage::
-            >>> list_tables(db, 'library_name', show_n_rows=False)
-            bank_ifndytd
-            bank_ifntq
-            ...
     """
     for table in db.list_tables(library):
         if show_n_rows:
@@ -839,7 +838,7 @@ def append_columns(data: pd.DataFrame, folder_path: str, file_name: str, column_
     """
 
     # TODO: Make merge work
-    index_col_name = data.index.name
+    index_col_names = data.index.names
     # Load DataFrame with new columns
     new_col_df = pd.read_csv(os.path.join(ROOT_DIR, folder_path, file_name), index_col=['datadate', 'gvkey', 'iid'],
                              header=0,
@@ -851,9 +850,10 @@ def append_columns(data: pd.DataFrame, folder_path: str, file_name: str, column_
     # JOB: Merge data with new columns
 
     timer = Timer().start()
-    if index_col_name is not None:
+    if None in index_col_names:
         data.reset_index(inplace=True)
         print('Resetting existing index.')
+        data.drop(columns='index', inplace=True)
     else:
         data.reset_index(inplace=True, drop=True)
         print('Resetting non-existent index.')
@@ -873,7 +873,78 @@ def append_columns(data: pd.DataFrame, folder_path: str, file_name: str, column_
     data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents_test.csv'))
     timer.stop()
 
-    if index_col_name is not None:
-        data.set_index(index_col_name, inplace=True)
+    if index_col_names is not None:
+        data.set_index(index_col_names, inplace=True)
     else:
         data.reset_index(inplace=True, drop=True)
+
+
+def add_constituency_col(data_orig: pd.DataFrame, folder_path: str) -> pd.DataFrame:
+    """
+    Append constituency column to DataFrame
+
+    :param data_orig: Original DataFrame to add column to
+    :param folder_path: Path to index data folder
+    :return: Appended DataFrame
+    """
+    print('\nAdding constituency column ...')
+    timer = Timer().start()
+    constituency_matrix = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'constituency_matrix.csv'),
+                                      index_col=0,
+                                      header=[0, 1],
+                                      parse_dates=True).stack([0, 1]).rename('in_index')
+
+    constituency_matrix.index.rename(['datadate', 'gvkey', 'iid'], inplace=True)
+
+    data = data_orig.copy()
+    del data_orig
+    saved_index = data.index.names
+    data.reset_index(inplace=True)
+
+    if None in saved_index:
+        data.drop(columns='index', inplace=True)
+
+    data.set_index(['datadate', 'gvkey', 'iid'], inplace=True)
+
+    data = data.merge(constituency_matrix, how='left', left_index=True, right_index=True)
+
+    data.reset_index(inplace=True)
+    try:
+        if None not in saved_index:
+            data.set_index(saved_index, inplace=True)
+    except IndexError as ie:
+        pass
+    print('Done')
+    timer.stop()
+
+    return data
+
+
+def quickload_full_data(dax=False):
+    path = r'C:\Users\svenk\PycharmProjects\Financial\data\dow_jones_stoxx_600_price_index'
+    if dax:
+        path = r'C:\Users\svenk\PycharmProjects\Financial\data\deutscher_aktienindex_(dax)_index'
+
+    data = pd.read_csv(os.path.join(path, r'index_data_constituents.csv'),
+                       index_col='datadate', header=0, parse_dates=True, infer_datetime_format=True,
+                       dtype={'gvkey': str, 'gsubind': str, 'gics_sector': str})
+    data = add_constituency_col(data, path)
+    data = data.loc[data['in_index'] == 1, :]
+    data.drop(columns=[col for col in data.columns if col.startswith('Unnamed')], inplace=True)
+    gics_map = pd.read_json(os.path.join('data', 'gics_code_dict.json'), orient='records', typ='series').rename(
+        'gics_sec')
+    gics_map = {str(key): val for key, val in gics_map.to_dict().items()}
+    data['gics_sec'] = data.loc[:, 'gics_sector'].replace(gics_map, inplace=True)
+
+    return data
+
+
+def to_actual_index(data: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    :param data:
+    :return:
+    """
+    data_new = data.loc[data['in_index'] == 1, :]
+    del data
+    return data_new

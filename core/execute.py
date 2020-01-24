@@ -534,15 +534,15 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         # print(full_portfolio.head())
         # print(full_portfolio.tail())
 
-        annualized_sharpe = calc_sharpe(full_portfolio.loc[:, ['daily_return']], annualize=True)
-        annualized_sortino = calc_sortino(full_portfolio.loc[:, ['daily_return']], annualize=True)
+        annualized_sharpe = calc_sharpe(full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(), annualize=True)
+        annualized_sortino = calc_sortino(full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(), annualize=True)
 
         accuracy = None
         mean_daily_return = None
         mean_daily_short = None
         mean_daily_long = None
 
-        # JOB: Calculate accuracy score
+        # JOB: Calculate accuracy score over all trades
         if parent_model_type == 'deep_learning':
             accuracy = binary_accuracy(full_portfolio['y_test'].values,
                                        full_portfolio['norm_prediction'].values).numpy()
@@ -555,11 +555,13 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
             accuracy = accuracy_score(full_portfolio['y_test'].values,
                                       full_portfolio['norm_prediction'].values)
 
-        mean_daily_excess_return = calc_excess_returns(full_portfolio.loc[:, ['daily_return']]).mean()
+        mean_daily_return = full_portfolio.groupby(level=['datadate'])['daily_return'].mean().mean()
 
-        mean_daily_return = full_portfolio['daily_return'].mean()
-        mean_daily_short = short_positions['daily_return'].mean()
-        mean_daily_long = long_positions['daily_return'].mean()
+        mean_daily_excess_return = calc_excess_returns(
+            full_portfolio.groupby(level=['datadate'])['daily_return'].mean().rename('daily_return')).mean()
+
+        mean_daily_short = short_positions.groupby(level=['datadate'])['daily_return'].mean().mean()
+        mean_daily_long = long_positions.groupby(level=['datadate'])['daily_return'].mean().mean()
 
         top_k_metrics.loc[top_k, 'Accuracy'] = accuracy
         top_k_metrics.loc[top_k, 'Mean Daily Return'] = mean_daily_return

@@ -452,8 +452,8 @@ def annualize_metric(metric: float, holding_periods: int = 1) -> float:
     :return: Annualized metric
     """
 
-    trading_days_per_year = 250
-    trans_ratio = trading_days_per_year / holding_periods
+    days_per_year = 360
+    trans_ratio = days_per_year / holding_periods
 
     return (1 + metric) ** trans_ratio - 1
 
@@ -539,12 +539,13 @@ def calc_sharpe(return_series, annualize=True):
     :return:
     """
 
+    days_per_year = 365
     excess_returns = calc_excess_returns(return_series)
     std = np.std(excess_returns)
     res = np.divide(excess_returns.mean(), std)
 
     if annualize:
-        res = res * np.sqrt(250)
+        res = res * np.sqrt(days_per_year)
 
     return res
 
@@ -558,22 +559,23 @@ def calc_sortino(return_series, annualize=True):
     :return:
     """
 
+    days_per_year = 365
     excess_returns = calc_excess_returns(return_series)
     semi_std = np.std(excess_returns[excess_returns < 0])
     res = np.divide(excess_returns.mean(), semi_std)
 
     if annualize:
-        res = res * np.sqrt(250)
+        res = res * np.sqrt(days_per_year)
 
     return res
 
 
-def deannualize(return_series, n_periods=250):
+def deannualize(return_series, n_periods=365):
     """
     Convert return in annual terms to a daily basis
 
     :param return_series: Return series to deannualize
-    :param n_periods: Target basis (250 for daily)
+    :param n_periods: Target basis (365 for daily)
     :return:
     """
     return np.power(1 + return_series, 1.0 / n_periods) - 1
@@ -590,7 +592,7 @@ def calc_excess_returns(return_series: pd.DataFrame, rf_rate_series: pd.DataFram
     if rf_rate_series is None:
         rf_rate_series = (pd.read_csv(os.path.join(ROOT_DIR, 'data', 'rf_rate_germany.csv'), parse_dates=True,
                                       index_col=0) / 100).resample('D').ffill()
-    combined = return_series.join(deannualize(rf_rate_series), how='left')
+    combined = pd.merge(return_series, deannualize(rf_rate_series), how='left', left_index=True, right_index=True)
     excess_returns = combined['daily_return'].subtract(combined['rf_rate_pct'])
 
     return excess_returns

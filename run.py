@@ -9,17 +9,20 @@ from collections import deque
 import pandas as pd
 from colorama import Fore, Style
 
+from matplotlib import pyplot as plt
+
 import config
 from config import ROOT_DIR
-from core.analysis import StatsReport
-from core.data_collection import load_full_data
+from core.analysis import StatsReport, VisTable, resample_month_end, df_to_html, DataTable
+from core.data_collection import load_full_data, add_constituency_col, to_actual_index
 from core.execute import main
 from core.model import WeightedEnsemble, MixedEnsemble
-from core.utils import get_study_period_ranges, Timer, print_study_period_ranges, CSVReader, get_run_number
+from core.utils import get_study_period_ranges, Timer, print_study_period_ranges, CSVReader, get_run_number, \
+    pretty_print_table
 
 if __name__ == '__main__':
     # Load configurations from file
-    configs = json.load(open('config.json', 'r'))
+    configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
     model_type = None
     multiple_models = None
     ensemble = None
@@ -43,19 +46,14 @@ if __name__ == '__main__':
     config.run_id = get_run_number()
 
     report = StatsReport()
-    report.summary(last_only=True, score_list=['Top-k Annualized Sharpe'], k=10, by_model_type=True)
-    report.to_html()
-
-    exit()
+    report.summary(last_only=False, score_list=['Top-k Annualized Sharpe'], k=10, by_model_type=True)
+    # report.to_html()
 
     # JOB: Specify classifier
 
     # multiple_models = ['RandomForestClassifier']
-
     # ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
-
-    multiple_models = ['RandomForestClassifier', ['ExtraTreesClassifier', 'GradientBoostingClassifier']]
-
+    multiple_models = ['RandomForestClassifier', ['ExtraTreesClassifier', 'LSTM']]
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio

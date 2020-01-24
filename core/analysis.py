@@ -7,17 +7,26 @@ import webbrowser
 
 import numpy as np
 import pandas as pd
+from matplotlib import ticker
 from pandas import DataFrame
+import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
 
 from config import ROOT_DIR
+from core.data_collection import add_constituency_col, to_actual_index, load_full_data
+from core.utils import get_study_period_ranges
 
 
 class StatsReport:
     """
-    Implement StatsReport object
+    Implement StatsReport object, which represents a wrapped DataFrame loaded from a json file
     """
 
     def __init__(self, attrs: list = None):
+        """
+
+        :param attrs: (Optional) Provide list of columns else - if None, infer from headers
+        """
         self.data = pd.read_json(os.path.join(ROOT_DIR, 'data', 'training_log.json'), orient='index',
                                  convert_dates=['Experiment Run End', 'Test Set Start Date', 'Test Set End Date',
                                                 'Study Period Start Date', 'Study Period End Date'])
@@ -29,14 +38,20 @@ class StatsReport:
 
     def to_html(self):
         data = self.split_dict_cols()
+        style = """
+        <html>
+            <head><title>Statistics</title></head>
+            <link rel="stylesheet" type="text/css" media="screen" href="tbl_style.css" />
+            <body>
+                {table}
+            </body>
+        </html>
+        """
+        with open(os.path.join(ROOT_DIR, 'data', 'stats.html'), 'w') as f:
+            f.write(style.format(table=data.to_html(classes='blueTable')))
+        webbrowser.open(os.path.join(ROOT_DIR, 'data', 'stats.html'), new=2)
 
-        text_file = open(os.path.join(ROOT_DIR, 'data', 'index.html'), 'w')
-        text_file.write(data.to_html())
-        text_file.close()
-
-        webbrowser.open(os.path.join(ROOT_DIR, 'data', 'index.html'), new=2)
-
-    def summary(self, score_list: list = None, k: int = None, last_only=True, by_model_type=False, model_type=False):
+    def summary(self, score_list: list = None, k: int = None, last_only=True, by_model_type=False):
         """
         Print summary of StatsReport
 
@@ -44,25 +59,11 @@ class StatsReport:
         :param by_model_type:
         :param k:
         :param score_list:
-        :param summary_type:
         :param last_only:
         :return:
         """
 
-        print(self.data)
-        if by_model_type:
-            model_types = self.data['Model Type'].unique()
-
-            for model_type in model_types:
-                print(f'Model Type: {model_type}')
-                self.summary(score_list=score_list, k=k, last_only=last_only, model_type=model_type)
-
-            return
-
         data = self.split_dict_cols(drop_configs=True)  # Split dict columns
-
-        if model_type:
-            data = data.loc[data['Model Type'] == model_type]
 
         # JOB: Select relevant columns
         if score_list:
@@ -81,14 +82,31 @@ class StatsReport:
                   f'{columns}\n')
 
         # JOB: Print summary statistics for relevant columns
-        for attr in columns:
-            try:
+        if not by_model_type:
+            for attr in columns:
+                try:
+                    if last_only:
+                        print(Statistics(data.loc[data['ID'] == self.last_id, attr], name=attr))
+                    else:
+                        print(Statistics(data.get(attr), name=attr))
+                except TypeError as te:
+                    pass
+
+        else:
+
+            df = pd.DataFrame({attr: [] for attr in columns})
+            df.index.name = 'Model'
+            for attr in columns:
                 if last_only:
-                    print(Statistics(data.loc[data['ID'] == self.last_id, attr], name=attr))
-                else:
-                    print(Statistics(data.get(attr), name=attr))
-            except TypeError as te:
-                pass
+                    data = data.loc[data['ID'] == self.last_id]
+
+                model_types = data['Model Type'].unique()
+                for model_type in model_types:
+                    model_data = data.loc[data['Model Type'] == model_type]
+                    df.loc[model_type, attr] = model_data[attr].mean()
+                    df.loc[model_type, f'{attr}_std'] = model_data[attr].std()
+
+            print(df)
 
     def split_dict_cols(self, drop_configs=True):
         """
@@ -130,12 +148,12 @@ class Statistics:
         summary = None
         if self.data is not None:
             summary = f'{30 * "-"}\n' \
-                      f'Name: {self.name}\n' \
-                      f'Count: {self.data.count()}\n' \
-                      f'Unique: {self.data.nunique()}\n' \
-                      f'Mean: {np.round(self.mean, 4)}\n' \
-                      f'Stdv.: {np.round(self.std, 4)}\n' \
-                      f'{30 * "-"}\n'
+                f'Name: {self.name}\n' \
+                f'Count: {self.data.count()}\n' \
+                f'Unique: {self.data.nunique()}\n' \
+                f'Mean: {np.round(self.mean, 4)}\n' \
+                f'Stdv.: {np.round(self.std, 4)}\n' \
+                f'{30 * "-"}\n'
         return summary
 
     @property
@@ -151,19 +169,219 @@ class Statistics:
         return self.data.nunique()
 
 
-class DataTable(DataFrame):
-    _metadata = ['name']
+class VisTable:
+    """
+    Implements a visualization table from a DataFrame with functions for plotting
+    """
 
-    def __init__(self, *args, **kwargs):
-        self.name = None
-        self.__dict__.update(kwargs)
-        rm_keys = self.__dict__.keys()
+    def __init__(self, data: pd.DataFrame, time_frame: tuple = None, groups: list = None, freq='M', stat='mean',
+                 attrs: list = None):
+        self.data = data.copy()
+        self.time_frame = time_frame
+        self.groups = groups
+        self.attrs = attrs
+        self.freq = freq
+        self.stat = stat
 
-        for key in rm_keys:
-            kwargs.pop(key, None)
-
-        super(DataTable, self).__init__(*args, **kwargs)
+    def __repr__(self):
+        return self.plot_grouped()
 
     @property
-    def _constructor(self):
-        return DataTable
+    def grouped_data(self):
+        return self.data.loc[self.time_frame[0]:self.time_frame[1]].groupby(self.groups)
+
+    def plot_grouped(self, monthly=False):
+        """
+        Plot data in a grouped fashion
+
+        :return:
+        """
+        fig, ax = plt.subplots(figsize=(8, 6))
+
+        # self.data.index = pd.to_datetime(self.data.index)
+        # print(self.grouped_data.get_group('Financials'))
+
+        if self.stat in ['count', 'share', 'percentage']:
+            ax.yaxis.set_major_formatter(ticker.PercentFormatter(1.0, decimals=0))
+            ax.set_ylim(0, 0.3)
+        if 'return' in self.attrs:
+            ax.yaxis.set_major_formatter(ticker.PercentFormatter(1.0, decimals=1))
+
+        for key, group in self.grouped_data:
+            # print(key)
+            if not monthly:
+                if self.stat not in ['count', 'share', 'percentage']:
+                    ax.plot(group.groupby(pd.Grouper(freq=self.freq))[self.attrs].apply(getattr(np, self.stat)),
+                            label=key)
+                else:
+                    avg_index_len = int(round(self.data.groupby('datadate')['gvkey'].count().mean()))
+                    ax.plot(
+                        group.groupby(pd.Grouper(freq=self.freq))[self.attrs].size().resample('Y', how='mean').divide(
+                            avg_index_len),
+                        label=key)
+            else:
+                pass
+
+        legend = ax.legend(loc='best', fontsize='large')
+        for line in legend.get_lines():
+            line.set_linewidth(3.0)
+        plt.show()
+
+
+class DataTable:
+    """
+    Implements a DataFrame wrapper class with grouping and date indexing capability
+    """
+
+    def __init__(self, data: pd.DataFrame, attrs: list = None, time_frame: tuple = None, groups: list = None, freq='M'):
+        self.name = None
+        self.time_frame = time_frame
+        self.groups_ = groups
+        self.freq = freq
+        self.data = data
+        self.attrs = attrs
+
+    def __repr__(self):
+        return self.data.__repr__()
+
+    @property
+    def groups(self):
+        return self.data.loc[self.time_frame[0]:self.time_frame[1]].groupby(self.groups_)[self.attrs]
+
+    @property
+    def combined(self):
+        return self.data.loc[self.time_frame[0]:self.time_frame[1]]
+
+    def get_group_stats(self):
+        summary = pd.DataFrame([], columns=['mean', 'std', 'skew', 'kurt', 'count'])
+        summary.index.name = 'Industry'
+
+        all_stats = self.combined.groupby(pd.Grouper(freq=self.freq))[
+            self.attrs].mean().agg(['mean', 'std', 'skew', pd.DataFrame.kurt])
+        n_all = self.combined.groupby(pd.Grouper(freq=self.freq))[self.attrs].size().mean()
+        all_stats.loc['count', self.attrs] = n_all
+
+        for key, group in self.groups:
+            print(key)
+            group_stats = group.groupby(pd.Grouper(freq=self.freq))[self.attrs].mean().agg(
+                ['mean', 'std', 'skew', pd.DataFrame.kurt])
+            n_stocks = group.groupby(pd.Grouper(freq=self.freq))[self.attrs].size().mean()
+            group_stats.loc['count', self.attrs] = n_stocks
+
+            summary.loc[key] = group_stats[self.attrs[0]]
+            summary = summary[['count', 'mean', 'std', 'skew', 'kurt']]
+
+        summary.loc['All'] = all_stats[self.attrs[0]]
+
+        return summary
+
+
+def fill_na(data: pd.DataFrame, columns: list = None):
+    """
+    Backfill missing values
+
+    :param columns: Columns to backfill
+    :param data:
+    :return:
+    """
+    data = data.copy()
+    data.reset_index(inplace=True)
+    data.set_index(['datadate', 'gvkey', 'iid'], inplace=True)
+    data.sort_index(level='datadate', inplace=True)
+    data = data.unstack(0).stack(dropna=False)
+    for col in columns:
+        data.loc[:, f'{col}_filled'] = data.groupby(['gvkey', 'iid'])[col].bfill(limit=4)
+
+    return data
+
+
+def resample_month_end(data, columns: list = None):
+    """
+    Resample data to monthly frequency and take last value in month
+
+    :param data: DataFrame
+    :param columns:
+    :return:
+    """
+    data = data.copy()
+    data = fill_na(data, ['return_index'])  # Backfill missing daily values
+
+    data.reset_index(inplace=True)
+    data.set_index(['datadate', 'gvkey', 'iid'], inplace=True)
+    data.sort_index(level='datadate', inplace=True)
+
+    data = data.groupby(['gvkey', 'iid']).resample('M', level='datadate').apply('last')  # Resample to monthly frequency
+    data.dropna(subset=['return_index_filled'], inplace=True)
+    # Create monthly return variable
+    data.loc[:, 'monthly_return'] = data.groupby(['gvkey', 'iid'])['return_index_filled'].apply(
+        lambda x: x.pct_change(periods=1))
+    data = data.reorder_levels(order=['datadate', 'gvkey', 'iid'])
+    data.sort_index(level='datadate', inplace=True)
+    if columns:
+        data = data.loc[:, ['gics_sector', *columns]]
+    data.reset_index(['gvkey', 'iid'], inplace=True)
+
+    return data
+
+
+def df_to_html(df, file_name='table', open_window=True):
+    style = """
+    <html>
+        <head><title>Statistics</title></head>
+        <link rel="stylesheet" type="text/css" media="screen" href="tbl_style.css" />
+        <body>
+            {table}
+        </body>
+    </html>
+    """
+    with open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), 'w') as f:
+        f.write(style.format(table=df.to_html(classes='blueTable')))
+
+    if open_window:
+        webbrowser.open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), new=2)
+
+
+if __name__ == '__main__':
+    configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
+    cols = ['above_cs_med', *configs['data']['columns']]
+
+    index_dict = {
+        'DJES': '150378',  # Dow Jones European STOXX Index
+        'SPEURO': '150913',  # S&P Euro Index
+        'EURONEXT': '150928',  # Euronext 100 Index
+        'DJ600': '150376',  # Dow Jones STOXX 600 Price Index
+        'DAX': '150095'
+    }
+
+    # JOB: Specify index ID, relevant columns and study period length
+    index_id = index_dict['DJ600']
+
+    # Load full index data
+    constituency_matrix, full_data, index_name, folder_path = load_full_data(index_id=index_id,
+                                                                             force_download=False,
+                                                                             last_n=None, columns=cols.copy(),
+                                                                             merge_gics=True)
+
+    # JOB: Add constitency column and reduce to actual index constituents
+    full_data = add_constituency_col(full_data, folder_path)
+    full_data = to_actual_index(full_data)
+    full_data.set_index('datadate', inplace=True)
+
+    vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='D', stat='count',
+                   attrs=['gvkey'])
+    vis.plot_grouped()
+
+    vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='Y',
+                   stat='mean',
+                   attrs=['daily_return'])
+    vis.plot_grouped()
+
+    # JOB: Resample to monthly
+    data = resample_month_end(full_data)
+    dt = DataTable(data=data, attrs=['monthly_return'], time_frame=('2002-01', '2019-12'), groups=['gics_sector'],
+                   freq='M')
+
+    stats = dt.get_group_stats()
+    print(stats)
+
+    df_to_html(stats)
