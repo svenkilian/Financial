@@ -3,7 +3,6 @@ This module implements methods to collect financial data from Wharton Research S
 """
 
 import datetime
-# Imports
 import json
 import os
 import re
@@ -17,21 +16,9 @@ import pandas as pd
 import wrds
 from colorama import Fore, Back, Style
 
+from config import *
 # Configurations for displaying DataFrames
-from config import ROOT_DIR
 from core.utils import get_index_name, check_directory_for_file, Timer, lookup_multiple
-
-pd.set_option('precision', 4)
-pd.set_option('display.max_rows', 200)
-pd.set_option('display.max_columns', 40)
-pd.set_option('max_colwidth', 60)
-pd.set_option('mode.sim_interactive', True)
-pd.set_option('expand_frame_repr', True)
-pd.set_option('large_repr', 'truncate')
-
-pd.set_option('colheader_justify', 'left')
-pd.set_option('display.width', 800)
-pd.set_option('display.html.table_schema', False)
 
 from sklearn.preprocessing import StandardScaler
 
@@ -169,7 +156,8 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
     full_data.sort_index(inplace=True)
     full_data.reset_index(inplace=True)
 
-    if merge_gics and 'gsubind' not in full_data.columns:
+    if merge_gics and all(col_name not in full_data.columns for col_name in ['gsubind', 'gsector']):
+        print('Neither \'gsubind\' nor \'gsector\' are in the columns.')
         # JOB: Create GICS (Global Industry Classification Standard) matrix
         gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
                                          load_from_file=load_from_file)
@@ -180,20 +168,23 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
         # Save to file
         full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
-    if 'gics_sector' not in full_data.columns:
+    if all(col_name not in full_data.columns for col_name in ['gics_sector', 'gsector']):
+        print('Neither \'gics_sector\' nor \'gsector\' are in the columns.')
         # JOB: Extract 2-digit GICS code
         generate_gics_sector(full_data)
         # Save to file
         print('Saving modified data to file ...')
         full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
-    if 'gsector' in full_data.columns:
-        full_data.drop(columns=['gsector'], inplace=True)
+    if ('gsector' in full_data.columns) and ('gics_sector' not in full_data.columns):
+        print('Renaming \'gsector\' to \'gics_sector\'.')
+        # full_data.drop(columns=['gsector'], inplace=True)
+        full_data.rename(columns={'gsector': 'gics_sector'}, inplace=True)
         # Save to file
         print('Saving modified data to file ...')
         full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
-    if 'ind_mom_ratio' in columns:
+    if any(col_name in columns for col_name in ['ind_mom_ratio', 'ind_mom']):
         # JOB: Add 6-month (=120 days) momentum column
         print('Adding 6-month momentum ...')
         timer = Timer().start()
@@ -345,7 +336,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     study_data.reset_index(inplace=True)
     study_data.set_index('datadate', inplace=True)
 
-    if 'ind_mom_ratio' in columns:
+    if any(col_name in columns for col_name in ['ind_mom_ratio', 'ind_mom']):
         # JOB: Add industry momentum column
         study_data.loc[:, 'ind_mom'] = study_data.groupby(['gics_sector', 'datadate'])['6m_mom'].transform('mean')
 

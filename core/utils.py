@@ -1,45 +1,25 @@
 """
 This utilities module implements helper functions for displaying data frames and plotting data.
 """
+import config
+from config import *
 import csv
 import datetime
 import datetime as dt
 import glob
 import json
-import os
 import sys
 import time
 from collections import deque
 from pydoc import locate
 
-import matplotlib
 import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from colorama import Fore, Back, Style
 from matplotlib import ticker
 from matplotlib.ticker import MaxNLocator
-from pandas.plotting import register_matplotlib_converters
 from tabulate import tabulate
-
-import config
-from config import ROOT_DIR
-
-# Update matplotlib setting
-plt.rcParams.update({'legend.fontsize': 8,
-                     'legend.loc': 'best',
-                     'legend.markerscale': 2.5,
-                     'legend.frameon': True,
-                     'legend.fancybox': True,
-                     'legend.shadow': True,
-                     'legend.facecolor': 'w',
-                     'legend.edgecolor': 'black',
-                     'legend.framealpha': 1})
-
-# matplotlib.style.use('fivethirtyeight')
-matplotlib.style.use('ggplot')
-register_matplotlib_converters()
 
 
 def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, title='', col_multi_index=False,
@@ -349,11 +329,16 @@ def get_run_number():
         with open(os.path.join(ROOT_DIR, 'data', 'training_log.json'), 'r') as f:
             data = json.load(f)
             last_item = deque(data.items(), maxlen=1).pop()[1]
-            run_id = last_item.get('ID') + 1
+            if last_item.get('ID'):
+                config.run_id = int(last_item.get('ID') + 1)
+            else:
+                print('Last entry has no ID. Looking for largest ID instead.')
+                max_key = max([val.get('ID', 0) for val in data.values() if val.get('ID') is not None])
+                config.run_id = int(max_key + 1)
     except FileNotFoundError:
-        run_id = 1
+        config.run_id = 1
 
-    return run_id
+    return config.run_id
 
 
 def apply_batch_directory(directory_path, function=None, **func_args):

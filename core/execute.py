@@ -1,5 +1,3 @@
-import random
-
 __author__ = "Sven Köpke"
 __copyright__ = "Sven Köpke 2019"
 __version__ = "0.0.1"
@@ -7,14 +5,13 @@ __license__ = "MIT"
 
 import datetime
 import json
+import random
 from typing import Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from colorama import Fore, Back, Style
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
 from tensorflow.keras.metrics import binary_accuracy
 
 import config
@@ -24,7 +21,7 @@ from core.data_processor import DataLoader
 from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble, MixedEnsemble
 from core.utils import plot_train_val, get_most_recent_file, CSVWriter, \
     check_data_conformity, annualize_metric, Timer, calc_sharpe, \
-    calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type, ProgressBar
+    calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type, ProgressBar, check_directory_for_file
 
 
 def main(index_id='150095', index_name='', full_data=None, constituency_matrix: pd.DataFrame = None,
@@ -284,15 +281,25 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
         print('Done testing individual models.')
 
-        predictions, y_test, test_data_index = model.predict(x_test, weighted=True, test_data_index=test_data_index,
+        predictions, y_test, test_data_index = model.predict(x_test, all_predictions=all_predictions, weighted=True,
+                                                             test_data_index=test_data_index,
                                                              y_test=y_test)
 
     # JOB: Test model
-    test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
-               y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
-               model_type=model.model_type, history=history,
-               index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
-               period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
+    if len(predictions) > 1:
+        for weighting, sub_predictions in predictions:
+            test_model(predictions=sub_predictions, configs=configs, folder_path=folder_path,
+                       test_data_index=test_data_index,
+                       y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
+                       model_type=f'{model.model_type}_{weighting}', history=history,
+                       index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
+                       period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
+    else:
+        test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
+                   y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
+                   model_type=model.model_type, history=history,
+                   index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
+                   period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
 
     del study_period_data
 
@@ -318,6 +325,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
     :return: Tuple of (x_train, y_train, x_test, y_test, test_data_index, data_cols, [Optional](validation data tuple))
     """
 
+    cols = cols.copy()
     print(f'{Style.BRIGHT}{Fore.YELLOW}Pre-processing data ...{Style.RESET_ALL}')
     timer = Timer().start()
 
@@ -476,8 +484,14 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         y_test = y_test[kwargs['model_index']]
         test_data_index = test_data_index[kwargs['model_index']]
         study_period_data = study_period_data.copy()
+    else:
+        study_period_data = study_period_data.copy()
 
-    print(f'\nTesting {model} model on unseen data ...')
+    if model_type:
+        print(f'\n{Style.BRIGHT}{Fore.BLUE}Testing {model_type} model on unseen data ...{Style.RESET_ALL}')
+    else:
+        print(f'\nTesting {model} model on unseen data ...')
+
     timer = Timer().start()
     # JOB: Create data frame with true and predicted values
     test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
@@ -513,7 +527,7 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     print(f'Average size of cross sections: {int(cross_section_size)}')
 
     # Define top k values
-    top_k_list = [5, 10]
+    top_k_list = [10]
 
     if cross_section_size > 30:
         top_k_list.extend([50, 100, 150, 200, 250])
@@ -534,8 +548,18 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         # print(full_portfolio.head())
         # print(full_portfolio.tail())
 
-        annualized_sharpe = calc_sharpe(full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(), annualize=True)
-        annualized_sortino = calc_sortino(full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(), annualize=True)
+        if not get_val_score_only:
+            return_series = full_portfolio.loc[:, 'daily_return'].groupby(level=['datadate']).mean()
+            cumulative_return = (return_series + 1).cumprod().rename('Cumulative Return')
+            cumulative_return.index.name = 'Time'
+            cumulative_return.plot(title=model_type)
+            plt.legend(loc='best')
+            plt.show()
+
+        annualized_sharpe = calc_sharpe(full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(),
+                                        annualize=True)
+        annualized_sortino = calc_sortino(full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(),
+                                          annualize=True)
 
         accuracy = None
         mean_daily_return = None
@@ -667,6 +691,7 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
         'Model Configs': model.get_params(),
         'Total Epochs': total_epochs,
+        'Study Period ID': config.study_period_id,
         'Period Range': period_range,
         'Study Period Start Date': start_date.isoformat(),
         'Study Period End Date': end_date.isoformat()
@@ -701,6 +726,13 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'),
                        field_names=list(data_record.keys()))
     logger.add_line(data_record)
+
+    external_file_path = r'E:\OneDrive - student.kit.edu\[01] Studium\[06] Seminare\[04] Electronic Markets & User Behavior\[04] Live Data'
+    if os.path.exists(external_file_path):
+        logger = CSVWriter(output_path=os.path.join(external_file_path, 'training_log.csv'),
+                           field_names=list(data_record.keys()))
+        logger.add_line(data_record)
+        add_to_json(data_record_json, os.path.join(external_file_path, 'training_log.json'))
 
     add_to_json(data_record_json, 'data/training_log.json')
 

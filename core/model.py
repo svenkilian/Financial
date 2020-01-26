@@ -1,6 +1,6 @@
 import inspect
-from typing import List
 
+from scipy.stats import rankdata
 from sklearn import ensemble
 
 from config import ROOT_DIR
@@ -11,7 +11,7 @@ GPU_ENABLED = True
 import os
 import numpy as np
 import datetime as dt
-from numpy import newaxis
+from numpy import newaxis, ndarray
 import pandas as pd
 import pprint
 from tensorflow.keras import optimizers
@@ -81,6 +81,9 @@ class LSTMModel:
             # Get layer type string
             layer_type = layer['type'].lower()
             # Add layer with configuration
+            if layer.get('params').get('input_shape'):
+                layer['params']['input_shape'] = (
+                    layer['params']['input_shape'][0], len(self.configs.get('data').get('columns')))
             self.model.add(layer_type_dict[layer_type].from_config(layer['params']))
 
             # if layer['type'] == 'lstm':
@@ -335,7 +338,8 @@ class TreeEnsemble:
         self.parameters = None
 
     def __repr__(self):
-        return f'{Style.BRIGHT}{Fore.YELLOW}{self.model}{Style.RESET_ALL}'
+        # return f'{Style.BRIGHT}{Fore.YELLOW}{self.model}{Style.RESET_ALL}'
+        return f'{Style.BRIGHT}{Fore.YELLOW}{self.model_type}{Style.RESET_ALL}'
 
     def fit(self, x_train: np.array, y_train: np.array, **fit_args):
         """
@@ -349,7 +353,7 @@ class TreeEnsemble:
         if fit_args.get('x_val'):
             val_score = execute.test_model(
                 predictions=self.model.predict_proba(fit_args.get('x_val')[fit_args['model_index']])[:, 1],
-                get_val_score_only=True, **fit_args)
+                get_val_score_only=True, model=self, **fit_args)
             return val_score
         ret_val = None
         if hasattr(self.model, 'oob_score_'):
@@ -407,6 +411,10 @@ class WeightedEnsemble:
 
     def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None,
                  verbose: int = 0):
+        """
+
+        :rtype: object
+        """
         self.classifier_types = classifier_type_list
         self.classifiers = [TreeEnsemble(index_name=index_name, model_type=m_type).build_model(configs, verbose=verbose)
                             for m_type in
@@ -583,11 +591,15 @@ class MixedEnsemble:
 
         return np.array(predictions_set)
 
-    def predict(self, x_test: np.array, test_data_index: np.array, y_test: np.array, weighted=False,
+    def predict(self, x_test: ndarray, all_predictions: ndarray = None, test_data_index: ndarray = None,
+                y_test: ndarray = None, weighted=False, performance_based=True, rank_based=True,
                 alpha=2) -> np.array:
         """
         Aggregate individual predictions
 
+        :param rank_based:
+        :param performance_based:
+        :param all_predictions:
         :param y_test:
         :param test_data_index: Array of test data indices
         :param alpha: Weighting parameter for weighted average
@@ -597,14 +609,17 @@ class MixedEnsemble:
         """
         print('Making aggregated predictions ...')
 
-        predictions = self.predict_all(x_test)
-        predictions_index_merged = pd.DataFrame()
+        if all_predictions is not None:
+            predictions = all_predictions
+        else:
+            predictions = self.predict_all(x_test)
+        predictions_index_merged = None
         test_sets = []
         y_test_sets = []
 
         for i, preds in enumerate(predictions):
             # JOB: Create data frame with true and predicted values
-            predictions_indexed = pd.DataFrame({'predictions': preds},
+            predictions_indexed = pd.DataFrame({f'predictions_{i}': preds},
                                                index=pd.MultiIndex.from_tuples(test_data_index[i],
                                                                                names=['datadate', 'stock_id']))
 
@@ -615,21 +630,47 @@ class MixedEnsemble:
             y_test_sets.append(y_test_indexed)
 
         for i in range(len(test_sets) - 1):
-            predictions_index_merged = test_sets[i].merge(test_sets[i + 1], how='inner', left_index=True,
-                                                          right_index=True, suffixes=(f'_{str(i)}', f'_{str(i + 1)}'))
+            if i == 0:
+                predictions_index_merged = test_sets[i]
 
-        y_test_indexed_merged = y_test_sets[0].loc[predictions_index_merged.index]
+            predictions_index_merged = predictions_index_merged.merge(test_sets[i + 1], how='inner', left_index=True,
+                                                                      right_index=True, suffixes=(False, False))
+
+        # y_test_indexed_merged = y_test_sets[0].loc[predictions_index_merged.index]
+        y_test_indexed_merged = pd.concat(y_test_sets, join='inner').drop_duplicates().loc[
+            predictions_index_merged.index]
 
         timer = Timer().start()
 
         if weighted:
-            print(
-                f'Weighting with Validation/OOB scores [{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
-            weights = [max(score, 0) ** alpha / max(sum([max(sc, 0) ** alpha for sc in self.val_scores]), 0) for score
-                       in
-                       self.val_scores]
-            print(f'Weights: [{", ".join([str(weight) for weight in weights])}]')
-            predictions = np.average(predictions_index_merged.values, weights=weights, axis=1)
+            predictions = []
+            if performance_based:
+                print(
+                    f'Performance-based weighting with Validation/OOB scores [{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
+                try:
+                    weights = [max(score, 0) ** alpha / max(sum([max(sc, 0) ** alpha for sc in self.val_scores]), 0) for
+                               score
+                               in
+                               self.val_scores]
+                except ZeroDivisionError as zde:
+                    print(
+                        f'{Style.BRIGHT}{Fore.LIGHTRED_EX}All validation scores are <= 0. '
+                        f'Resorting to equal weighting.{Style.RESET_ALL}')
+                    weights = [1 / len(self.val_scores) for score in self.val_scores]
+                print(f'Weights: [{", ".join([str(weight) for weight in weights])}]')
+                preds = np.average(predictions_index_merged.values, weights=weights, axis=1)
+                predictions.append(('performance', preds))
+            if rank_based:
+                print(
+                    f'Rank-based weighting with Validation/OOB scores '
+                    f'[{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
+
+                ranks = (len(self.val_scores) + 1) - rankdata(self.val_scores, method='ordinal')
+                weights = [(1 / rank_i) / sum([(1 / rank_j) for rank_j in ranks]) for rank_i in ranks]
+
+                print(f'Weights: [{", ".join([str(round(weight, 3)) for weight in weights])}]')
+                preds = np.average(predictions_index_merged.values, weights=weights, axis=1)
+                predictions.append(('rank', preds))
         else:
             predictions = np.mean(predictions_index_merged.values, axis=1)
         timer.stop()

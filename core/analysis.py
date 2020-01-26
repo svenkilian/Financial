@@ -2,19 +2,14 @@
 This module implements classes and methods for data analysis
 """
 import json
-import os
 import webbrowser
 
 import numpy as np
 import pandas as pd
 from matplotlib import ticker
-from pandas import DataFrame
-import matplotlib.pyplot as plt
-from scipy.signal import savgol_filter
 
-from config import ROOT_DIR
+from config import *
 from core.data_collection import add_constituency_col, to_actual_index, load_full_data
-from core.utils import get_study_period_ranges
 
 
 class StatsReport:
@@ -36,77 +31,122 @@ class StatsReport:
         else:
             self.attrs = attrs
 
-    def to_html(self):
+    def to_html(self, title='Statistics', file_name='stats', open_window=True):
+        """
+        Create and save HTML table
+
+        :param title: Title of HTML page
+        :param file_name: File name to save HTML page to
+        :param open_window: Open created file in new browser window
+        :return:
+        """
         data = self.split_dict_cols()
-        style = """
+        table = data.to_html(classes='blueTable')
+        html_doc = f"""
         <html>
-            <head><title>Statistics</title></head>
+            <head><title>{title}</title></head>
             <link rel="stylesheet" type="text/css" media="screen" href="tbl_style.css" />
             <body>
                 {table}
             </body>
         </html>
         """
-        with open(os.path.join(ROOT_DIR, 'data', 'stats.html'), 'w') as f:
-            f.write(style.format(table=data.to_html(classes='blueTable')))
-        webbrowser.open(os.path.join(ROOT_DIR, 'data', 'stats.html'), new=2)
+        with open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), 'w') as f:
+            f.write(html_doc)
 
-    def summary(self, score_list: list = None, k: int = None, last_only=True, by_model_type=False):
+        if open_window:
+            webbrowser.open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), new=2)
+
+    def summary(self, score_list: list = None, index_only: str = None, k: int = None, last_only=True,
+                by_model_type=False, sort_by: list = None,
+                show_std=False, to_html=True, open_window=True) -> pd.DataFrame:
         """
-        Print summary of StatsReport
+        Print summary of StatsReport and return as DataFrame
 
-        :param model_type:
-        :param by_model_type:
-        :param k:
-        :param score_list:
-        :param last_only:
-        :return:
+        :param to_html: Export summary table to HTML file
+        :param open_window: Open created HTML page in new browser window
+        :param index_only: Filter by specified index
+        :param show_std: Show standard deviation along with mean
+        :param sort_by: List of column indices to sort by
+        :param by_model_type: Show results separately for each model
+        :param k: Top-k statistics to consider
+        :param score_list: List of performance metrics to include
+        :param last_only: Show statistics for last run only
+        :return: Summary as DataFrame
         """
 
         data = self.split_dict_cols(drop_configs=True)  # Split dict columns
+        index_name = None
 
         # JOB: Select relevant columns
         if score_list:
-            columns = [col for col in data.columns if any([col.startswith(score) for score in score_list])]
+            columns = [col for col in data.columns if any([score in col for score in score_list])]
             if k:
-                columns = [col for col in columns if col.endswith(str(k))]
+                columns = [col for col in columns if col.endswith(f'_{k}')]
         else:
             columns = data.columns
 
+        if index_only:
+            # Filter by specified index
+            index_name = data.get('Index Name').loc[
+                data['Index Name'].str.contains(index_only, case=False, regex=False)].drop_duplicates().values[0]
+
+            print(f'Filter by index: {index_name}')
+            data = data.loc[data['Index Name'].str.contains(index_name, case=False, regex=False)]
+
         # JOB: Print summary info
-        if not last_only:
+        if last_only:
+            # Filter by last available index
+            print(f'Summary report for last available run (ID={last_id(data)} of {self.last_id}) and \n'
+                  f'{columns}\n')
+            try:
+                data = data.loc[data['ID'] == last_id(data)]
+            except TypeError as te:
+                print(te)
+                pass
+        else:
             print(f'Summary report for all runs and \n'
                   f'{columns}\n')
+
+        n_models = data['Model Type'].nunique()
+        if data.shape[0] > n_models:
+            print(f'Showing last {n_models} out of {data.shape[0]}')
+            print('...')
+            print(data.tail(n_models))
         else:
-            print(f'Summary report for last run (ID={self.last_id}) and \n'
-                  f'{columns}\n')
+            print(data)
+
+        total_obs = len(data['Test Set Start Date'].unique())
+        print(f'Number of unique time periods in filtered observation data: {total_obs}')
 
         # JOB: Print summary statistics for relevant columns
         if not by_model_type:
             for attr in columns:
-                try:
-                    if last_only:
-                        print(Statistics(data.loc[data['ID'] == self.last_id, attr], name=attr))
-                    else:
-                        print(Statistics(data.get(attr), name=attr))
-                except TypeError as te:
-                    pass
-
+                print(Statistics(data.get(attr), name=attr))
         else:
-
             df = pd.DataFrame({attr: [] for attr in columns})
             df.index.name = 'Model'
             for attr in columns:
-                if last_only:
-                    data = data.loc[data['ID'] == self.last_id]
-
                 model_types = data['Model Type'].unique()
                 for model_type in model_types:
                     model_data = data.loc[data['Model Type'] == model_type]
                     df.loc[model_type, attr] = model_data[attr].mean()
-                    df.loc[model_type, f'{attr}_std'] = model_data[attr].std()
+                    if show_std:
+                        df.loc[model_type, f'{attr}_std'] = model_data[attr].std()
 
+            # JOB: Sort columns lexicographically:
+            df = df.reindex(sorted(df.columns), axis=1)
+            if sort_by and k:
+                df.sort_values(by=[f'{key}_{k}' for key in sort_by], axis=0, ascending=False, inplace=True)
+            else:
+                df.sort_values(by=columns, axis=0, ascending=False, inplace=True)
             print(df)
+            if to_html:
+                df_to_html(df,
+                           title='Model Performance Overview' if not index_only else f'Model Performance Overview {index_name}',
+                           open_window=open_window)
+
+            return df
 
     def split_dict_cols(self, drop_configs=True):
         """
@@ -130,7 +170,7 @@ class StatsReport:
 
     @property
     def last_id(self):
-        return self.data.get('ID').max()
+        return int(self.data.get('ID').max())
 
 
 class Statistics:
@@ -139,6 +179,13 @@ class Statistics:
     """
 
     def __init__(self, data=None, index=None, name=None):
+        """
+        Constructor for Statistics class
+
+        :param data: Series-like data object
+        :param index: (Optional) Index for data series
+        :param name: Name of data series
+        """
         self.name = name
         if hasattr(data, 'index'):
             index = data.index
@@ -148,13 +195,17 @@ class Statistics:
         summary = None
         if self.data is not None:
             summary = f'{30 * "-"}\n' \
-                f'Name: {self.name}\n' \
-                f'Count: {self.data.count()}\n' \
-                f'Unique: {self.data.nunique()}\n' \
-                f'Mean: {np.round(self.mean, 4)}\n' \
-                f'Stdv.: {np.round(self.std, 4)}\n' \
-                f'{30 * "-"}\n'
+                      f'Name: {self.name}\n' \
+                      f'Count: {self.data.count}\n' \
+                      f'Unique: {self.nunique}\n' \
+                      f'Mean: {np.round(self.mean, 4)}\n' \
+                      f'Stdv.: {np.round(self.std, 4)}\n' \
+                      f'{30 * "-"}\n'
         return summary
+
+    @property
+    def count(self):
+        return pd.Series.count(self.data)
 
     @property
     def mean(self):
@@ -203,7 +254,7 @@ class VisTable:
 
         if self.stat in ['count', 'share', 'percentage']:
             ax.yaxis.set_major_formatter(ticker.PercentFormatter(1.0, decimals=0))
-            ax.set_ylim(0, 0.3)
+            ax.set_ylim(0, 0.35)
         if 'return' in self.attrs:
             ax.yaxis.set_major_formatter(ticker.PercentFormatter(1.0, decimals=1))
 
@@ -221,7 +272,7 @@ class VisTable:
                         label=key)
             else:
                 pass
-
+        ax.set_title(', '.join([attr.replace('_', ' ').title() for attr in self.attrs]), fontsize=16)
         legend = ax.legend(loc='best', fontsize='large')
         for line in legend.get_lines():
             line.set_linewidth(3.0)
@@ -253,6 +304,11 @@ class DataTable:
         return self.data.loc[self.time_frame[0]:self.time_frame[1]]
 
     def get_group_stats(self):
+        """
+        Create DataFrame containing grouped stats
+
+        :return:
+        """
         summary = pd.DataFrame([], columns=['mean', 'std', 'skew', 'kurt', 'count'])
         summary.index.name = 'Industry'
 
@@ -324,10 +380,25 @@ def resample_month_end(data, columns: list = None):
     return data
 
 
-def df_to_html(df, file_name='table', open_window=True):
-    style = """
+def df_to_html(df, title='Statistics', file_name='table', open_window=True) -> None:
+    """
+    Export DataFrame to HTML page
+
+    :param df: DataFrame to export as HTML
+    :param title: HTML page title
+    :param file_name: File name to save HTML to
+    :param open_window: Open HTML page in new browser window
+    :return: None
+    """
+    try:
+        table = df.to_html(classes='blueTable')
+    except AttributeError as ae:
+        print('Single statistic cannot be exported to HTML.')
+        return
+
+    html_doc = f"""
     <html>
-        <head><title>Statistics</title></head>
+        <head><title>{title}</title></head>
         <link rel="stylesheet" type="text/css" media="screen" href="tbl_style.css" />
         <body>
             {table}
@@ -335,13 +406,31 @@ def df_to_html(df, file_name='table', open_window=True):
     </html>
     """
     with open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), 'w') as f:
-        f.write(style.format(table=df.to_html(classes='blueTable')))
+        f.write(html_doc)
 
     if open_window:
         webbrowser.open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), new=2)
 
 
-if __name__ == '__main__':
+def last_id(data):
+    try:
+        last = int(data.get('ID').max())
+    except ValueError:
+        last = None
+        print('Index not in DataFrame.')
+    return last
+
+
+def main(full_log=False, index_summary=True, plots_only=False):
+    """
+    Main method of analysis.py module (to be called when module is run stand-alone)
+
+    :param full_log:
+    :param index_summary: Whether to include summary of index
+    :param plots_only: Whether to only plot index constituency and daily returns over time
+                       (only considered if index_summary is True)
+    :return:
+    """
     configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
     cols = ['above_cs_med', *configs['data']['columns']]
 
@@ -354,34 +443,50 @@ if __name__ == '__main__':
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['DJ600']
+    index_id = index_dict['DAX']
 
-    # Load full index data
-    constituency_matrix, full_data, index_name, folder_path = load_full_data(index_id=index_id,
-                                                                             force_download=False,
-                                                                             last_n=None, columns=cols.copy(),
-                                                                             merge_gics=True)
+    # JOB: Create model performance report
+    report = StatsReport()
+    if full_log:
+        report.to_html(file_name='run_overview', title='Training Log', open_window=False)
+    report.summary(last_only=True, index_only=None, score_list=['Accuracy', 'Sharpe', 'Sortino', 'Excess Return'],
+                   k=10,
+                   by_model_type=True, sort_by=['Top-k Annualized Sharpe'], show_std=False, to_html=True,
+                   open_window=False)
 
-    # JOB: Add constitency column and reduce to actual index constituents
-    full_data = add_constituency_col(full_data, folder_path)
-    full_data = to_actual_index(full_data)
-    full_data.set_index('datadate', inplace=True)
+    if index_summary:
+        # Load full index data
+        constituency_matrix, full_data, index_name, folder_path = load_full_data(index_id=index_id,
+                                                                                 force_download=False,
+                                                                                 last_n=None, columns=cols.copy(),
+                                                                                 merge_gics=True)
 
-    vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='D', stat='count',
-                   attrs=['gvkey'])
-    vis.plot_grouped()
+        # JOB: Add constitency column and reduce to actual index constituents
+        full_data = add_constituency_col(full_data, folder_path)
+        full_data = to_actual_index(full_data)
+        full_data.set_index('datadate', inplace=True)
 
-    vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='Y',
-                   stat='mean',
-                   attrs=['daily_return'])
-    vis.plot_grouped()
+        vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='D', stat='count',
+                       attrs=['gvkey'])
+        vis.plot_grouped()
 
-    # JOB: Resample to monthly
-    data = resample_month_end(full_data)
-    dt = DataTable(data=data, attrs=['monthly_return'], time_frame=('2002-01', '2019-12'), groups=['gics_sector'],
-                   freq='M')
+        vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='Y',
+                       stat='mean',
+                       attrs=['daily_return'])
+        vis.plot_grouped()
 
-    stats = dt.get_group_stats()
-    print(stats)
+        if not plots_only:
+            # JOB: Resample to monthly
+            data = resample_month_end(full_data)
+            dt = DataTable(data=data, attrs=['monthly_return'], time_frame=('2002-01', '2019-12'),
+                           groups=['gics_sector'],
+                           freq='M')
 
-    df_to_html(stats)
+            stats = dt.get_group_stats()
+            print(stats)
+
+            df_to_html(stats, title='Index Stats', file_name='index_stats', open_window=False)
+
+
+if __name__ == '__main__':
+    main(full_log=True, index_summary=False, plots_only=True)

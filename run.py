@@ -4,21 +4,17 @@ This module serves as a starting point for model training and conducting experim
 
 import json
 import os
-from collections import deque
 
-import pandas as pd
 from colorama import Fore, Style
 
-from matplotlib import pyplot as plt
-
 import config
+from config import *
 from config import ROOT_DIR
-from core.analysis import StatsReport, VisTable, resample_month_end, df_to_html, DataTable
-from core.data_collection import load_full_data, add_constituency_col, to_actual_index
+from core.analysis import StatsReport
+from core.data_collection import load_full_data
 from core.execute import main
 from core.model import WeightedEnsemble, MixedEnsemble
-from core.utils import get_study_period_ranges, Timer, print_study_period_ranges, CSVReader, get_run_number, \
-    pretty_print_table
+from core.utils import get_study_period_ranges, Timer, print_study_period_ranges, get_run_number
 
 if __name__ == '__main__':
     # Load configurations from file
@@ -32,28 +28,25 @@ if __name__ == '__main__':
         'DJES': '150378',  # Dow Jones European STOXX Index
         'SPEURO': '150913',  # S&P Euro Index
         'EURONEXT': '150928',  # Euronext 100 Index
-        'DJ600': '150376',  # Dow Jones STOXX 600 Price Index
+        'STOXX600': '150376',  # Dow Jones STOXX 600 Price Index
         'DAX': '150095'
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['DAX']
+    index_id = index_dict['STOXX600']
     cols = ['above_cs_med', *configs['data']['columns']]
     study_period_length = 1000
-    verbose = 1
+    verbose = 0
     plotting = False
 
-    config.run_id = get_run_number()
-
-    report = StatsReport()
-    report.summary(last_only=False, score_list=['Top-k Annualized Sharpe'], k=10, by_model_type=True)
-    # report.to_html()
+    # Determine ID of current run
+    print(f'Logging with run ID = {get_run_number()}')
 
     # JOB: Specify classifier
 
     # multiple_models = ['RandomForestClassifier']
     # ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
-    multiple_models = ['RandomForestClassifier', ['ExtraTreesClassifier', 'LSTM']]
+    multiple_models = [['LSTM', 'ExtraTreesClassifier', 'RandomForestClassifier']]
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio
@@ -83,6 +76,7 @@ if __name__ == '__main__':
     # list(sorted(study_period_ranges.keys()))
     for study_period_ix in range(6, len(study_period_ranges) + 1):
         date_range = study_period_ranges.get(study_period_ix)
+        config.study_period_id = study_period_ix
         print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
         timer = Timer().start()
 
@@ -133,6 +127,12 @@ if __name__ == '__main__':
 
         print(f'\n\n{Fore.GREEN}{Style.BRIGHT}Done fitting on period {study_period_ix}.{Style.RESET_ALL}')
         timer.stop()
+        study_period_stats = StatsReport().summary(last_only=True, index_only=index_name,
+                                                   score_list=['Accuracy', 'Sharpe', 'Sortino', 'Excess Return'],
+                                                   k=10,
+                                                   by_model_type=True, sort_by=['Top-k Annualized Sharpe'],
+                                                   show_std=False, to_html=False,
+                                                   open_window=False)
 
     total_runtime_timer.stop()
 

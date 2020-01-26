@@ -1,17 +1,16 @@
 {
   "data": {
     "columns": [
-      "stand_d_return",
-      "ind_mom_ratio"
+      "stand_d_return"
     ],
     "sequence_length": 241,
     "train_test_split": 0.75,
     "normalize": true
   },
   "training": {
-    "epochs": 4,
-    "batch_size": 64,
-    "early_stopping_patience": 2
+    "epochs": 10,
+    "batch_size": 32,
+    "early_stopping_patience": 4
   },
   "model": {
     "loss": "binary_crossentropy",
@@ -26,13 +25,13 @@
       {
         "type": "lstm",
         "params": {
-          "units": 20,
+          "units": 25,
           "dropout": 0.1,
           "recurrent_dropout": 0.0,
           "kernel_regularizer": "l2",
           "input_shape": [
             240,
-            2
+            0
           ],
           "return_sequences": false
         }
@@ -47,7 +46,7 @@
     ]
   },
   "RandomForestClassifier": {
-    "n_estimators": 200,
+    "n_estimators": 500,
     "max_depth": 20,
     "n_jobs": -1,
     "oob_score": true,
@@ -64,7 +63,7 @@
     "base_estimator__max_depth": 10
   },
   "ExtraTreesClassifier": {
-    "n_estimators": 200,
+    "n_estimators": 500,
     "max_depth": 20,
     "warm_start": true,
     "oob_score": true,
