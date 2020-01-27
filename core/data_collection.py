@@ -90,7 +90,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
 
     else:
         data = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'),
-                           dtype={'gvkey': str, 'gsubind': str, 'datadate': str, 'gics_sector': str},
+                           dtype={'gvkey': str, 'gsubind': str, 'datadate': str, 'gics_sector': str, 'gsector': str},
                            parse_dates=False, index_col=0)
         data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'], infer_datetime_format=True).dt.date
 
@@ -171,6 +171,7 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
     if all(col_name not in full_data.columns for col_name in ['gics_sector', 'gsector']):
         print('Neither \'gics_sector\' nor \'gsector\' are in the columns.')
         # JOB: Extract 2-digit GICS code
+        assert 'gsubind' in full_data.columns
         generate_gics_sector(full_data)
         # Save to file
         print('Saving modified data to file ...')
@@ -198,7 +199,14 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
     gics_map = pd.read_json(os.path.join(ROOT_DIR, 'data', 'gics_code_dict.json'), orient='records',
                             typ='series').rename('gics_sec')
     gics_map = {str(key): val for key, val in gics_map.to_dict().items()}
-    full_data['gics_sec'] = full_data.loc[:, 'gics_sector'].replace(gics_map, inplace=True)
+
+    if 'gics_sector_name' not in full_data.columns:
+        full_data.loc[:, 'gics_sector_name'] = full_data['gics_sector'].replace(gics_map, inplace=False)
+        print('Saving modified data to file ...')
+        full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
+
+    if 'prchd' in full_data.columns:
+        full_data.loc[:, 'daily_spread'] = (full_data['prchd'] - full_data['prcld']).divide(full_data['prccd'])
 
     print('Successfully loaded index history.')
     timer.stop()
@@ -456,7 +464,7 @@ def create_constituency_matrix(load_from_file=False, index_id='150095', lookup_t
 def create_gics_matrix(index_id='150095', index_name=None, lookup_table=None, folder_path: str = None,
                        load_from_file=False) -> pd.DataFrame:
     """
-    Generate constituency matrix Global Industry Classification Standard (GICS) classification.
+    Generate constituency matrix with Global Industry Classification Standard (GICS) classification code (full length)
 
     :param index_id: Index to create constituency matrix for
     :param index_name: (Optional) - Index name
@@ -820,54 +828,57 @@ def generate_gics_sector(data: pd.DataFrame):
 
 def append_columns(data: pd.DataFrame, folder_path: str, file_name: str, column_list: list):
     """
+    Retroactively append columns to index data
 
-    :param column_list:
-    :param data:
-    :param folder_path:
-    :param file_name:
+    :param column_list: Columns to append
+    :param data: Original DataFrame to append data to
+    :param folder_path: Path to index data
+    :param file_name: Name of file containing the additional columns
     :return:
     """
 
-    # TODO: Make merge work
-    index_col_names = data.index.names
-    # Load DataFrame with new columns
-    new_col_df = pd.read_csv(os.path.join(ROOT_DIR, folder_path, file_name), index_col=['datadate', 'gvkey', 'iid'],
-                             header=0,
-                             parse_dates=True, infer_datetime_format=True,
-                             dtype={'gvkey': str})
+    saved_index_cols = None
+    if isinstance(data.index, pd.RangeIndex):
+        pass
+    elif isinstance(data.index, pd.MultiIndex) or isinstance(data.index, pd.Index):
+        saved_index_cols = list(data.index.names)
+        if saved_index_cols[0] is None:
+            saved_index_cols = None
 
+    # JOB: Load DataFrame with new columns
+    new_col_df = pd.read_csv(os.path.join(ROOT_DIR, folder_path, file_name),
+                             header=0, dtype={'gvkey': str})
+
+    new_col_df.loc[:, 'datadate'] = pd.to_datetime(new_col_df['datadate'], format='%Y%m%d')
+    new_col_df.set_index(['datadate', 'gvkey', 'iid'], inplace=True)
+
+    # JOB: Filter by relevant columns
     new_col_df = new_col_df.loc[:, column_list]
 
     # JOB: Merge data with new columns
 
     timer = Timer().start()
-    if None in index_col_names:
-        data.reset_index(inplace=True)
-        print('Resetting existing index.')
-        data.drop(columns='index', inplace=True)
+    if saved_index_cols is None:
+        pass
     else:
-        data.reset_index(inplace=True, drop=True)
-        print('Resetting non-existent index.')
+        data.reset_index(inplace=True, drop=False)
+        print('Resetting existing index.')
 
     print('Merging full data set with new columns ...')
     data.set_index(['datadate', 'gvkey', 'iid'], inplace=True)
+
     data = data.merge(new_col_df, how='left', left_index=True, right_index=True)
     data.reset_index(inplace=True)
     timer.stop()
-    print(data.head())
-    print(data.tail())
-    print(data.sample(40))
 
     # Save to file
-    print('Saving appended DataFrame to file ...')
+    print('\nSaving appended DataFrame to file ...')
     timer = Timer().start()
     data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents_test.csv'))
     timer.stop()
 
-    if index_col_names is not None:
-        data.set_index(index_col_names, inplace=True)
-    else:
-        data.reset_index(inplace=True, drop=True)
+    if saved_index_cols is not None:
+        data.set_index(saved_index_cols, inplace=True)
 
 
 def add_constituency_col(data_orig: pd.DataFrame, folder_path: str) -> pd.DataFrame:

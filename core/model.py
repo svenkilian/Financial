@@ -16,9 +16,9 @@ import pandas as pd
 import pprint
 from tensorflow.keras import optimizers
 from colorama import Fore, Style
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
-from core.utils import Timer, get_model_parent_type
+from core.utils import Timer, get_model_parent_type, pretty_print_table
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
@@ -119,6 +119,7 @@ class LSTMModel:
     def fit(self, x_train: np.array, y_train: np.array, verbose=1, **fit_args):
         validation_data = None
         if fit_args.get('x_val') is not None:
+            # In case classifier is part of mixed ensembe, extract valudation data
             validation_data = (fit_args['x_val'][fit_args['model_index']], fit_args['y_test'][fit_args['model_index']])
             validation_split = None
         else:
@@ -135,7 +136,7 @@ class LSTMModel:
 
         if fit_args.get('x_val'):
             val_score = execute.test_model(predictions=self.predict(fit_args.get('x_val')[fit_args['model_index']]),
-                                           get_val_score_only=True, **fit_args)
+                                           get_val_score_only=True, model=self, **fit_args)
             return val_score
 
         best_val_accuracy = float(history.history['val_accuracy'][np.argmin(history.history['val_loss'])])
@@ -163,8 +164,8 @@ class LSTMModel:
 
         timer = Timer()
         timer.start()
-        print('[Model] Training Started')
-        print('[Model] %s epochs, %s batch size' % (epochs, batch_size))
+        print('[LSTM Model] Training Started')
+        print(f'[LSTM Model] Epochs: {epochs}, batch size: {batch_size} ')
         early_stopping_patience = configs['training']['early_stopping_patience']
 
         save_fname = os.path.join(ROOT_DIR, save_dir, '%s-%s-e%s-b%s.h5' % (self.index_name,
@@ -172,7 +173,7 @@ class LSTMModel:
                                                                             str(epochs), str(batch_size)))
         callbacks = [
             EarlyStopping(monitor='val_loss', patience=early_stopping_patience, restore_best_weights=True,
-                          verbose=1),
+                          verbose=1, min_delta=0.00005),
             ModelCheckpoint(filepath=save_fname, monitor='val_loss', save_best_only=True, verbose=1)]
 
         if GPU_ENABLED:
@@ -351,6 +352,7 @@ class TreeEnsemble:
         """
         self.model.fit(x_train, y_train)
         if fit_args.get('x_val'):
+            # In case TreeEnsemble is part of MixedEnsemble, get validation scores
             val_score = execute.test_model(
                 predictions=self.model.predict_proba(fit_args.get('x_val')[fit_args['model_index']])[:, 1],
                 get_val_score_only=True, model=self, **fit_args)
@@ -451,7 +453,7 @@ class WeightedEnsemble:
                     feature_importances = model.model.feature_importances_
 
                 print('Feature importances:')
-                print(feature_importances)
+                pretty_print_table(feature_importances)
             timer.stop()
 
     def get_params(self):
@@ -522,7 +524,7 @@ class MixedEnsemble:
     Implements a mixed ensemble with a LSTM and a tree-based classifier
     """
 
-    def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None,
+    def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None, weighting_criterion='Accuracy',
                  verbose: int = 0):
         self.index_name = index_name
         self.classifier_types = classifier_type_list
@@ -533,8 +535,11 @@ class MixedEnsemble:
                                                                                         verbose=verbose) for m_type in
             self.classifier_types]
         self.val_scores = []
+        self.weighting_criterion = weighting_criterion
         self.verbose = verbose
         self.model_type = f'{self.__class__.__name__}({", ".join([str(clf.model_type) for clf in self.classifiers])})'
+        model: Union[TreeEnsemble, LSTMModel]
+        self.data_set_indices = [0 if model.parent_model_type == 'deep_learning' else 1 for model in self.classifiers]
 
         print(f'Successfully created mixed ensemble of {[clf for clf in self.classifiers]}')
 
@@ -558,8 +563,14 @@ class MixedEnsemble:
         for i, model in enumerate(self.classifiers):
             # JOB: Fit each ensemble component and evaluate performance on validation data
             print(f'\n\nFitting {Style.BRIGHT}{Fore.BLUE}{model.model_type}{Style.RESET_ALL} model ...')
+            data_set_index = None
+            if model.parent_model_type == 'deep_learning':
+                data_set_index = 0
+            elif model.parent_model_type == 'tree_based':
+                data_set_index = 1
             timer = Timer().start()
-            val_score = model.fit(x_train[i], y_train[i], model_index=i, verbose=self.verbose, **fit_args)
+            val_score = model.fit(x_train[data_set_index], y_train[data_set_index], model_index=data_set_index,
+                                  verbose=self.verbose, model_type=model.model_type, **fit_args)
             if val_score:
                 self.val_scores.append(val_score)
 
@@ -580,7 +591,12 @@ class MixedEnsemble:
         """
         predictions_set = []
 
-        for i, model in enumerate(self.classifiers):
+        for model in self.classifiers:
+            i = None
+            if model.parent_model_type == 'deep_learning':
+                i = 0
+            elif model.parent_model_type == 'tree_based':
+                i = 1
             predictions = None
             if isinstance(model, TreeEnsemble):
                 predictions = model.model.predict_proba(x_test[i])[:, 1]
@@ -605,7 +621,7 @@ class MixedEnsemble:
         :param alpha: Weighting parameter for weighted average
         :param weighted: Use performance-weighted average
         :param x_test: Test set
-        :return: Tuple(predictions, y_test_indexed_merged.values, pd.Index(predictions_index_merged.index)
+        :return: Tuple(predictions, y_test_indexed_merged.values, predictions_index_merged.index
         """
         print('Making aggregated predictions ...')
 
@@ -614,31 +630,39 @@ class MixedEnsemble:
         else:
             predictions = self.predict_all(x_test)
         predictions_index_merged = None
+        y_test_indexed_merged = None
         test_sets = []
         y_test_sets = []
 
         for i, preds in enumerate(predictions):
             # JOB: Create data frame with true and predicted values
-            predictions_indexed = pd.DataFrame({f'predictions_{i}': preds},
-                                               index=pd.MultiIndex.from_tuples(test_data_index[i],
-                                                                               names=['datadate', 'stock_id']))
 
-            y_test_indexed = pd.DataFrame({'y_test': y_test[i].ravel()},
-                                          index=pd.MultiIndex.from_tuples(test_data_index[i],
+            predictions_indexed = pd.DataFrame({f'predictions_{i}': preds},
+                                               index=pd.MultiIndex.from_tuples(
+                                                   test_data_index[self.data_set_indices[i]],
+                                                   names=['datadate', 'stock_id']))
+
+            y_test_indexed = pd.DataFrame({f'y_test_{i}': y_test[self.data_set_indices[i]].ravel()},
+                                          index=pd.MultiIndex.from_tuples(test_data_index[self.data_set_indices[i]],
                                                                           names=['datadate', 'stock_id']))
+
             test_sets.append(predictions_indexed)
             y_test_sets.append(y_test_indexed)
 
         for i in range(len(test_sets) - 1):
             if i == 0:
                 predictions_index_merged = test_sets[i]
+                y_test_indexed_merged = y_test_sets[i]
 
             predictions_index_merged = predictions_index_merged.merge(test_sets[i + 1], how='inner', left_index=True,
                                                                       right_index=True, suffixes=(False, False))
 
-        # y_test_indexed_merged = y_test_sets[0].loc[predictions_index_merged.index]
-        y_test_indexed_merged = pd.concat(y_test_sets, join='inner').drop_duplicates().loc[
-            predictions_index_merged.index]
+            y_test_indexed_merged = y_test_indexed_merged.merge(y_test_sets[i + 1], how='inner', left_index=True,
+                                                                right_index=True, suffixes=(False, False))
+
+        y_test_indexed_merged = y_test_indexed_merged.iloc[:, 0]
+
+        assert y_test_indexed_merged.shape[0] == predictions_index_merged.shape[0]
 
         timer = Timer().start()
 
@@ -646,7 +670,7 @@ class MixedEnsemble:
             predictions = []
             if performance_based:
                 print(
-                    f'Performance-based weighting with Validation/OOB scores [{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
+                    f'\nPerformance-based weighting with Validation/OOB scores [{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
                 try:
                     weights = [max(score, 0) ** alpha / max(sum([max(sc, 0) ** alpha for sc in self.val_scores]), 0) for
                                score
@@ -662,7 +686,7 @@ class MixedEnsemble:
                 predictions.append(('performance', preds))
             if rank_based:
                 print(
-                    f'Rank-based weighting with Validation/OOB scores '
+                    f'\nRank-based weighting with Validation/OOB scores '
                     f'[{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
 
                 ranks = (len(self.val_scores) + 1) - rankdata(self.val_scores, method='ordinal')
@@ -675,7 +699,7 @@ class MixedEnsemble:
             predictions = np.mean(predictions_index_merged.values, axis=1)
         timer.stop()
 
-        return predictions, y_test_indexed_merged.values, pd.Index(predictions_index_merged.index)
+        return predictions, y_test_indexed_merged.values, predictions_index_merged.index
 
     @staticmethod
     def is_mixed_ensemble(classifier_list, configs):

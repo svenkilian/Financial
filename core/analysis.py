@@ -3,13 +3,15 @@ This module implements classes and methods for data analysis
 """
 import json
 import webbrowser
+from typing import Union
 
 import numpy as np
-import pandas as pd
+from colorama import Fore, Style
 from matplotlib import ticker
 
 from config import *
 from core.data_collection import add_constituency_col, to_actual_index, load_full_data
+from core.utils import pretty_print_table
 
 
 class StatsReport:
@@ -57,19 +59,20 @@ class StatsReport:
         if open_window:
             webbrowser.open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), new=2)
 
-    def summary(self, score_list: list = None, index_only: str = None, k: int = None, last_only=True,
-                by_model_type=False, sort_by: list = None,
+    def summary(self, score_list: list = None, index_only: str = None, k: Union[list, int] = None, last_only=True, show_all=False,
+                by_model_type=False, sort_by: str = None,
                 show_std=False, to_html=True, open_window=True) -> pd.DataFrame:
         """
         Print summary of StatsReport and return as DataFrame
 
+        :param show_all: Show full training history
         :param to_html: Export summary table to HTML file
         :param open_window: Open created HTML page in new browser window
         :param index_only: Filter by specified index
         :param show_std: Show standard deviation along with mean
-        :param sort_by: List of column indices to sort by
+        :param sort_by: Column to sort by
         :param by_model_type: Show results separately for each model
-        :param k: Top-k statistics to consider
+        :param k: List of k Top-k statistics to consider
         :param score_list: List of performance metrics to include
         :param last_only: Show statistics for last run only
         :return: Summary as DataFrame
@@ -77,12 +80,14 @@ class StatsReport:
 
         data = self.split_dict_cols(drop_configs=True)  # Split dict columns
         index_name = None
+        if isinstance(k, int):
+            k = [k]
 
         # JOB: Select relevant columns
         if score_list:
             columns = [col for col in data.columns if any([score in col for score in score_list])]
             if k:
-                columns = [col for col in columns if col.endswith(f'_{k}')]
+                columns = [col for col in columns for i in k if col.endswith(f'_{i}')]
         else:
             columns = data.columns
 
@@ -91,7 +96,7 @@ class StatsReport:
             index_name = data.get('Index Name').loc[
                 data['Index Name'].str.contains(index_only, case=False, regex=False)].drop_duplicates().values[0]
 
-            print(f'Filter by index: {index_name}')
+            print(f'Filter by index: {Style.BRIGHT}{Fore.LIGHTBLUE_EX}{index_name}{Style.RESET_ALL}')
             data = data.loc[data['Index Name'].str.contains(index_name, case=False, regex=False)]
 
         # JOB: Print summary info
@@ -109,15 +114,15 @@ class StatsReport:
                   f'{columns}\n')
 
         n_models = data['Model Type'].nunique()
-        if data.shape[0] > n_models:
+        if data.shape[0] > n_models and not show_all:
             print(f'Showing last {n_models} out of {data.shape[0]}')
             print('...')
-            print(data.tail(n_models))
+            pretty_print_table(data.tail(n_models).iloc[:, :15])
         else:
-            print(data)
+            pretty_print_table(data.iloc[:, :15])
 
         total_obs = len(data['Test Set Start Date'].unique())
-        print(f'Number of unique time periods in filtered observation data: {total_obs}')
+        print(f'\nNumber of unique time periods in filtered observation data: {total_obs}')
 
         # JOB: Print summary statistics for relevant columns
         if not by_model_type:
@@ -136,11 +141,16 @@ class StatsReport:
 
             # JOB: Sort columns lexicographically:
             df = df.reindex(sorted(df.columns), axis=1)
+            sort_by = [col for col in data.columns if sort_by in col][0].split('_')[0]
             if sort_by and k:
-                df.sort_values(by=[f'{key}_{k}' for key in sort_by], axis=0, ascending=False, inplace=True)
+                sort_by_column = f'{sort_by}_{k[0]}'
+                print(f'Table sorted by {sort_by_column}')
+                df.sort_values(by=sort_by_column, axis=0, ascending=False, inplace=True)
+                col_names_rm = [col for col in df.columns if col not in sort_by_column]
+                df = df[[sort_by_column, *col_names_rm]]
             else:
                 df.sort_values(by=columns, axis=0, ascending=False, inplace=True)
-            print(df)
+            pretty_print_table(df)
             if to_html:
                 df_to_html(df,
                            title='Model Performance Overview' if not index_only else f'Model Performance Overview {index_name}',
@@ -438,7 +448,7 @@ def main(full_log=False, index_summary=True, plots_only=False):
         'DJES': '150378',  # Dow Jones European STOXX Index
         'SPEURO': '150913',  # S&P Euro Index
         'EURONEXT': '150928',  # Euronext 100 Index
-        'DJ600': '150376',  # Dow Jones STOXX 600 Price Index
+        'STOXX600': '150376',  # Dow Jones STOXX 600 Price Index
         'DAX': '150095'
     }
 
@@ -449,9 +459,10 @@ def main(full_log=False, index_summary=True, plots_only=False):
     report = StatsReport()
     if full_log:
         report.to_html(file_name='run_overview', title='Training Log', open_window=False)
-    report.summary(last_only=True, index_only=None, score_list=['Accuracy', 'Sharpe', 'Sortino', 'Excess Return'],
+    report.summary(last_only=True, index_only=None, show_all=False,
+                   score_list=['Accuracy', 'Sharpe', 'Sortino', 'Return'],
                    k=10,
-                   by_model_type=True, sort_by=['Top-k Annualized Sharpe'], show_std=False, to_html=True,
+                   by_model_type=True, sort_by='Annualized Excess Return', show_std=False, to_html=True,
                    open_window=False)
 
     if index_summary:
@@ -459,9 +470,9 @@ def main(full_log=False, index_summary=True, plots_only=False):
         constituency_matrix, full_data, index_name, folder_path = load_full_data(index_id=index_id,
                                                                                  force_download=False,
                                                                                  last_n=None, columns=cols.copy(),
-                                                                                 merge_gics=True)
+                                                                                 merge_gics=False)
 
-        # JOB: Add constitency column and reduce to actual index constituents
+        # JOB: Add constituency column and reduce to actual index constituents
         full_data = add_constituency_col(full_data, folder_path)
         full_data = to_actual_index(full_data)
         full_data.set_index('datadate', inplace=True)
@@ -479,7 +490,7 @@ def main(full_log=False, index_summary=True, plots_only=False):
             # JOB: Resample to monthly
             data = resample_month_end(full_data)
             dt = DataTable(data=data, attrs=['monthly_return'], time_frame=('2002-01', '2019-12'),
-                           groups=['gics_sector'],
+                           groups=['gics_sector_name'],
                            freq='M')
 
             stats = dt.get_group_stats()

@@ -36,6 +36,7 @@ class DataLoader:
         self.data_test_index = None
 
         self.data = self.data[self.cols]
+        self.data.dropna(inplace=True)  # TODO: Remove
 
         # Handle empty data frame
         if len(self.data) == 0:
@@ -197,7 +198,7 @@ class DataLoader:
                 data_x = np.array([])
                 data_y = np.array([])
                 print(
-                    f'{Fore.RED}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
+                    f'\n{Fore.RED}{Style.BRIGHT}Non-positive test data length for {self.stock_id}.{Style.RESET_ALL}')
 
             # print('Test data length: %s' % len(data_x))
 

@@ -6,7 +6,7 @@ __license__ = "MIT"
 import datetime
 import json
 import random
-from typing import Union
+from typing import Union, Tuple
 
 import numpy as np
 import pandas as pd
@@ -21,7 +21,8 @@ from core.data_processor import DataLoader
 from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble, MixedEnsemble
 from core.utils import plot_train_val, get_most_recent_file, CSVWriter, \
     check_data_conformity, annualize_metric, Timer, calc_sharpe, \
-    calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type, ProgressBar, check_directory_for_file
+    calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type, ProgressBar, check_directory_for_file, \
+    pretty_print_table
 
 
 def main(index_id='150095', index_name='', full_data=None, constituency_matrix: pd.DataFrame = None,
@@ -211,7 +212,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
             # JOB: Fit models
             print(f'\n\nFitting ensemble ...')
-            model.fit(x_train, y_train, feature_names=feature_names, show_importances=False)
+            model.fit(x_train, y_train, feature_names=feature_names, show_importances=True)
 
             print(f'\nOut-of-bag scores: {model.oob_scores}')
 
@@ -241,15 +242,14 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     elif parent_model_type == 'mixed':
         # JOB: Fitting and testing in case of mixed ensemble
         model: MixedEnsemble = ensemble
-        model_type = str(model)
         print('Mixed ensemble configuration:')
-        print(model_type)
+        print(model)
 
         x_val = []
         y_val = []
         val_index = []
 
-        for i in range(len(model.classifiers)):
+        for i in range(2):
             x_val_i, y_val_i, val_index_i = validation_data[i]
             x_val.append(x_val_i)
             y_val.append(y_val_i)
@@ -260,7 +260,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
         model.fit(x_train, y_train, feature_names=feature_names, x_val=x_val, val_index=val_index,
                   configs=configs,
                   folder_path=folder_path, y_test=y_val, test_data_index=val_index,
-                  study_period_data=study_period_data.copy(), weighting_criterion='Annualized Sharpe')
+                  study_period_data=study_period_data.copy(), weighting_criterion='Accuracy')
 
         print(f'\nValidation/Out-of-bag scores: {model.val_scores}')
 
@@ -270,9 +270,14 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
         all_predictions = model.predict_all(x_test)
         for i, base_clf in enumerate(ensemble.classifiers):
             print(f'Testing ensemble component {i + 1} ({base_clf.model_type})')
+            data_set_index = None
+            if base_clf.parent_model_type == 'deep_learning':
+                data_set_index = 0
+            elif base_clf.parent_model_type == 'tree_based':
+                data_set_index = 1
             test_model(predictions=all_predictions[i],
-                       configs=configs, folder_path=folder_path, test_data_index=test_data_index[i],
-                       y_test=y_test[i], study_period_data=study_period_data.copy(),
+                       configs=configs, folder_path=folder_path, test_data_index=test_data_index[data_set_index],
+                       y_test=y_test[data_set_index], study_period_data=study_period_data.copy(),
                        parent_model_type=base_clf.parent_model_type,
                        model_type=base_clf.model_type, history=history,
                        index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
@@ -285,21 +290,30 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                                                              test_data_index=test_data_index,
                                                              y_test=y_test)
 
+    preds = pd.DataFrame({'performance': [], 'rank': []})
+
     # JOB: Test model
-    if len(predictions) > 1:
+    if isinstance(predictions, tuple):
         for weighting, sub_predictions in predictions:
-            test_model(predictions=sub_predictions, configs=configs, folder_path=folder_path,
-                       test_data_index=test_data_index,
-                       y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
-                       model_type=f'{model.model_type}_{weighting}', history=history,
-                       index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
-                       period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
+            pred = test_model(predictions=sub_predictions, configs=configs, folder_path=folder_path,
+                              test_data_index=test_data_index,
+                              y_test=y_test, study_period_data=study_period_data.copy(),
+                              parent_model_type=parent_model_type,
+                              model_type=f'{model.model_type}_{weighting}', history=history,
+                              index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
+                              model=model,
+                              period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
+
+            preds.loc[:, weighting] = pred
     else:
         test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
                    y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
                    model_type=model.model_type, history=history,
                    index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
                    period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
+
+    preds.loc[:, 'Same'] = np.where(preds['performance'] == preds['rank'], True, False)
+    print(f"{preds['Same'].sum()}/{preds.shape[0]}")  # TODO: Remove
 
     del study_period_data
 
@@ -340,8 +354,7 @@ def preprocess_data(study_period_data: pd.DataFrame, unique_indices: pd.MultiInd
             study_period_data=study_period_data, unique_indices=unique_indices, cols=cols, split_index=split_index,
             configs=configs, full_date_range=full_date_range, parent_model_type=parent_model_type,
             ensemble=None, from_mixed=True, return_validation_data=True, validation_range=validation_range) for
-            parent_model_type in
-            ensemble_components_parent_types]).T.tolist()
+            parent_model_type in ['deep_learning', 'tree_based']]).T.tolist()
 
     # JOB: Instantiate training and test data
     data = None
@@ -480,17 +493,15 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     :param end_date:
     """
 
-    if kwargs.get('model_index') is not None:
+    if get_val_score_only:
+        # In case classifier is part of MixedEnsemble as is being validated
         y_test = y_test[kwargs['model_index']]
         test_data_index = test_data_index[kwargs['model_index']]
-        study_period_data = study_period_data.copy()
+        print(f'\nGetting validation score for {Style.BRIGHT}{Fore.BLUE}{model_type}{Style.RESET_ALL} ...')
     else:
-        study_period_data = study_period_data.copy()
+        print(f'\nTesting {Style.BRIGHT}{Fore.BLUE}{model_type}{Style.RESET_ALL} model on unseen data ...')
 
-    if model_type:
-        print(f'\n{Style.BRIGHT}{Fore.BLUE}Testing {model_type} model on unseen data ...{Style.RESET_ALL}')
-    else:
-        print(f'\nTesting {model} model on unseen data ...')
+    study_period_data = study_period_data.copy()
 
     timer = Timer().start()
     # JOB: Create data frame with true and predicted values
@@ -508,9 +519,11 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
 
     del study_period_data
 
+    full_portfolio = None
+
     # JOB: Create normalized predictions (e.g., directional prediction relative to cross-sectional median of predictions)
     test_set_comparison.loc[:, 'norm_prediction'] = test_set_comparison.loc[:, 'prediction'].gt(
-        test_set_comparison.groupby('datadate')['prediction'].transform('median')).astype(np.int8)
+        test_set_comparison.groupby('datadate')['prediction'].transform('median')).astype(np.int16)
 
     # JOB: Create cross-sectional ranking
     test_set_comparison.loc[:, 'prediction_rank'] = test_set_comparison.groupby('datadate')['prediction'].rank(
@@ -527,7 +540,7 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     print(f'Average size of cross sections: {int(cross_section_size)}')
 
     # Define top k values
-    top_k_list = [10]
+    top_k_list = [5, 10]
 
     if cross_section_size > 30:
         top_k_list.extend([50, 100, 150, 200, 250])
@@ -536,6 +549,12 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     top_k_metrics = pd.DataFrame(
         {'Accuracy': [], 'Mean Daily Return': [], 'Mean Daily Return (Short)': [], 'Mean Daily Return (Long)': []})
     top_k_metrics.index.name = 'k'
+
+    t_costs = 0.0005
+
+    market_metrics = None
+    if not get_val_score_only:
+        market_metrics, market_cum_returns = get_market_metrics(test_set_comparison)
 
     for top_k in top_k_list:
         # JOB: Filter test data by top/bottom k affiliation
@@ -549,17 +568,28 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         # print(full_portfolio.tail())
 
         if not get_val_score_only:
+            market_metrics, market_cum_returns = get_market_metrics(test_set_comparison)
+
             return_series = full_portfolio.loc[:, 'daily_return'].groupby(level=['datadate']).mean()
-            cumulative_return = (return_series + 1).cumprod().rename('Cumulative Return')
+            cumulative_return = (return_series + 1).cumprod().rename('Cumulative Portfolio Return')
             cumulative_return.index.name = 'Time'
-            cumulative_return.plot(title=model_type)
-            plt.legend(loc='best')
-            plt.show()
+            merged = pd.concat([cumulative_return, market_cum_returns], axis=1, join='outer')
+            if plotting:
+                merged.plot()
+                plt.legend(loc='best')
+                plt.title(label=model_type)
+                plt.show()
 
         annualized_sharpe = calc_sharpe(full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(),
                                         annualize=True)
+        annualized_sharpe_atc = calc_sharpe(
+            full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean() - 4 * t_costs,
+            annualize=True)
         annualized_sortino = calc_sortino(full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(),
                                           annualize=True)
+        annualized_sortino_atc = calc_sortino(
+            full_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean() - 4 * t_costs,
+            annualize=True)
 
         accuracy = None
         mean_daily_return = None
@@ -597,11 +627,27 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         top_k_metrics.loc[top_k, 'Mean Daily Return (Short)'] = mean_daily_short
         top_k_metrics.loc[top_k, 'Mean Daily Return (Long)'] = mean_daily_long
 
+        # JOB: Add metrics incl. transaction costs of 5 bps per half-turn
+
+        top_k_metrics.loc[top_k, 'Mean Daily Return_atc'] = mean_daily_return - 4 * t_costs
+        top_k_metrics.loc[top_k, 'Annualized Return_atc'] = annualize_metric(mean_daily_return - 4 * t_costs)
+        top_k_metrics.loc[top_k, 'Mean Daily Excess Return_atc'] = mean_daily_excess_return - 4 * t_costs
+        top_k_metrics.loc[top_k, 'Annualized Excess Return_atc'] = annualize_metric(
+            mean_daily_excess_return - 4 * t_costs)
+        top_k_metrics.loc[top_k, 'Annualized Sharpe_atc'] = annualized_sharpe_atc
+        top_k_metrics.loc[top_k, 'Annualized Sortino_atc'] = annualized_sortino_atc
+        top_k_metrics.loc[top_k, 'Mean Daily Return (Short)_atc'] = mean_daily_short - 2 * t_costs
+        top_k_metrics.loc[top_k, 'Mean Daily Return (Long)_atc'] = mean_daily_long - 2 * t_costs
+
     if get_val_score_only:
+        print(f'{weighting_criterion} score: {top_k_metrics.loc[10, weighting_criterion]}')
         return top_k_metrics.loc[10, weighting_criterion]
 
+    top_k_metrics = pd.concat([top_k_metrics, market_metrics.to_frame().T], join='outer', verify_integrity=True)
+    top_k_metrics.fillna('-', inplace=True)
+
     # JOB: Display top-k metrics
-    print(top_k_metrics)
+    pretty_print_table(top_k_metrics)
 
     # JOB: Plot accuracies and save figure to file
     if plotting:
@@ -634,6 +680,10 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         test_score = accuracy_score(test_set_comparison['y_test'].values,
                                     test_set_comparison['norm_prediction'].values)
         print(f'\nTest score on full test set: {np.round(test_score, 4)}')
+
+        # pretty_print_table(
+        #     pd.DataFrame({'y_test': test_set_comparison['y_test'].values, 'norm_prediction': test_set_comparison[
+        #         'norm_prediction'].values}).sample(100))  # TODO: Remove
 
     total_epochs = len(history.history['loss']) if history is not None else None
 
@@ -743,6 +793,45 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
 
     print('Done testing on unseen data.')
     timer.stop()
+
+    return full_portfolio['norm_prediction'].values
+
+
+def get_market_metrics(market_portfolio: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+    """
+    Get performance metrics for full market portfolio
+
+    :param market_portfolio: DataFrame including full test set (market portfolio)
+    :return: Tuple of market portfolio metrics (Series) and cumulative returns series (Series)
+    """
+
+    market_portfolio_metrics = pd.Series([]).rename('Market')
+    market_portfolio_metrics.index.name = 'Metrics'
+
+    return_series = market_portfolio.loc[:, 'daily_return'].groupby(level=['datadate']).mean()
+    cumulative_return = (return_series + 1).cumprod().rename('Cumulative Market Return')
+    cumulative_return.index.name = 'Time'
+    # cumulative_return.plot(title='Cumulative Market Performance')
+    # plt.legend(loc='best')
+    # plt.show()
+
+    # JOB: Calculate metrics
+    annualized_sharpe = calc_sharpe(market_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(),
+                                    annualize=True)
+    annualized_sortino = calc_sortino(market_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(),
+                                      annualize=True)
+    mean_daily_return = market_portfolio.groupby(level=['datadate'])['daily_return'].mean().mean()
+    mean_daily_excess_return = calc_excess_returns(
+        market_portfolio.groupby(level=['datadate'])['daily_return'].mean().rename('daily_return')).mean()
+
+    market_portfolio_metrics.loc['Mean Daily Return'] = mean_daily_return
+    market_portfolio_metrics.loc['Annualized Return'] = annualize_metric(mean_daily_return)
+    market_portfolio_metrics.loc['Mean Daily Excess Return'] = mean_daily_excess_return
+    market_portfolio_metrics.loc['Annualized Excess Return'] = annualize_metric(mean_daily_excess_return)
+    market_portfolio_metrics.loc['Annualized Sharpe'] = annualized_sharpe
+    market_portfolio_metrics.loc['Annualized Sortino'] = annualized_sortino
+
+    return market_portfolio_metrics, cumulative_return
 
 
 if __name__ == '__main__':

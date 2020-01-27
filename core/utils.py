@@ -103,7 +103,7 @@ def pretty_print_table(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     Usage::
             >>> pretty_print_table(db, headers=['col_1', 'col_2'])
     """
-    print(tabulate(df, headers, tablefmt=tablefmt, showindex=True))
+    print(tabulate(df, headers, tablefmt=tablefmt, showindex=True, floatfmt='.4f'))
 
 
 def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> None:

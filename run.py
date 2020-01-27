@@ -11,7 +11,7 @@ import config
 from config import *
 from config import ROOT_DIR
 from core.analysis import StatsReport
-from core.data_collection import load_full_data
+from core.data_collection import load_full_data, append_columns
 from core.execute import main
 from core.model import WeightedEnsemble, MixedEnsemble
 from core.utils import get_study_period_ranges, Timer, print_study_period_ranges, get_run_number
@@ -37,6 +37,7 @@ if __name__ == '__main__':
     cols = ['above_cs_med', *configs['data']['columns']]
     study_period_length = 1000
     verbose = 0
+    weighting_criterion = 'Accuracy'
     plotting = False
 
     # Determine ID of current run
@@ -45,8 +46,8 @@ if __name__ == '__main__':
     # JOB: Specify classifier
 
     # multiple_models = ['RandomForestClassifier']
-    # ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
-    multiple_models = [['LSTM', 'ExtraTreesClassifier', 'RandomForestClassifier']]
+    ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
+    # multiple_models = [['LSTM', 'ExtraTreesClassifier', 'RandomForestClassifier']]
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio
@@ -57,6 +58,8 @@ if __name__ == '__main__':
                                                                              force_download=False,
                                                                              last_n=None, columns=cols.copy(),
                                                                              merge_gics=True)
+
+    # append_columns(full_data, folder_path, 'high_low.csv', ['prchd', 'prcld'])
 
     # Determine length of full data
     data_length = full_data['datadate'].drop_duplicates().size
@@ -74,7 +77,7 @@ if __name__ == '__main__':
 
     # JOB: Iteratively fit model on all study periods
     # list(sorted(study_period_ranges.keys()))
-    for study_period_ix in range(6, len(study_period_ranges) + 1):
+    for study_period_ix in range(8, len(study_period_ranges) + 1):
         date_range = study_period_ranges.get(study_period_ix)
         config.study_period_id = study_period_ix
         print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
@@ -87,7 +90,9 @@ if __name__ == '__main__':
 
                     if MixedEnsemble.is_mixed_ensemble(model_type, configs):
                         ensemble = MixedEnsemble(index_name=index_name.lower().replace(' ', '_'),
-                                                 classifier_type_list=model_type, configs=configs, verbose=verbose)
+                                                 classifier_type_list=model_type,
+                                                 weighting_criterion=weighting_criterion, configs=configs,
+                                                 verbose=verbose)
                         model_type = None
 
                     elif WeightedEnsemble.is_weighted_ensemble(model_type, configs):
@@ -127,10 +132,10 @@ if __name__ == '__main__':
 
         print(f'\n\n{Fore.GREEN}{Style.BRIGHT}Done fitting on period {study_period_ix}.{Style.RESET_ALL}')
         timer.stop()
-        study_period_stats = StatsReport().summary(last_only=True, index_only=index_name,
+        study_period_stats = StatsReport().summary(last_only=True, index_only=index_name, show_all=False,
                                                    score_list=['Accuracy', 'Sharpe', 'Sortino', 'Excess Return'],
-                                                   k=10,
-                                                   by_model_type=True, sort_by=['Top-k Annualized Sharpe'],
+                                                   k=[10],
+                                                   by_model_type=True, sort_by='Annualized Sharpe',
                                                    show_std=False, to_html=False,
                                                    open_window=False)
 
