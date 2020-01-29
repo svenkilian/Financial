@@ -80,6 +80,7 @@ class DataLoader:
 
             self.data_train_index = pd.MultiIndex.from_product(
                 [self.data.get(self.cols).iloc[self.seq_len - 1:target_start_index].index, [stock_id]])
+
         elif model_type == 'tree_based':
             if self.len_train >= self.seq_len:
                 self.data_test = self.data.get(self.cols).iloc[self.i_split - seq_len + 2:].values  # Get test array

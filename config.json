@@ -8,8 +8,8 @@
     "normalize": true
   },
   "training": {
-    "epochs": 1,
-    "batch_size": 128,
+    "epochs": 10,
+    "batch_size": 32,
     "early_stopping_patience": 3
   },
   "model": {
@@ -45,30 +45,30 @@
       }
     ]
   },
-  "RandomForestClassifier": {
-    "n_estimators": 50,
-    "max_depth": 20,
-    "n_jobs": -1,
-    "oob_score": true,
-    "warm_start": true
-  },
-  "GradientBoostingClassifier": {
-    "n_estimators": 15,
-    "max_depth": 5,
-    "warm_start": true
-  },
-  "AdaBoostClassifier": {
-    "n_estimators": 500,
-    "base_estimator": "DecisionTreeClassifier",
-    "base_estimator__max_depth": 10
-  },
-  "ExtraTreesClassifier": {
-    "n_estimators": 50,
-    "max_depth": 20,
-    "warm_start": true,
-    "oob_score": true,
-    "bootstrap": true,
-    "n_jobs": -1
+  "tree_based_classifiers": {
+    "RandomForestClassifier": {
+      "n_estimators": 200,
+      "max_depth": 20,
+      "oob_score": true,
+      "n_jobs": -1
+    },
+    "ExtraTreesClassifier": {
+      "n_estimators": 500,
+      "max_depth": 20,
+      "warm_start": true,
+      "oob_score": true,
+      "bootstrap": true,
+      "n_jobs": -1
+    },
+    "GradientBoostingClassifier": {
+      "n_estimators": 15,
+      "max_depth": 5
+    },
+    "AdaBoostClassifier": {
+      "n_estimators": 15,
+      "base_estimator": "DecisionTreeClassifier",
+      "base_estimator__max_depth": 5
+    }
   },
   "model_hierarchy": {
     "tree_based": [

@@ -205,8 +205,12 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
             timer = Timer().start()
             model.fit(x_train, y_train)
 
-            print('\nFeature importances:')
-            print(model.model.feature_importances_)
+            try:
+                print('\nFeature importances:')
+                print(model.model.feature_importances_)
+            except AttributeError as ae:
+                pass
+
             timer.stop()
 
             print(f'\nMaking predictions on test set ...')
@@ -222,7 +226,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
             # JOB: Fit models
             print(f'\n\nFitting ensemble ...')
-            model.fit(x_train, y_train, feature_names=feature_names, show_importances=True)
+            model.fit(x_train, y_train, feature_names=feature_names, show_importances=False)
 
             print(f'\nOut-of-bag scores: {model.oob_scores}')
 
@@ -298,7 +302,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                                                                     test_data_index_merged=test_data_index_merged,
                                                                     y_test=y_test)
 
-    preds = pd.DataFrame({'performance': [], 'rank': []})
+    # preds = pd.DataFrame({'performance': [], 'rank': []})
 
     # JOB: Test model
     if isinstance(predictions[0], tuple):
@@ -312,7 +316,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                               model=model,
                               period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
 
-            preds.loc[:, weighting] = pred
+            # preds.loc[:, weighting] = pred
     else:
         test_model(predictions=predictions, configs=configs, folder_path=folder_path, test_data_index=test_data_index,
                    y_test=y_test, study_period_data=study_period_data.copy(), parent_model_type=parent_model_type,
@@ -320,8 +324,8 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
                    index_id=index_id, index_name=index_name, study_period_length=len(full_date_range), model=model,
                    period_range=period_range, start_date=start_date, end_date=end_date, plotting=plotting)
 
-    preds.loc[:, 'Same'] = np.where(preds['performance'] == preds['rank'], True, False)
-    print(f"{preds['Same'].sum()}/{preds.shape[0]}")  # TODO: Remove
+    # preds.loc[:, 'Same'] = np.where(preds['performance'] == preds['rank'], True, False)
+    # print(f"{preds['Same'].sum()}/{preds.shape[0]}")  # TODO: Remove
 
     del study_period_data
 
@@ -573,6 +577,7 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         market_metrics, market_cum_returns = get_market_metrics(test_set_comparison, t_costs=t_costs)
 
     top_10_return_series = None
+    top_10_error_series = None
 
     for top_k in top_k_list:
         # JOB: Filter test data by top/bottom k affiliation
@@ -624,9 +629,6 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
             annualize=True)
 
         accuracy = None
-        mean_daily_return = None
-        mean_daily_short = None
-        mean_daily_long = None
 
         # JOB: Calculate accuracy score over all trades
         if parent_model_type == 'deep_learning':
@@ -767,9 +769,9 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     data_record_json = data_record
 
     forest_record = {'Experiment Run End': datetime.datetime.now().isoformat(),
-                     'Parent Model Type': parent_model_type,
-                     'Model Type': model_type,
-                     'Index ID': index_id,
+                     'Parent Model Type': str(parent_model_type),
+                     'Model Type': str(model_type),
+                     'Index ID': str(index_id),
                      'Index Name': index_name,
                      'Study Period Length': study_period_length,
                      'Test Set Size': y_test.shape[0],

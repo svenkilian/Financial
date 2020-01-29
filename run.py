@@ -21,7 +21,7 @@ if __name__ == '__main__':
     configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
     model_type = None
     multiple_models = None
-    ensemble = None
+    # ensemble = None
 
     # Specify dict of important indices
     index_dict = {
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     index_id = index_dict['DAX']
     cols = ['above_cs_med', *configs['data']['columns']]
     study_period_length = 1000
-    verbose = 0
+    verbose = 1
     weighting_criterion = 'Accuracy'
     plotting = False
 
@@ -46,8 +46,10 @@ if __name__ == '__main__':
     # JOB: Specify classifier
 
     # multiple_models = ['RandomForestClassifier']
-    # ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
-    multiple_models = [['LSTM', 'ExtraTreesClassifier', 'RandomForestClassifier']]
+    multiple_models = [
+        ['LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier', 'GradientBoostingClassifier', 'AdaBoostClassifier']]
+    # ensemble = ['AdaBoostClassifier']
+    # multiple_models = [['LSTM', 'ExtraTreesClassifier', 'RandomForestClassifier']]
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio
@@ -85,7 +87,6 @@ if __name__ == '__main__':
             # JOB: Run multiple models (may include ensembles)
             for model_type in multiple_models:
                 if isinstance(model_type, list):
-
                     if MixedEnsemble.is_mixed_ensemble(model_type, configs):
                         ensemble = MixedEnsemble(index_name=index_name.lower().replace(' ', '_'),
                                                  classifier_type_list=model_type,
@@ -130,9 +131,9 @@ if __name__ == '__main__':
 
         print(f'\n\n{Fore.GREEN}{Style.BRIGHT}Done fitting on period {study_period_ix}.{Style.RESET_ALL}')
         timer.stop()
-        study_period_stats = StatsReport().summary(last_only=True, index_only=index_name, show_all=False,
+        study_period_stats = StatsReport().summary(last_only=False, index_only=index_name, show_all=False,
                                                    score_list=['Accuracy', 'Sharpe', 'Sortino', 'Excess Return'],
-                                                   k=[10],
+                                                   k=[10], run_id=config.run_id,
                                                    by_model_type=True, sort_by='Annualized Sharpe',
                                                    show_std=False, to_html=False,
                                                    open_window=False)

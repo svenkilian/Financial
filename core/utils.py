@@ -1,6 +1,7 @@
 """
 This utilities module implements helper functions for displaying data frames and plotting data.
 """
+import itertools
 import webbrowser
 
 import config
@@ -343,6 +344,27 @@ def check_directory_for_file(index_name: str = None, index_id=None, folder_path:
         load_from_file = False
 
     return load_from_file
+
+
+def to_combinations(list_of_objs: list):
+    """
+    Create array of all combinations of a list of length n of the shape (1, 2, ..., n)
+    :param list_of_objs:
+    :return:
+    """
+    combinations = []
+    list_of_lists = []
+
+    for i in range(2, len(list_of_objs)):
+        combinations.extend(itertools.combinations(range(len(list_of_objs)), i))
+
+    for comb in combinations:
+        item_list = []
+        for item in comb:
+            item_list.append(list_of_objs[item])
+        list_of_lists.append(item_list)
+
+    return list_of_lists
 
 
 def get_run_number():

@@ -48,7 +48,7 @@ class LSTMModel:
                f'({", ".join([layer.__class__.__name__ for layer in self.model.layers])}){Style.RESET_ALL}'
 
     def get_params(self):
-        return self.configs
+        return {'data': self.configs['data'], 'training': self.configs['training'], 'model': self.configs['model']}
 
     def load_model(self, filepath):
         """
@@ -335,7 +335,7 @@ class TreeEnsemble:
         if index_name:
             self.index_name = index_name
         else:
-            index_name = ''
+            self.index_name = ''
         self.parameters = None
 
     def __repr__(self):
@@ -363,7 +363,7 @@ class TreeEnsemble:
         return ret_val
 
     def get_params(self):
-        return self.model.get_params()
+        return str(self.model.get_params())
 
     def build_model(self, configs: dict, verbose=2):
 
@@ -373,14 +373,17 @@ class TreeEnsemble:
                               inspect.isclass(ensemble.__dict__.get(key))}
 
         # Retrieve model parameters from config
-        self.parameters = configs[self.model_type]
+        self.parameters = configs['tree_based_classifiers'][self.model_type]
 
         if 'base_estimator' in self.parameters.keys():
             base_estimator_name = self.parameters.get('base_estimator')
             base_clfs = sklearn.tree.__dict__['__all__']
             base_type_dict = {key.lower(): sklearn.tree.__dict__.get(key) for key in base_clfs if
                               inspect.isclass(sklearn.tree.__dict__.get(key))}
-            base_estimator = base_type_dict[base_estimator_name.lower()]()
+            if isinstance(base_estimator_name, str):
+                base_estimator = base_type_dict[base_estimator_name.lower()]()
+            else:
+                base_estimator = base_estimator_name
             self.parameters['base_estimator'] = base_estimator
 
         # Extract nested parameters
@@ -463,7 +466,7 @@ class WeightedEnsemble:
         """
         params = []
         for model in self.classifiers:
-            params.append(model.get_params())
+            params.append(str(model.get_params()))
         return params
 
     def predict_all(self, x_test: np.array) -> np.array:
@@ -646,8 +649,8 @@ class MixedEnsemble:
                                                    names=['datadate', 'stock_id']))
 
             predictions_indexed = predictions_indexed.loc[index_merged]
-            print(f'Length of indexed prediction: {len(predictions_indexed)}')
-            print(predictions_indexed.iloc[:, 0].values)
+            # print(f'Length of indexed prediction: {len(predictions_indexed)}')
+            # print(predictions_indexed.iloc[:, 0].values)
             predictions_set.append(predictions_indexed.iloc[:, 0].values)
 
         print(', '.join([str(len(l)) for l in predictions_set]))
@@ -659,7 +662,7 @@ class MixedEnsemble:
     def predict(self, x_test: ndarray, y_test_merged: ndarray, all_predictions: ndarray = None,
                 test_data_index: ndarray = None,
                 test_data_index_merged: pd.MultiIndex = None,
-                y_test: ndarray = None, weighted=False, performance_based=True, rank_based=True,
+                y_test: ndarray = None, weighted=True, performance_based=True, rank_based=True, equal_weights=True,
                 alpha=2) -> np.array:
         """
         Aggregate individual predictions
@@ -701,7 +704,7 @@ class MixedEnsemble:
                         f'{Style.BRIGHT}{Fore.LIGHTRED_EX}All validation scores are <= 0. '
                         f'Resorting to equal weighting.{Style.RESET_ALL}')
                     weights = [1 / len(self.val_scores) for score in self.val_scores]
-                print(f'Weights: [{", ".join([str(weight) for weight in weights])}]')
+                print(f'Weights: [{", ".join([str(round(weight, 3)) for weight in weights])}]')
                 preds = np.average(all_predictions, weights=weights, axis=0)
                 predictions.append(('performance', preds))
             if rank_based:
@@ -715,6 +718,13 @@ class MixedEnsemble:
                 print(f'Weights: [{", ".join([str(round(weight, 3)) for weight in weights])}]')
                 preds = np.average(all_predictions, weights=weights, axis=0)
                 predictions.append(('rank', preds))
+            if equal_weights:
+                print('\nWeighting with equal weights:')
+                weights = [1 / len(self.classifier_types) for _ in self.classifier_types]
+                print(f'Weights: [{", ".join([str(round(weight, 3)) for weight in weights])}]')
+                preds = np.mean(all_predictions, axis=0)
+                predictions.append(('equal', preds))
+
         else:
             predictions = np.mean(all_predictions, axis=0)
         timer.stop()
