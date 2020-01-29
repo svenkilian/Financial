@@ -33,7 +33,7 @@ if __name__ == '__main__':
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['STOXX600']
+    index_id = index_dict['DAX']
     cols = ['above_cs_med', *configs['data']['columns']]
     study_period_length = 1000
     verbose = 0
@@ -46,8 +46,8 @@ if __name__ == '__main__':
     # JOB: Specify classifier
 
     # multiple_models = ['RandomForestClassifier']
-    ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
-    # multiple_models = [['LSTM', 'ExtraTreesClassifier', 'RandomForestClassifier']]
+    # ensemble = ['RandomForestClassifier', 'ExtraTreesClassifier']
+    multiple_models = [['LSTM', 'ExtraTreesClassifier', 'RandomForestClassifier']]
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio
@@ -58,8 +58,6 @@ if __name__ == '__main__':
                                                                              force_download=False,
                                                                              last_n=None, columns=cols.copy(),
                                                                              merge_gics=True)
-
-    # append_columns(full_data, folder_path, 'high_low.csv', ['prchd', 'prcld'])
 
     # Determine length of full data
     data_length = full_data['datadate'].drop_duplicates().size

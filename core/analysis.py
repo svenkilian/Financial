@@ -8,6 +8,7 @@ from typing import Union
 import numpy as np
 from colorama import Fore, Style
 from matplotlib import ticker
+import pylab
 
 from config import *
 from core.data_collection import add_constituency_col, to_actual_index, load_full_data
@@ -24,9 +25,13 @@ class StatsReport:
 
         :param attrs: (Optional) Provide list of columns else - if None, infer from headers
         """
-        self.data = pd.read_json(os.path.join(ROOT_DIR, 'data', 'training_log.json'), orient='index',
-                                 convert_dates=['Experiment Run End', 'Test Set Start Date', 'Test Set End Date',
-                                                'Study Period Start Date', 'Study Period End Date'])
+        try:
+            self.data = pd.read_json(os.path.join(ROOT_DIR, 'data', 'training_log.json'), orient='index',
+                                     convert_dates=['Experiment Run End', 'Test Set Start Date', 'Test Set End Date',
+                                                    'Study Period Start Date', 'Study Period End Date'])
+        except ValueError as ve:
+            print('Log file does not exist.')
+            exit(1)
 
         if attrs is None:
             self.attrs = self.data.columns
@@ -59,8 +64,9 @@ class StatsReport:
         if open_window:
             webbrowser.open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), new=2)
 
-    def summary(self, score_list: list = None, index_only: str = None, k: Union[list, int] = None, last_only=True, show_all=False,
-                by_model_type=False, sort_by: str = None,
+    def summary(self, score_list: list = None, index_only: str = None, k: Union[list, int] = None, last_only=True,
+                show_all=False,
+                by_model_type=False, sort_by: str = None, run_id=None,
                 show_std=False, to_html=True, open_window=True) -> pd.DataFrame:
         """
         Print summary of StatsReport and return as DataFrame
@@ -100,6 +106,10 @@ class StatsReport:
             data = data.loc[data['Index Name'].str.contains(index_name, case=False, regex=False)]
 
         # JOB: Print summary info
+        if run_id:
+            data = data.loc[data['ID'] == run_id]
+            last_only = False
+
         if last_only:
             # Filter by last available index
             print(f'Summary report for last available run (ID={last_id(data)} of {self.last_id}) and \n'
@@ -154,7 +164,7 @@ class StatsReport:
             if to_html:
                 df_to_html(df,
                            title='Model Performance Overview' if not index_only else f'Model Performance Overview {index_name}',
-                           open_window=open_window)
+                           open_window=open_window, file_name='mode_performance_overview')
 
             return df
 
@@ -166,7 +176,7 @@ class StatsReport:
         """
         data = self.data.copy().get(self.attrs)
         if drop_configs:
-            data.drop(columns=['Model Configs'], inplace=True)
+            data.drop(columns=['Model Configs', 'Prediction Error', 'Return Series'], inplace=True)
         for attr in data:
             if self.data[attr].dtype == object:
                 if isinstance(data[attr][-1], dict) and attr != 'Model Configs':
@@ -251,20 +261,20 @@ class VisTable:
     def grouped_data(self):
         return self.data.loc[self.time_frame[0]:self.time_frame[1]].groupby(self.groups)
 
-    def plot_grouped(self, monthly=False):
+    def plot_grouped(self, monthly=False, title=None, legend=True, save_to_file=False):
         """
         Plot data in a grouped fashion
 
         :return:
         """
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(6, 4))
 
         # self.data.index = pd.to_datetime(self.data.index)
         # print(self.grouped_data.get_group('Financials'))
 
         if self.stat in ['count', 'share', 'percentage']:
             ax.yaxis.set_major_formatter(ticker.PercentFormatter(1.0, decimals=0))
-            ax.set_ylim(0, 0.35)
+            ax.set_ylim(0, 0.25)
         if 'return' in self.attrs:
             ax.yaxis.set_major_formatter(ticker.PercentFormatter(1.0, decimals=1))
 
@@ -282,10 +292,24 @@ class VisTable:
                         label=key)
             else:
                 pass
-        ax.set_title(', '.join([attr.replace('_', ' ').title() for attr in self.attrs]), fontsize=16)
-        legend = ax.legend(loc='best', fontsize='large')
-        for line in legend.get_lines():
-            line.set_linewidth(3.0)
+
+        if title is not None:
+            ax.set_title(title.title(), fontsize=16)
+        else:
+            ax.set_title(', '.join([attr.replace('_', ' ').title() for attr in self.attrs]), fontsize=16)
+
+        if legend:
+            legend = ax.legend(loc='best', fontsize='large', shadow=False)
+            for line in legend.get_lines():
+                line.set_linewidth(3.0)
+
+        if save_to_file:
+            path_to_data = os.path.join(ROOT_DIR, 'data/plots')
+            if not os.path.exists(path_to_data):
+                print(f'Creating folder for plots ...')
+                os.mkdir(path_to_data)
+
+            plt.savefig(os.path.join(path_to_data, f'{title.lower().replace(" ", "_")}.png'), dpi=600)
         plt.show()
 
 
@@ -459,11 +483,11 @@ def main(full_log=False, index_summary=True, plots_only=False):
     report = StatsReport()
     if full_log:
         report.to_html(file_name='run_overview', title='Training Log', open_window=False)
-    report.summary(last_only=True, index_only=None, show_all=False,
+    report.summary(last_only=True, index_only='DAX', show_all=False,
                    score_list=['Accuracy', 'Sharpe', 'Sortino', 'Return'],
-                   k=10,
+                   k=10, run_id=None,
                    by_model_type=True, sort_by='Annualized Excess Return', show_std=False, to_html=True,
-                   open_window=False)
+                   open_window=True)
 
     if index_summary:
         # Load full index data
@@ -477,11 +501,12 @@ def main(full_log=False, index_summary=True, plots_only=False):
         full_data = to_actual_index(full_data)
         full_data.set_index('datadate', inplace=True)
 
-        vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='D', stat='count',
+        vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector_name'], freq='D',
+                       stat='count',
                        attrs=['gvkey'])
-        vis.plot_grouped()
+        vis.plot_grouped(title='Index Composition', save_to_file=True, legend=True)
 
-        vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='Y',
+        vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='M',
                        stat='mean',
                        attrs=['daily_return'])
         vis.plot_grouped()
@@ -500,4 +525,4 @@ def main(full_log=False, index_summary=True, plots_only=False):
 
 
 if __name__ == '__main__':
-    main(full_log=True, index_summary=False, plots_only=True)
+    main(full_log=True, index_summary=True, plots_only=True)

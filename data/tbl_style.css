@@ -26,7 +26,7 @@
 .blueTable thead th {
   font-size: 15px;
   font-weight: bold;
-  color: #FFFFFF;
+  color: #000000;
   border-left: 2px solid #D0E4F5;
 }
 .blueTable thead th:first-child {

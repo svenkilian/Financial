@@ -524,7 +524,8 @@ class MixedEnsemble:
     Implements a mixed ensemble with a LSTM and a tree-based classifier
     """
 
-    def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None, weighting_criterion='Accuracy',
+    def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None,
+                 weighting_criterion='Accuracy',
                  verbose: int = 0):
         self.index_name = index_name
         self.classifier_types = classifier_type_list
@@ -581,17 +582,53 @@ class MixedEnsemble:
     def get_params(self):
         pass
 
-    def predict_all(self, x_test: np.array) -> np.array:
+    def predict_all(self, x_test: np.array, y_test: np.array, test_data_index: ndarray) -> Tuple:
         """
         Predict on test set, separately for each individual classifier
 
+        :param y_test:
+        :param test_data_index:
         :param x_test: Test set
 
-        :return: Array with individual predictions in rows
+        :return: (Array with individual predictions in rows, merged index)
         """
         predictions_set = []
+        predictions_index_set = []
+        y_test_sets = []
+        index_merged = None
+        y_test_indexed_merged = None
 
-        for model in self.classifiers:
+        # Build test set indices for individual predictions
+        for model_index, _ in enumerate(self.classifiers):
+            predictions_index = pd.DataFrame({f'predictions_{model_index}': 0},
+                                             index=pd.MultiIndex.from_tuples(
+                                                 test_data_index[self.data_set_indices[model_index]],
+                                                 names=['datadate', 'stock_id']))
+            predictions_index_set.append(predictions_index)
+
+            y_test_indexed = pd.DataFrame({f'y_test_{model_index}': y_test[self.data_set_indices[model_index]].ravel()},
+                                          index=pd.MultiIndex.from_tuples(test_data_index[self.data_set_indices[
+                                              model_index]],
+                                                                          names=['datadate', 'stock_id']))
+            y_test_sets.append(y_test_indexed)
+
+        for i in range(len(predictions_index_set) - 1):
+            if i == 0:
+                index_merged = predictions_index_set[i]
+                y_test_indexed_merged = y_test_sets[i]
+
+            index_merged = index_merged.merge(predictions_index_set[i + 1], how='inner',
+                                              left_index=True,
+                                              right_index=True, suffixes=(False, False))
+            y_test_indexed_merged = y_test_indexed_merged.merge(y_test_sets[i + 1], how='inner', left_index=True,
+                                                                right_index=True, suffixes=(False, False))
+
+        y_test_indexed_merged = y_test_indexed_merged.iloc[:, 0]
+
+        index_merged = index_merged.index
+        print(f'Length of merged index: {len(index_merged)}')  # TODO: Remove
+
+        for model_index, model in enumerate(self.classifiers):
             i = None
             if model.parent_model_type == 'deep_learning':
                 i = 0
@@ -603,16 +640,32 @@ class MixedEnsemble:
             elif isinstance(model, LSTMModel):
                 predictions = model.predict(x_test[i])
 
-            predictions_set.append(predictions)
+            predictions_indexed = pd.DataFrame({f'predictions_{i}': predictions},
+                                               index=pd.MultiIndex.from_tuples(
+                                                   test_data_index[self.data_set_indices[i]],
+                                                   names=['datadate', 'stock_id']))
 
-        return np.array(predictions_set)
+            predictions_indexed = predictions_indexed.loc[index_merged]
+            print(f'Length of indexed prediction: {len(predictions_indexed)}')
+            print(predictions_indexed.iloc[:, 0].values)
+            predictions_set.append(predictions_indexed.iloc[:, 0].values)
 
-    def predict(self, x_test: ndarray, all_predictions: ndarray = None, test_data_index: ndarray = None,
+        print(', '.join([str(len(l)) for l in predictions_set]))
+        if len(set(([len(preds) for preds in predictions_set]))) != 1:
+            raise AssertionError('Test set sizes do not match.')
+
+        return np.array(predictions_set), y_test_indexed_merged.values, index_merged
+
+    def predict(self, x_test: ndarray, y_test_merged: ndarray, all_predictions: ndarray = None,
+                test_data_index: ndarray = None,
+                test_data_index_merged: pd.MultiIndex = None,
                 y_test: ndarray = None, weighted=False, performance_based=True, rank_based=True,
                 alpha=2) -> np.array:
         """
         Aggregate individual predictions
 
+        :param y_test_merged:
+        :param test_data_index_merged:
         :param rank_based:
         :param performance_based:
         :param all_predictions:
@@ -621,48 +674,15 @@ class MixedEnsemble:
         :param alpha: Weighting parameter for weighted average
         :param weighted: Use performance-weighted average
         :param x_test: Test set
-        :return: Tuple(predictions, y_test_indexed_merged.values, predictions_index_merged.index
+        :return: Tuple(predictions, y_test_indexed_merged.values, predictions_indexed_merged.index
         """
         print('Making aggregated predictions ...')
 
         if all_predictions is not None:
-            predictions = all_predictions
+            pass
         else:
-            predictions = self.predict_all(x_test)
-        predictions_index_merged = None
-        y_test_indexed_merged = None
-        test_sets = []
-        y_test_sets = []
-
-        for i, preds in enumerate(predictions):
-            # JOB: Create data frame with true and predicted values
-
-            predictions_indexed = pd.DataFrame({f'predictions_{i}': preds},
-                                               index=pd.MultiIndex.from_tuples(
-                                                   test_data_index[self.data_set_indices[i]],
-                                                   names=['datadate', 'stock_id']))
-
-            y_test_indexed = pd.DataFrame({f'y_test_{i}': y_test[self.data_set_indices[i]].ravel()},
-                                          index=pd.MultiIndex.from_tuples(test_data_index[self.data_set_indices[i]],
-                                                                          names=['datadate', 'stock_id']))
-
-            test_sets.append(predictions_indexed)
-            y_test_sets.append(y_test_indexed)
-
-        for i in range(len(test_sets) - 1):
-            if i == 0:
-                predictions_index_merged = test_sets[i]
-                y_test_indexed_merged = y_test_sets[i]
-
-            predictions_index_merged = predictions_index_merged.merge(test_sets[i + 1], how='inner', left_index=True,
-                                                                      right_index=True, suffixes=(False, False))
-
-            y_test_indexed_merged = y_test_indexed_merged.merge(y_test_sets[i + 1], how='inner', left_index=True,
-                                                                right_index=True, suffixes=(False, False))
-
-        y_test_indexed_merged = y_test_indexed_merged.iloc[:, 0]
-
-        assert y_test_indexed_merged.shape[0] == predictions_index_merged.shape[0]
+            all_predictions, y_test_merged, test_data_index_merged = self.predict_all(x_test, y_test=y_test,
+                                                                                      test_data_index=test_data_index)
 
         timer = Timer().start()
 
@@ -682,7 +702,7 @@ class MixedEnsemble:
                         f'Resorting to equal weighting.{Style.RESET_ALL}')
                     weights = [1 / len(self.val_scores) for score in self.val_scores]
                 print(f'Weights: [{", ".join([str(weight) for weight in weights])}]')
-                preds = np.average(predictions_index_merged.values, weights=weights, axis=1)
+                preds = np.average(all_predictions, weights=weights, axis=0)
                 predictions.append(('performance', preds))
             if rank_based:
                 print(
@@ -693,13 +713,13 @@ class MixedEnsemble:
                 weights = [(1 / rank_i) / sum([(1 / rank_j) for rank_j in ranks]) for rank_i in ranks]
 
                 print(f'Weights: [{", ".join([str(round(weight, 3)) for weight in weights])}]')
-                preds = np.average(predictions_index_merged.values, weights=weights, axis=1)
+                preds = np.average(all_predictions, weights=weights, axis=0)
                 predictions.append(('rank', preds))
         else:
-            predictions = np.mean(predictions_index_merged.values, axis=1)
+            predictions = np.mean(all_predictions, axis=0)
         timer.stop()
 
-        return predictions, y_test_indexed_merged.values, predictions_index_merged.index
+        return predictions, y_test_merged, test_data_index_merged
 
     @staticmethod
     def is_mixed_ensemble(classifier_list, configs):

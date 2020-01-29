@@ -22,7 +22,7 @@ from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble, MixedEnsemble
 from core.utils import plot_train_val, get_most_recent_file, CSVWriter, \
     check_data_conformity, annualize_metric, Timer, calc_sharpe, \
     calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type, ProgressBar, check_directory_for_file, \
-    pretty_print_table
+    pretty_print_table, df_to_html
 
 
 def main(index_id='150095', index_name='', full_data=None, constituency_matrix: pd.DataFrame = None,
@@ -117,11 +117,20 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     start_date = full_date_range.min().date()
     end_date = full_date_range.max().date()
 
+    print(study_period_data.index.name)
     # JOB: Set MultiIndex to stock identifier
     study_period_data = study_period_data.reset_index().set_index(['gvkey', 'iid'])
 
     # Get unique stock indices in study period
     unique_indices = study_period_data.index.unique()
+
+    # pretty_print_table(study_period_data.iloc[:20, :])
+    # df_to_html(study_period_data.tail(20)[
+    #                ['datadate', 'ajexdi', 'trfd', 'cshtrd', 'conml', 'gics_sector_name', 'prcld', 'prchd', 'prccd',
+    #                 'return_index',
+    #                 'daily_return', 'stand_d_return', 'cs_med', 'above_cs_med', 'cs_length']], title='Raw Data',
+    #            open_window=True)
+
 
     # Calculate Sharpe Ratio for full index history
     sharpe_ratio_sp = calc_sharpe(study_period_data.set_index('datadate').loc[:, ['daily_return']], annualize=True)
@@ -156,6 +165,7 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
     history = None
     predictions = None
     model = None
+    test_data_index_merged = None
 
     # JOB: Test model performance on test data
     if parent_model_type == 'deep_learning':
@@ -260,24 +270,20 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
         model.fit(x_train, y_train, feature_names=feature_names, x_val=x_val, val_index=val_index,
                   configs=configs,
                   folder_path=folder_path, y_test=y_val, test_data_index=val_index,
-                  study_period_data=study_period_data.copy(), weighting_criterion='Accuracy')
+                  study_period_data=study_period_data.copy(), weighting_criterion='Mean Daily Excess Return')
 
         print(f'\nValidation/Out-of-bag scores: {model.val_scores}')
 
         # JOB: Testing ensemble components and ensemble performance
         print('Testing ensemble components:')
 
-        all_predictions = model.predict_all(x_test)
+        all_predictions, y_test_merged, test_data_index_merged = model.predict_all(x_test, y_test=y_test,
+                                                                                   test_data_index=test_data_index)
         for i, base_clf in enumerate(ensemble.classifiers):
             print(f'Testing ensemble component {i + 1} ({base_clf.model_type})')
-            data_set_index = None
-            if base_clf.parent_model_type == 'deep_learning':
-                data_set_index = 0
-            elif base_clf.parent_model_type == 'tree_based':
-                data_set_index = 1
             test_model(predictions=all_predictions[i],
-                       configs=configs, folder_path=folder_path, test_data_index=test_data_index[data_set_index],
-                       y_test=y_test[data_set_index], study_period_data=study_period_data.copy(),
+                       configs=configs, folder_path=folder_path, test_data_index=test_data_index_merged,
+                       y_test=y_test_merged, study_period_data=study_period_data.copy(),
                        parent_model_type=base_clf.parent_model_type,
                        model_type=base_clf.model_type, history=history,
                        index_id=index_id, index_name=index_name, study_period_length=len(full_date_range),
@@ -286,17 +292,19 @@ def main(index_id='150095', index_name='', full_data=None, constituency_matrix: 
 
         print('Done testing individual models.')
 
-        predictions, y_test, test_data_index = model.predict(x_test, all_predictions=all_predictions, weighted=True,
-                                                             test_data_index=test_data_index,
-                                                             y_test=y_test)
+        predictions, y_test, test_data_index_merged = model.predict(x_test=x_test, y_test_merged=y_test_merged,
+                                                                    all_predictions=all_predictions, weighted=True,
+                                                                    test_data_index=test_data_index,
+                                                                    test_data_index_merged=test_data_index_merged,
+                                                                    y_test=y_test)
 
     preds = pd.DataFrame({'performance': [], 'rank': []})
 
     # JOB: Test model
-    if isinstance(predictions, tuple):
+    if isinstance(predictions[0], tuple):
         for weighting, sub_predictions in predictions:
             pred = test_model(predictions=sub_predictions, configs=configs, folder_path=folder_path,
-                              test_data_index=test_data_index,
+                              test_data_index=test_data_index_merged,
                               y_test=y_test, study_period_data=study_period_data.copy(),
                               parent_model_type=parent_model_type,
                               model_type=f'{model.model_type}_{weighting}', history=history,
@@ -501,12 +509,20 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     else:
         print(f'\nTesting {Style.BRIGHT}{Fore.BLUE}{model_type}{Style.RESET_ALL} model on unseen data ...')
 
+    # print(f'{Style.BRIGHT}{Fore.MAGENTA}Length of test data: {len(y_test)}{Style.RESET_ALL}')
+
     study_period_data = study_period_data.copy()
 
     timer = Timer().start()
     # JOB: Create data frame with true and predicted values
-    test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
-                                       index=pd.MultiIndex.from_tuples(test_data_index, names=['datadate', 'stock_id']))
+    if isinstance(test_data_index, pd.MultiIndex):
+        test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
+                                           index=test_data_index)
+
+    else:
+        test_set_comparison = pd.DataFrame({'y_test': y_test.astype('int8').flatten(), 'prediction': predictions},
+                                           index=pd.MultiIndex.from_tuples(test_data_index,
+                                                                           names=['datadate', 'stock_id']))
 
     # JOB: Transform index of study period data to match test_set_comparison index
     study_period_data.index = study_period_data.index.tolist()  # Flatten MultiIndex to tuples
@@ -554,7 +570,9 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
 
     market_metrics = None
     if not get_val_score_only:
-        market_metrics, market_cum_returns = get_market_metrics(test_set_comparison)
+        market_metrics, market_cum_returns = get_market_metrics(test_set_comparison, t_costs=t_costs)
+
+    top_10_return_series = None
 
     for top_k in top_k_list:
         # JOB: Filter test data by top/bottom k affiliation
@@ -568,11 +586,25 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         # print(full_portfolio.tail())
 
         if not get_val_score_only:
-            market_metrics, market_cum_returns = get_market_metrics(test_set_comparison)
+            market_metrics, market_cum_returns = get_market_metrics(test_set_comparison, t_costs=t_costs)
 
             return_series = full_portfolio.loc[:, 'daily_return'].groupby(level=['datadate']).mean()
+            if top_k == 10:
+                top_10_return_series = return_series
+                top_10_return_series = top_10_return_series.reset_index()
+                top_10_return_series.loc[:, 'datadate'] = top_10_return_series['datadate'].dt.strftime('%Y-%m-%d')
+                top_10_return_series.set_index('datadate', inplace=True)
+
+                sorted_portfolio = full_portfolio.set_index('prediction_rank', append=True, inplace=False)
+                sorted_portfolio.reset_index(['stock_id'], inplace=True)
+                sorted_portfolio.sort_index(level=['datadate', 'prediction_rank'], inplace=True)
+                sorted_portfolio.reset_index(level='datadate', inplace=True, drop=True)
+                top_10_error_series = (sorted_portfolio['norm_prediction'] - sorted_portfolio['y_test']).abs()
+                top_10_error_series = top_10_error_series.values.tolist()
+
             cumulative_return = (return_series + 1).cumprod().rename('Cumulative Portfolio Return')
             cumulative_return.index.name = 'Time'
+
             merged = pd.concat([cumulative_return, market_cum_returns], axis=1, join='outer')
             if plotting:
                 merged.plot()
@@ -628,7 +660,6 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         top_k_metrics.loc[top_k, 'Mean Daily Return (Long)'] = mean_daily_long
 
         # JOB: Add metrics incl. transaction costs of 5 bps per half-turn
-
         top_k_metrics.loc[top_k, 'Mean Daily Return_atc'] = mean_daily_return - 4 * t_costs
         top_k_metrics.loc[top_k, 'Annualized Return_atc'] = annualize_metric(mean_daily_return - 4 * t_costs)
         top_k_metrics.loc[top_k, 'Mean Daily Excess Return_atc'] = mean_daily_excess_return - 4 * t_costs
@@ -696,6 +727,9 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         'Index ID': index_id,
         'Index Name': index_name,
         'Study Period Length': study_period_length,
+        'Period Range': period_range,
+        'Study Period Start Date': start_date.isoformat(),
+        'Study Period End Date': end_date.isoformat(),
         'Test Set Size': y_test.shape[0],
         'Days Test Set': test_set_n_days,
         'Constituent Number': test_set_n_constituents,
@@ -703,6 +737,7 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         'Test Set Start Date': test_data_start_date.isoformat(),
         'Test Set End Date': test_data_end_date.isoformat(),
         'Total Accuracy': test_score,
+
         'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
         'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
         'Top-k Mean Daily Excess Return': top_k_metrics['Mean Daily Excess Return'].to_dict(),
@@ -710,42 +745,26 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
         'Top-k Annualized Sharpe': top_k_metrics['Annualized Sharpe'].to_dict(),
         'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
+        'Mean Daily Return (Short)': top_k_metrics['Mean Daily Return (Short)'].to_dict(),
+        'Mean Daily Return (Long)': top_k_metrics['Mean Daily Return (Long)'].to_dict(),
+
+        'Top-k Mean Daily Return_atc': top_k_metrics['Mean Daily Return_atc'].to_dict(),
+        'Top-k Annualized Return_atc': top_k_metrics['Annualized Return_atc'].to_dict(),
+        'Top-k Mean Daily Excess Return_atc': top_k_metrics['Mean Daily Excess Return_atc'].to_dict(),
+        'Top-k Annualized Excess Return_atc': top_k_metrics['Annualized Excess Return_atc'].to_dict(),
+        'Top-k Annualized Sharpe_atc': top_k_metrics['Annualized Sharpe_atc'].to_dict(),
+        'Top-k Annualized Sortino_atc': top_k_metrics['Annualized Sortino_atc'].to_dict(),
+        'Top-k Mean Daily Return (Short)_atc': top_k_metrics['Mean Daily Return (Short)_atc'].to_dict(),
+        'Top-k Mean Daily Return (Long)_atc': top_k_metrics['Mean Daily Return (Long)_atc'].to_dict(),
+
         'Model Configs': model.get_params(),
         'Total Epochs': total_epochs,
-        'Period Range': period_range,
-        'Study Period Start Date': start_date.isoformat(),
-        'Study Period End Date': end_date.isoformat()
+
+        'Return Series': top_10_return_series.to_dict(),
+        'Prediction Error': top_10_error_series
     }
 
-    data_record_json = {
-        'ID': config.run_id,
-        'Experiment Run End': datetime.datetime.now().isoformat(),
-        'Parent Model Type': parent_model_type,
-        'Model Type': model_type,
-        'Index ID': index_id,
-        'Index Name': index_name,
-        'Study Period Length': study_period_length,
-        'Test Set Size': y_test.shape[0],
-        'Days Test Set': test_set_n_days,
-        'Constituent Number': test_set_n_constituents,
-        'Average Cross Section Size': cross_section_size,
-        'Test Set Start Date': test_data_start_date.isoformat(),
-        'Test Set End Date': test_data_end_date.isoformat(),
-        'Total Accuracy': test_score,
-        'Top-k Accuracy Scores': top_k_metrics['Accuracy'].to_dict(),
-        'Top-k Mean Daily Return': top_k_metrics['Mean Daily Return'].to_dict(),
-        'Top-k Mean Daily Excess Return': top_k_metrics['Mean Daily Excess Return'].to_dict(),
-        'Top-k Annualized Excess Return': top_k_metrics['Annualized Excess Return'].to_dict(),
-        'Top-k Annualized Return': top_k_metrics['Annualized Return'].to_dict(),
-        'Top-k Annualized Sharpe': top_k_metrics['Annualized Sharpe'].to_dict(),
-        'Top-k Annualized Sortino': top_k_metrics['Annualized Sortino'].to_dict(),
-        'Model Configs': model.get_params(),
-        'Total Epochs': total_epochs,
-        'Study Period ID': config.study_period_id,
-        'Period Range': period_range,
-        'Study Period Start Date': start_date.isoformat(),
-        'Study Period End Date': end_date.isoformat()
-    }
+    data_record_json = data_record
 
     forest_record = {'Experiment Run End': datetime.datetime.now().isoformat(),
                      'Parent Model Type': parent_model_type,
@@ -797,10 +816,12 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
     return full_portfolio['norm_prediction'].values
 
 
-def get_market_metrics(market_portfolio: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+# noinspection DuplicatedCode
+def get_market_metrics(market_portfolio: pd.DataFrame, t_costs: float) -> Tuple[pd.Series, pd.Series]:
     """
     Get performance metrics for full market portfolio
 
+    :param t_costs: Transaction costs per half-turn
     :param market_portfolio: DataFrame including full test set (market portfolio)
     :return: Tuple of market portfolio metrics (Series) and cumulative returns series (Series)
     """
@@ -816,10 +837,19 @@ def get_market_metrics(market_portfolio: pd.DataFrame) -> Tuple[pd.Series, pd.Se
     # plt.show()
 
     # JOB: Calculate metrics
+    # noinspection DuplicatedCode
     annualized_sharpe = calc_sharpe(market_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(),
                                     annualize=True)
+    annualized_sharpe_atc = calc_sharpe(
+        market_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean() - 4 * t_costs,
+        annualize=True)
+
     annualized_sortino = calc_sortino(market_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean(),
                                       annualize=True)
+    annualized_sortino_atc = calc_sortino(
+        market_portfolio.loc[:, ['daily_return']].groupby(level=['datadate']).mean() - 4 * t_costs,
+        annualize=True)
+
     mean_daily_return = market_portfolio.groupby(level=['datadate'])['daily_return'].mean().mean()
     mean_daily_excess_return = calc_excess_returns(
         market_portfolio.groupby(level=['datadate'])['daily_return'].mean().rename('daily_return')).mean()
@@ -830,6 +860,15 @@ def get_market_metrics(market_portfolio: pd.DataFrame) -> Tuple[pd.Series, pd.Se
     market_portfolio_metrics.loc['Annualized Excess Return'] = annualize_metric(mean_daily_excess_return)
     market_portfolio_metrics.loc['Annualized Sharpe'] = annualized_sharpe
     market_portfolio_metrics.loc['Annualized Sortino'] = annualized_sortino
+
+    # JOB: Add metrics incl. transaction costs of 5 bps per half-turn
+    market_portfolio_metrics.loc['Mean Daily Return_atc'] = mean_daily_return - 4 * t_costs
+    market_portfolio_metrics.loc['Annualized Return_atc'] = annualize_metric(mean_daily_return - 4 * t_costs)
+    market_portfolio_metrics.loc['Mean Daily Excess Return_atc'] = mean_daily_excess_return - 4 * t_costs
+    market_portfolio_metrics.loc['Annualized Excess Return_atc'] = annualize_metric(
+        mean_daily_excess_return - 4 * t_costs)
+    market_portfolio_metrics.loc['Annualized Sharpe_atc'] = annualized_sharpe_atc
+    market_portfolio_metrics.loc['Annualized Sortino_atc'] = annualized_sortino_atc
 
     return market_portfolio_metrics, cumulative_return
 

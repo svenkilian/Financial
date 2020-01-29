@@ -1,6 +1,8 @@
 """
 This utilities module implements helper functions for displaying data frames and plotting data.
 """
+import webbrowser
+
 import config
 from config import *
 import csv
@@ -160,6 +162,33 @@ def plot_results(predicted_data, true_data):
     plt.plot(predicted_data, label='Prediction')
     plt.legend()
     plt.show()
+
+
+def df_to_html(df: pd.DataFrame, title='', file_name='study_period_data', open_window=True):
+    """
+    Create and save HTML table
+
+    :param df: DataFrame
+    :param title: Title of HTML page
+    :param file_name: File name to save HTML page to
+    :param open_window: Open created file in new browser window
+    :return:
+    """
+    table = df.to_html(classes='blueTable')
+    html_doc = f"""
+    <html>
+        <head><title>{title}</title></head>
+        <link rel="stylesheet" type="text/css" media="screen" href="tbl_style.css" />
+        <body>
+            {table}
+        </body>
+    </html>
+    """
+    with open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), 'w') as f:
+        f.write(html_doc)
+
+    if open_window:
+        webbrowser.open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), new=2)
 
 
 def load_json_to_df(file_path: str) -> pd.DataFrame:

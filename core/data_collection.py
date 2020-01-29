@@ -18,7 +18,7 @@ from colorama import Fore, Back, Style
 
 from config import *
 # Configurations for displaying DataFrames
-from core.utils import get_index_name, check_directory_for_file, Timer, lookup_multiple
+from core.utils import get_index_name, check_directory_for_file, Timer, lookup_multiple, df_to_html
 
 from sklearn.preprocessing import StandardScaler
 
@@ -151,7 +151,7 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
     timer = Timer().start()
     full_data = retrieve_index_history(index_id=index_id, from_file=load_from_file, last_n=last_n,
                                        folder_path=folder_path, generate_dict=False)
-    full_data.set_index('datadate', inplace=True)
+    full_data.set_index('datadate', inplace=True, drop=True)
     # JOB: Sort by date and reset index
     full_data.sort_index(inplace=True)
     full_data.reset_index(inplace=True)
@@ -244,7 +244,7 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
     full_data.loc[:, 'datadate'] = pd.to_datetime(full_data['datadate'])
 
     # Set index to date column
-    full_data.set_index('datadate', inplace=True)
+    full_data.set_index('datadate', inplace=True, drop=True)
 
     # Get unique dates
     unique_dates = full_data.index.drop_duplicates()
@@ -272,11 +272,15 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
         print('Terminating program.')
         sys.exit(1)
 
+    # df_to_html(constituency_matrix.iloc[-20:, :20], 'const_matrix')
+    # exit()
+
     full_data.reset_index(inplace=True)
 
     # JOB: Select relevant data
     # Select relevant stocks
-    full_data = full_data.set_index(['gvkey', 'iid'])
+    full_data = full_data.set_index(['gvkey', 'iid'], drop=True)
+
     # print(f'Length of intersection: {len(constituent_indices.intersection(full_data.index))}')
     # print(f'Length of difference: {len(constituent_indices.difference(full_data.index))}')
     assert len(constituent_indices.intersection(full_data.index)) == len(constituent_indices)
@@ -339,10 +343,9 @@ def generate_study_period(constituency_matrix: pd.DataFrame, full_data: pd.DataF
 
     # JOB: Add columns with number of securities in cross-section
     study_data.loc[:, 'cs_length'] = study_data.groupby('datadate')['daily_return'].count()
-    study_data.reset_index(inplace=True)
 
     study_data.reset_index(inplace=True)
-    study_data.set_index('datadate', inplace=True)
+    study_data.set_index('datadate', inplace=True, drop=True)
 
     if any(col_name in columns for col_name in ['ind_mom_ratio', 'ind_mom']):
         # JOB: Add industry momentum column
