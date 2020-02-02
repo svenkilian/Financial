@@ -1,22 +1,23 @@
 """
 This module implements classes and methods for data analysis
 """
-import datetime
 import itertools
 import json
 import webbrowser
+from textwrap import wrap
 from typing import Union
 
+import matplotlib.dates as mdates
 import numpy as np
 from colorama import Fore, Style
 from matplotlib import ticker
+from matplotlib.pyplot import gca
 from tqdm import tqdm
 
 from config import *
 from core.data_collection import add_constituency_col, to_actual_index, load_full_data
 from core.utils import pretty_print_table, Timer
 from external.dm_test import dm_test
-from textwrap import wrap
 
 
 class StatsReport:
@@ -24,7 +25,7 @@ class StatsReport:
     Implement StatsReport object, which represents a wrapped DataFrame loaded from a json file
     """
 
-    def __init__(self, log_path: str = None, attrs: list = None):
+    def __init__(self, log_path: str = None, attrs: list = None, model_types=None):
         """
 
         :param attrs: (Optional) Provide list of columns else - if None, infer from headers
@@ -36,7 +37,7 @@ class StatsReport:
             log_path = os.path.join(ROOT_DIR, 'data', log_path)
 
         try:
-            print(log_path)
+            print(f'Log path: {log_path}')
             self.data = pd.read_json(log_path, orient='index',
                                      convert_dates=['Experiment Run End', 'Test Set Start Date', 'Test Set End Date',
                                                     'Study Period Start Date', 'Study Period End Date'])
@@ -49,6 +50,9 @@ class StatsReport:
             self.attrs = self.data.columns
         else:
             self.attrs = attrs
+
+        if model_types is not None:
+            self.data = self.data[self.data['Model Type'].isin(model_types)]
 
     def to_html(self, title='Statistics', file_name='stats', open_window=True):
         """
@@ -79,11 +83,14 @@ class StatsReport:
     def summary(self, score_list: list = None, index_only: str = None, k: Union[list, int] = None, last_only=True,
                 show_all=False,
                 by_model_type=False, sort_by: str = None, run_id=None,
-                show_std=False, to_html=True, open_window=True, compare_errors=False, start_date=None,
-                end_date=None) -> pd.DataFrame:
+                show_std=False, to_html=True, open_window=True, pretty_print=False, compare_errors=False,
+                start_date=None,
+                end_date=None, silent=False) -> pd.DataFrame:
         """
         Print summary of StatsReport and return as DataFrame
 
+        :param silent:
+        :param pretty_print:
         :param end_date:
         :param start_date:
         :param compare_errors:
@@ -101,13 +108,13 @@ class StatsReport:
         :return: Summary as DataFrame
         """
 
-        data = self.split_dict_cols(drop_configs=False)  # Split dict columns
+        data = self.split_dict_cols(drop_configs=True)  # Split dict columns
         index_name = None
         if isinstance(k, int):
             k = [k]
 
         # JOB: Select relevant columns
-        if score_list:
+        if score_list is not None:
             columns = [col for col in data.columns if any([score in col for score in score_list])]
             if k:
                 columns = [col for col in columns for i in k if col.endswith(f'_{i}')]
@@ -123,14 +130,16 @@ class StatsReport:
 
         n_models = data['Model Type'].nunique()
         if data.shape[0] > n_models and not show_all:
-            print(f'Showing last {n_models} out of {data.shape[0]}')
-            print('...')
-            pretty_print_table(data.tail(n_models).iloc[:, :10])
+            if not silent:
+                print(f'Showing last {n_models} out of {data.shape[0]}')
+                print('...')
+                pretty_print_table(data.tail(n_models).iloc[:, :10])
         else:
             pretty_print_table(data.iloc[:, :10])
 
         total_obs = len(data['Test Set Start Date'].unique())
-        print(f'\nNumber of unique time periods in filtered observation data: {total_obs}')
+        if not silent:
+            print(f'\nNumber of unique time periods in filtered observation data: {total_obs}')
 
         # JOB: Print summary statistics for relevant columns
         if not by_model_type:
@@ -152,17 +161,20 @@ class StatsReport:
             sort_by = [col for col in data.columns if sort_by in col][0].split('_')[0]
             if sort_by and k:
                 sort_by_column = f'{sort_by}_{k[0]}'
-                print(f'Table sorted by {sort_by_column}')
+                if not silent:
+                    print(f'Table sorted by {sort_by_column}')
                 df.sort_values(by=sort_by_column, axis=0, ascending=False, inplace=True)
                 col_names_rm = [col for col in df.columns if col not in sort_by_column]
                 df = df[[sort_by_column, *col_names_rm]]
             else:
                 df.sort_values(by=columns, axis=0, ascending=False, inplace=True)
-            pretty_print_table(df)
             if to_html:
                 df_to_html(df,
                            title='Model Performance Overview' if not index_only else f'Model Performance Overview {index_name}',
                            open_window=open_window, file_name='mode_performance_overview')
+
+            if pretty_print:
+                pretty_print_table(df)
 
             return df
 
@@ -344,7 +356,8 @@ class VisTable:
     Implements a visualization table from a DataFrame with functions for plotting
     """
 
-    def __init__(self, data: pd.DataFrame, time_frame: tuple = None, groups: list = None, freq='M', stat='mean',
+    def __init__(self, data: pd.DataFrame, time_frame: tuple = None, groups: list = None, freq='M',
+                 stat: Union[str, None] = 'mean',
                  attrs: list = None):
         self.data = data.copy()
         self.time_frame = time_frame
@@ -358,7 +371,44 @@ class VisTable:
 
     @property
     def grouped_data(self):
-        return self.data.loc[self.time_frame[0]:self.time_frame[1]].groupby(self.groups)
+        if self.data.index.name is not 'datadate':
+            self.data.loc[:, 'Test Set End Date'] = pd.to_datetime(self.data['Test Set End Date'])
+            df = self.data[(self.data['Test Set End Date'] > self.time_frame[0]) & (
+                    self.data['Test Set End Date'] <= self.time_frame[1])].groupby(
+                [pd.Grouper(key='Test Set End Date', freq='Y'), *self.groups])
+        else:
+            df = self.data.loc[self.time_frame[0]:self.time_frame[1]].groupby(self.groups)
+
+        return df
+
+    def plot_bar(self, title=None, legend=True, save_to_file=False):
+        """
+        Plot grouped bar plot over time
+
+        :param model_types:
+        :param attrs:
+        :param title:
+        :param legend:
+        :param save_to_file:
+        :return:
+        """
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        data = self.grouped_data.mean()[self.attrs].unstack().droplevel(level=0, axis=1)
+        data.index = data.index.year
+
+        data.plot(kind='bar', rot=0, ax=ax, fontsize=14, width=0.8)
+        ax.set_xlabel('Year')
+        ax.set_ylabel(self.attrs[0].replace('_', ' '))
+        ax.set_title(self.attrs[0].replace('_', ' '))
+
+        if 'Accuracy' in self.attrs[0]:
+            ax.set_ylim(0.5, 0.58)
+
+        plt.tight_layout()
+
+        plt.show()
 
     def plot_grouped(self, title=None, legend=True, save_to_file=False, y_limit: float = None):
         """
@@ -371,9 +421,6 @@ class VisTable:
         :return:
         """
         fig, ax = plt.subplots(figsize=(8, 5))
-
-        # self.data.index = pd.to_datetime(self.data.index)
-        # print(self.grouped_data.get_group('Financials'))
 
         if y_limit is None:
             y_limit = 0.25
@@ -522,6 +569,9 @@ def filter_df(df, columns=None, index_only: str = None, run_id=None, last_only=T
     """
     Filter data frame
 
+    :param end_date:
+    :param start_date:
+    :param last_run_id:
     :param df:
     :param columns:
     :param index_only:
@@ -602,6 +652,46 @@ def df_to_html(df, title='Statistics', file_name='table', open_window=True) -> N
         webbrowser.open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), new=2)
 
 
+def plot_yearly_metrics(metrics, k):
+    """
+
+    :param k:
+    :param metrics:
+    :return:
+    """
+
+    columns = None
+
+    if metrics is not None:
+        columns = [col for col in StatsReport().split_dict_cols().columns if
+                   any([score in col for score in metrics])]
+        if k:
+            columns = [col for col in columns if (col.endswith(f'_{k}') and 'atc' not in col)]
+    print(f'{Style.BRIGHT}{Fore.RED}Printing columns: {Style.RESET_ALL}')
+    for metric in columns:
+        print(f'{Style.BRIGHT}{Fore.RED}{metric}{Style.RESET_ALL}')
+        report = StatsReport(log_path=None,
+                             model_types=[*(StatsReport().summary(last_only=True, index_only=None, show_all=False,
+                                                                  score_list=metric,
+                                                                  k=10, run_id=None,
+                                                                  by_model_type=True,
+                                                                  sort_by=metric,
+                                                                  show_std=False,
+                                                                  to_html=False,
+                                                                  open_window=False, compare_errors=False,
+                                                                  start_date='2002-10', end_date='2019-12',
+                                                                  silent=True).index[
+                                            :3]), 'LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier',
+                                          'GradientBoostingClassifier', 'Market'])
+
+        data = report.split_dict_cols(drop_configs=True)
+
+        VisTable(data, time_frame=('1998-12', '2019-12'),
+                 groups=['Model Type'], freq='Y',
+                 stat=None,
+                 attrs=[metric]).plot_bar()
+
+
 def last_id(data):
     try:
         last = int(data.get('ID').max())
@@ -637,8 +727,12 @@ def main(full_log=False, index_summary=True, plots_only=False, compare_models=Fa
     # JOB: Specify index ID, relevant columns and study period length
     index_id = index_dict['Europe350']
 
+    report = StatsReport()
     # JOB: Create model performance report
-    report = StatsReport(log_path=None)
+
+    plot_yearly_metrics(metrics=['Accuracy', 'Excess Return', 'Sharpe', 'Sortino', 'Daily'], k=10)
+
+    exit()
 
     if compare_models:
         report.compare_prediction_errors(to_html=True)
@@ -650,7 +744,7 @@ def main(full_log=False, index_summary=True, plots_only=False, compare_models=Fa
                    score_list=['Accuracy', 'Sharpe', 'Sortino', 'Return'],
                    k=10, run_id=None,
                    by_model_type=True, sort_by='Sharpe', show_std=False, to_html=False,
-                   open_window=False, compare_errors=False, start_date='2002-10', end_date='2005-10')
+                   open_window=False, pretty_print=True, compare_errors=False, start_date='2002-10', end_date='2018-12')
 
     # report.plot_return_series(cumulative_only=False)
 
