@@ -1,9 +1,13 @@
+__author__ = "Sven Köpke"
+__copyright__ = "Sven Köpke 2019"
+__version__ = "0.0.1"
+__license__ = "MIT"
+
 """
 This module serves as a starting point for model training and conducting experiments with various specifications.
 """
 
 import json
-import os
 
 from colorama import Fore, Style
 
@@ -11,7 +15,7 @@ import config
 from config import *
 from config import ROOT_DIR
 from core.analysis import StatsReport
-from core.data_collection import load_full_data, append_columns
+from core.data_collection import load_full_data, calculate_daily_return
 from core.execute import main
 from core.model import WeightedEnsemble, MixedEnsemble
 from core.utils import get_study_period_ranges, Timer, print_study_period_ranges, get_run_number
@@ -20,24 +24,25 @@ if __name__ == '__main__':
     # Load configurations from file
     configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
     model_type = None
-    multiple_models = None
-    # ensemble = None
+    # multiple_models = None
+    ensemble = None
 
     # Specify dict of important indices
     index_dict = {
         'DJES': '150378',  # Dow Jones European STOXX Index
-        'SPEURO': '150913',  # S&P Euro Index
+        'SPEURO': '150913',  # S&P Euro Index,
+        'Europe350': '150927',  # S&P Europe 350 Index
         'EURONEXT': '150928',  # Euronext 100 Index
         'STOXX600': '150376',  # Dow Jones STOXX 600 Price Index
         'DAX': '150095'
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['DAX']
+    index_id = index_dict['Europe350']
     cols = ['above_cs_med', *configs['data']['columns']]
-    study_period_length = 1000
-    verbose = 1
-    weighting_criterion = 'Accuracy'
+    study_period_length = 1500
+    verbose = 0
+    weighting_criterion = 'Mean Daily Return'
     plotting = False
 
     # Determine ID of current run
@@ -47,9 +52,9 @@ if __name__ == '__main__':
 
     # multiple_models = ['RandomForestClassifier']
     multiple_models = [
-        ['LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier', 'GradientBoostingClassifier', 'AdaBoostClassifier']]
+        ['LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier', 'GradientBoostingClassifier']]
     # ensemble = ['AdaBoostClassifier']
-    # multiple_models = [['LSTM', 'ExtraTreesClassifier', 'RandomForestClassifier']]
+    # multiple_models = [['LSTM', 'RandomForestClassifier']]
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
 
     # JOB: Calculate test_period_length from split ratio
@@ -77,7 +82,7 @@ if __name__ == '__main__':
 
     # JOB: Iteratively fit model on all study periods
     # list(sorted(study_period_ranges.keys()))
-    for study_period_ix in range(8, len(study_period_ranges) + 1):
+    for study_period_ix in range(1, len(study_period_ranges) + 1):
         date_range = study_period_ranges.get(study_period_ix)
         config.study_period_id = study_period_ix
         print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
@@ -103,7 +108,6 @@ if __name__ == '__main__':
                 main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
                      constituency_matrix=constituency_matrix,
                      columns=cols.copy(), folder_path=folder_path,
-                     data_only=False,
                      load_last=False, start_index=date_range[0],
                      end_index=date_range[1], model_type=model_type, ensemble=ensemble, verbose=verbose,
                      plotting=plotting)
@@ -113,7 +117,6 @@ if __name__ == '__main__':
             main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
                  constituency_matrix=constituency_matrix,
                  columns=cols.copy(), folder_path=folder_path,
-                 data_only=False,
                  load_last=False, start_index=date_range[0],
                  end_index=date_range[1],
                  ensemble=WeightedEnsemble(index_name=index_name.lower().replace(' ', '_'),
@@ -125,7 +128,6 @@ if __name__ == '__main__':
             main(index_id=index_id, index_name=index_name, full_data=full_data.copy(),
                  constituency_matrix=constituency_matrix,
                  columns=cols.copy(), folder_path=folder_path,
-                 data_only=False,
                  load_last=False, start_index=date_range[0],
                  end_index=date_range[1], model_type=model_type, verbose=verbose, plotting=plotting)
 

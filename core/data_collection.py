@@ -4,7 +4,6 @@ This module implements methods to collect financial data from Wharton Research S
 
 import datetime
 import json
-import os
 import re
 import sys
 import time
@@ -15,12 +14,11 @@ import numpy as np
 import pandas as pd
 import wrds
 from colorama import Fore, Back, Style
+from sklearn.preprocessing import StandardScaler
 
 from config import *
 # Configurations for displaying DataFrames
-from core.utils import get_index_name, check_directory_for_file, Timer, lookup_multiple, df_to_html
-
-from sklearn.preprocessing import StandardScaler
+from core.utils import get_index_name, check_directory_for_file, Timer, lookup_multiple
 
 pd.set_option('mode.chained_assignment', None)
 warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
@@ -91,7 +89,7 @@ def retrieve_index_history(index_id: str = None, from_file=False, last_n: int = 
     else:
         data = pd.read_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'),
                            dtype={'gvkey': str, 'gsubind': str, 'datadate': str, 'gics_sector': str, 'gsector': str},
-                           parse_dates=False, index_col=0)
+                           parse_dates=False, index_col=False)
         data.loc[:, 'datadate'] = pd.to_datetime(data.loc[:, 'datadate'], infer_datetime_format=True).dt.date
 
     if not check_directory_for_file(index_id=index_id, folder_path=os.path.join(folder_path, 'gvkey_name_dict.json'),
@@ -156,7 +154,7 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
     full_data.sort_index(inplace=True)
     full_data.reset_index(inplace=True)
 
-    if merge_gics and all(col_name not in full_data.columns for col_name in ['gsubind', 'gsector']):
+    if merge_gics and all(col_name not in full_data.columns for col_name in ['gsubind', 'gsector', 'gics_sector']):
         print('Neither \'gsubind\' nor \'gsector\' are in the columns.')
         # JOB: Create GICS (Global Industry Classification Standard) matrix
         gics_matrix = create_gics_matrix(index_id=index_id, index_name=index_name, lookup_table=lookup_table,
@@ -201,12 +199,19 @@ def load_full_data(index_id: str = '150095', force_download: bool = False, last_
     gics_map = {str(key): val for key, val in gics_map.to_dict().items()}
 
     if 'gics_sector_name' not in full_data.columns:
+        print('Extracting GICS sector names ...')
         full_data.loc[:, 'gics_sector_name'] = full_data['gics_sector'].replace(gics_map, inplace=False)
         print('Saving modified data to file ...')
         full_data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
-    if 'prchd' in full_data.columns:
-        full_data.loc[:, 'daily_spread'] = (full_data['prchd'] - full_data['prcld']).divide(full_data['prccd'])
+    # if 'prchd' in full_data.columns:
+    #     full_data.loc[:, 'daily_spread'] = (full_data['prchd'] - full_data['prcld']).divide(full_data['prccd'])
+
+    if 'daily_return' not in full_data.columns:
+        print('Calculating daily returns ...')
+        timer = Timer.start()
+        full_data = calculate_daily_return(full_data, folder_path=folder_path, save_to_file=True)
+        timer.stop()
 
     print('Successfully loaded index history.')
     timer.stop()
@@ -622,7 +627,8 @@ def calculate_daily_return(data: pd.DataFrame, save_to_file=False, folder_path=N
     :param data: Original Data Frame
     :return: Data Frame with added columns
     """
-    data = data.reset_index(inplace=False).set_index(keys=['datadate', 'gvkey', 'iid'], inplace=False)
+    data.reset_index(inplace=True, drop=True)
+    data.set_index(keys=['datadate', 'gvkey', 'iid'], inplace=True)
 
     # JOB: Calculate Return Index Column
     data.loc[:, 'return_index'] = (data['prccd'] / data['ajexdi']) * data['trfd']
@@ -640,10 +646,10 @@ def calculate_daily_return(data: pd.DataFrame, save_to_file=False, folder_path=N
 
     if save_to_file:
         # Reset index
-        data.reset_index(inplace=True)
+        data.reset_index(inplace=True, drop=False)
 
         # Save to file
-        data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents_test.csv'))
+        data.to_csv(os.path.join(ROOT_DIR, folder_path, 'index_data_constituents.csv'))
 
     return data
 

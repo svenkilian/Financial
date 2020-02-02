@@ -2,6 +2,7 @@ import inspect
 
 from scipy.stats import rankdata
 from sklearn import ensemble
+from tqdm import tqdm
 
 from config import ROOT_DIR
 from core import execute
@@ -16,9 +17,9 @@ import pandas as pd
 import pprint
 from tensorflow.keras import optimizers
 from colorama import Fore, Style
-from typing import List, Tuple, Union
+from typing import List, Tuple
 
-from core.utils import Timer, get_model_parent_type, pretty_print_table
+from core.utils import Timer, get_model_parent_type, pretty_print_table, to_combinations
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, TensorBoard
@@ -28,17 +29,15 @@ import sklearn.tree
 # tf.logging.set_verbosity(tf.logging.ERROR)
 
 
+#
+
 class LSTMModel:
     """
     LSTM model class
     """
 
-    def __init__(self, index_name=None):
+    def __init__(self):
         self.model = Sequential()  # Initialize Keras sequential model
-        if index_name:
-            self.index_name = index_name
-        else:
-            self.index_name = ''
         self.configs = None
         self.model_type = 'LSTM'
         self.parent_model_type = 'deep_learning'
@@ -168,7 +167,7 @@ class LSTMModel:
         print(f'[LSTM Model] Epochs: {epochs}, batch size: {batch_size} ')
         early_stopping_patience = configs['training']['early_stopping_patience']
 
-        save_fname = os.path.join(ROOT_DIR, save_dir, '%s-%s-e%s-b%s.h5' % (self.index_name,
+        save_fname = os.path.join(ROOT_DIR, save_dir, '%s-%s-e%s-b%s.h5' % ('training_',
                                                                             dt.datetime.now().strftime('%d%m%Y-%H%M%S'),
                                                                             str(epochs), str(batch_size)))
         callbacks = [
@@ -255,7 +254,7 @@ class LSTMModel:
         :param x_test: Test data
         :return: Predictions
         """
-        print('[Model] Predicting on test data ...')
+        print('[LSTM Model] Predicting on test data ...')
         predicted = self.model.predict(x_test)
         predicted = np.reshape(predicted, (predicted.size,))
 
@@ -327,15 +326,11 @@ class TreeEnsemble:
     Random Forest model class
     """
 
-    def __init__(self, index_name=None, model_type='RandomForestClassifier'):
+    def __init__(self, model_type='RandomForestClassifier'):
 
         self.model = None
         self.model_type = model_type
         self.parent_model_type = 'tree_based'
-        if index_name:
-            self.index_name = index_name
-        else:
-            self.index_name = ''
         self.parameters = None
 
     def __repr__(self):
@@ -421,7 +416,7 @@ class WeightedEnsemble:
         :rtype: object
         """
         self.classifier_types = classifier_type_list
-        self.classifiers = [TreeEnsemble(index_name=index_name, model_type=m_type).build_model(configs, verbose=verbose)
+        self.classifiers = [TreeEnsemble(model_type=m_type).build_model(configs, verbose=verbose)
                             for m_type in
                             self.classifier_types]
         self.model_type = f'{self.__class__.__name__}({", ".join([str(clf.model_type) for clf in self.classifiers])})'
@@ -528,30 +523,70 @@ class MixedEnsemble:
     """
 
     def __init__(self, index_name: str = '', classifier_type_list: List[str] = None, configs: dict = None,
-                 weighting_criterion='Accuracy',
-                 verbose: int = 0):
+                 weighting_criterion='Accuracy', verbose: int = 0, mute=False):
         self.index_name = index_name
         self.classifier_types = classifier_type_list
+        self.configs = configs
         self.classifiers = [
-            TreeEnsemble(index_name=index_name, model_type=m_type).build_model(configs, verbose=verbose) if
+            TreeEnsemble(model_type=m_type).build_model(self.configs, verbose=verbose) if
             get_model_parent_type(model_type=m_type) == 'tree_based'
-            else LSTMModel(index_name=index_name.lower().replace(' ', '_')).build_model(configs=configs,
-                                                                                        verbose=verbose) for m_type in
-            self.classifier_types]
-        self.val_scores = []
+            else LSTMModel().build_model(configs=configs,
+                                         verbose=verbose) for m_type in
+            self.classifier_types] if classifier_type_list is not None else []
+        self.__val_scores = []
         self.weighting_criterion = weighting_criterion
         self.verbose = verbose
-        self.model_type = f'{self.__class__.__name__}({", ".join([str(clf.model_type) for clf in self.classifiers])})'
-        model: Union[TreeEnsemble, LSTMModel]
-        self.data_set_indices = [0 if model.parent_model_type == 'deep_learning' else 1 for model in self.classifiers]
+        if not mute:
+            print(f'Successfully created mixed ensemble of {[clf for clf in self.classifiers]}')
 
-        print(f'Successfully created mixed ensemble of {[clf for clf in self.classifiers]}')
+    @classmethod
+    def from_classifier_list(cls, classifiers: list, classifier_types: list, val_scores: list, weighting_criterion,
+                             configs, verbose):
+        model = cls(configs=configs, weighting_criterion=weighting_criterion, mute=True)
+        model.classifier_types = classifier_types
+        model.val_scores = val_scores
+        model.classifiers = list(classifiers)
+        model.weighting_criterion = weighting_criterion
+        model.verbose = verbose
+        print(f'Successfully created mixed ensemble of {[clf for clf in model.classifiers]}')
+
+        return model
 
     def __repr__(self):
         out = f'{Style.BRIGHT}{Fore.BLUE}{self.__class__.__name__}' \
               f'({", ".join([str(clf.model_type) for clf in self.classifiers])}){Style.RESET_ALL}'
 
         return out
+
+    @property
+    def val_scores(self):
+        return self.__val_scores
+
+    @val_scores.setter
+    def val_scores(self, value):
+        self.__val_scores = value
+
+    @property
+    def combinations(self):
+        sub_ensembles = []
+        clf_combinations, clf_type_combinations, clf_val_combinations = to_combinations(
+            self.classifiers), to_combinations(self.classifier_types), to_combinations(self.val_scores)
+
+        for i in range(len(clf_combinations)):
+            sub_ensembles.append(MixedEnsemble.from_classifier_list(classifiers=list(clf_combinations[i]),
+                                                                    classifier_types=list(clf_type_combinations[i]),
+                                                                    val_scores=list(clf_val_combinations[i]),
+                                                                    weighting_criterion=self.weighting_criterion,
+                                                                    configs=self.configs, verbose=self.verbose))
+        return sub_ensembles
+
+    @property
+    def model_type(self):
+        return f'{self.__class__.__name__}({", ".join([str(clf.model_type) for clf in self.classifiers])})'
+
+    @property
+    def data_set_indices(self):
+        return [0 if model.parent_model_type == 'deep_learning' else 1 for model in self.classifiers]
 
     def fit(self, x_train: list, y_train: list, feature_names: List[List[str]] = None, **fit_args) -> list:
         """
@@ -665,16 +700,17 @@ class MixedEnsemble:
                 y_test: ndarray = None, weighted=True, performance_based=True, rank_based=True, equal_weights=True,
                 alpha=2) -> np.array:
         """
-        Aggregate individual predictions
+        Aggregate individual predictions to weighted predictions according to weighting schemes
 
-        :param y_test_merged:
-        :param test_data_index_merged:
-        :param rank_based:
-        :param performance_based:
-        :param all_predictions:
-        :param y_test:
-        :param test_data_index: Array of test data indices
         :param alpha: Weighting parameter for weighted average
+        :param performance_based: Use performance-based weighting
+        :param equal_weights: Use equal weights weighting
+        :param rank_based: Use rank-based weighting
+        :param y_test_merged: Test target array
+        :param test_data_index_merged: Test data index
+        :param all_predictions: All predictions
+        :param y_test: Individual-level test targets
+        :param test_data_index: Array of test data indices
         :param weighted: Use performance-weighted average
         :param x_test: Test set
         :return: Tuple(predictions, y_test_indexed_merged.values, predictions_indexed_merged.index
@@ -690,10 +726,11 @@ class MixedEnsemble:
         timer = Timer().start()
 
         if weighted:
-            predictions = []
+            predictions = []  # Initialize list of predictions
             if performance_based:
+                # JOB: Aggregate predictions based on the component models' validation score
                 print(
-                    f'\nPerformance-based weighting with Validation/OOB scores [{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
+                    f'\nPerformance-based weighting with validation scores ({self.weighting_criterion}): [{", ".join([str(np.round(score, 4)) for score in self.val_scores])}]')
                 try:
                     weights = [max(score, 0) ** alpha / max(sum([max(sc, 0) ** alpha for sc in self.val_scores]), 0) for
                                score
@@ -708,9 +745,10 @@ class MixedEnsemble:
                 preds = np.average(all_predictions, weights=weights, axis=0)
                 predictions.append(('performance', preds))
             if rank_based:
+                # JOB: Aggregate predictions based on the component models' validation score rank
                 print(
-                    f'\nRank-based weighting with Validation/OOB scores '
-                    f'[{", ".join([str(np.round(score, 3)) for score in self.val_scores])}]')
+                    f'\nRank-based weighting with validation scores ({self.weighting_criterion}): '
+                    f'[{", ".join([str(np.round(score, 4)) for score in self.val_scores])}]')
 
                 ranks = (len(self.val_scores) + 1) - rankdata(self.val_scores, method='ordinal')
                 weights = [(1 / rank_i) / sum([(1 / rank_j) for rank_j in ranks]) for rank_i in ranks]
@@ -719,6 +757,7 @@ class MixedEnsemble:
                 preds = np.average(all_predictions, weights=weights, axis=0)
                 predictions.append(('rank', preds))
             if equal_weights:
+                # JOB: Aggregate predictions using equal weights
                 print('\nWeighting with equal weights:')
                 weights = [1 / len(self.classifier_types) for _ in self.classifier_types]
                 print(f'Weights: [{", ".join([str(round(weight, 3)) for weight in weights])}]')
@@ -726,6 +765,7 @@ class MixedEnsemble:
                 predictions.append(('equal', preds))
 
         else:
+            # JOB: In case no weighting scheme is specified, resort to equal weighting
             predictions = np.mean(all_predictions, axis=0)
         timer.stop()
 
@@ -744,4 +784,4 @@ class MixedEnsemble:
         has_tree_based = len(set(classifier_list).intersection(configs['model_hierarchy']['tree_based'])) > 0
         has_lstm = len(set(classifier_list).intersection(configs['model_hierarchy']['deep_learning'])) > 0
 
-        return has_tree_based and has_lstm
+        return all([has_tree_based, has_lstm])

@@ -34,15 +34,29 @@
 #   Journal of business & economic statistics 13(3), 253-264.
 #
 ##########################################################
-from typing import NamedTuple
+from typing import NamedTuple, Union
+from scipy.stats import t
+import collections
+import pandas as pd
+import numpy as np
 
 
-def dm_test(actual_lst, pred1_lst, pred2_lst, h=1, crit="MSE", power=2, alternative='two_sided') -> NamedTuple:
+def dm_test(actual_lst=None, pred1_lst=None, pred2_lst=None, e_1=None, e_2=None, h=1, crit="MSE", power=2,
+            alternative='two_sided') -> Union[NamedTuple, None]:
     """
+    This function implements the modified test proposed by Harvey, Leybourne and Newbold (1997).
 
+    The null hypothesis is that the two methods have the same forecast accuracy.
+    For alternative="less", the alternative hypothesis is that method 2 is less accurate than method 1.
+    For alternative="greater", the alternative hypothesis is that method 2 is more accurate than method 1.
+    For alternative="two.sided", the alternative hypothesis is that method 1 and method 2 have different levels of accuracy.
+
+    References
+    :param e_1:
+    :param e_2:
     :param actual_lst: List of actual values
     :param pred1_lst: First list of predicted values
-    :param pred2_lst: Second list of predicted values
+    :param pred2_lst: Second list of predicted values (series that alternative hypothesis pertains to)
     :param h: Number of steps ahead
     :param crit: String specifying the error criterion (MSE, MAD, MAPE, poly)
     :param power: Power for crit power (only meaningful when crit is `poly`)
@@ -60,7 +74,7 @@ def dm_test(actual_lst, pred1_lst, pred2_lst, h=1, crit="MSE", power=2, alternat
             msg = "The type of the number of steps ahead (h) is not an integer."
             return (rt, msg)
         # Check the range of h
-        if (h < 1):
+        if h < 1:
             rt = -1
             msg = "The number of steps ahead (h) is not large enough."
             return (rt, msg)
@@ -68,17 +82,17 @@ def dm_test(actual_lst, pred1_lst, pred2_lst, h=1, crit="MSE", power=2, alternat
         len_p1 = len(pred1_lst)
         len_p2 = len(pred2_lst)
         # Check if lengths of actual values and predicted values are equal
-        if (len_act != len_p1 or len_p1 != len_p2 or len_act != len_p2):
+        if len_act != len_p1 or len_p1 != len_p2 or len_act != len_p2:
             rt = -1
             msg = "Lengths of actual_lst, pred1_lst and pred2_lst do not match."
             return (rt, msg)
         # Check range of h
-        if (h >= len_act):
+        if h >= len_act:
             rt = -1
             msg = "The number of steps ahead is too large."
-            return (rt, msg)
+            return rt, msg
         # Check if criterion supported
-        if (crit != "MSE" and crit != "MAPE" and crit != "MAD" and crit != "poly"):
+        if crit != "MSE" and crit != "MAPE" and crit != "MAD" and crit != "poly":
             rt = -1
             msg = "The criterion is not supported."
             return (rt, msg)
@@ -96,25 +110,20 @@ def dm_test(actual_lst, pred1_lst, pred2_lst, h=1, crit="MSE", power=2, alternat
             is_actual_ok = compiled_regex(str(abs(actual)))
             is_pred1_ok = compiled_regex(str(abs(pred1)))
             is_pred2_ok = compiled_regex(str(abs(pred2)))
-            if (not (is_actual_ok and is_pred1_ok and is_pred2_ok)):
+            if not (is_actual_ok and is_pred1_ok and is_pred2_ok):
                 msg = "An element in the actual_lst, pred1_lst or pred2_lst is not numeric."
                 rt = -1
-                return (rt, msg)
-        return (rt, msg)
+                return rt, msg
+        return rt, msg
 
     # Error check
-    error_code = error_check()
-    # Raise error if cannot pass error check
-    if (error_code[0] == -1):
-        raise SyntaxError(error_code[1])
-        return
-    # Import libraries
-    from scipy.stats import t
-    import collections
-    import pandas as pd
-    import numpy as np
+    if e_1 is None and e_2 is None:
+        error_code = error_check()
+        # Raise error if cannot pass error check
+        if error_code[0] == -1:
+            raise SyntaxError(error_code[1])
 
-    # Initialise lists
+    # Initialize lists
     e1_lst = []
     e2_lst = []
     d_lst = []
@@ -125,65 +134,73 @@ def dm_test(actual_lst, pred1_lst, pred2_lst, h=1, crit="MSE", power=2, alternat
     pred2_lst = pd.Series(pred2_lst).apply(lambda x: float(x)).tolist()
 
     # Length of lists (as real numbers)
-    T = float(len(actual_lst))
+    if actual_lst:
+        series_length = float(len(actual_lst))
+    else:
+        series_length = len(e_1)
 
     # construct d according to crit
-    if (crit == "MSE"):
+    if crit == "MSE":
         for actual, p1, p2 in zip(actual_lst, pred1_lst, pred2_lst):
             e1_lst.append((actual - p1) ** 2)
             e2_lst.append((actual - p2) ** 2)
         for e1, e2 in zip(e1_lst, e2_lst):
             d_lst.append(e1 - e2)
-    elif (crit == "MAD"):
+    elif crit == "MAD":
         for actual, p1, p2 in zip(actual_lst, pred1_lst, pred2_lst):
             e1_lst.append(abs(actual - p1))
             e2_lst.append(abs(actual - p2))
         for e1, e2 in zip(e1_lst, e2_lst):
             d_lst.append(e1 - e2)
-    elif (crit == "MAPE"):
+    elif crit == "MAPE":
         for actual, p1, p2 in zip(actual_lst, pred1_lst, pred2_lst):
             e1_lst.append(abs((actual - p1) / actual))
             e2_lst.append(abs((actual - p2) / actual))
         for e1, e2 in zip(e1_lst, e2_lst):
             d_lst.append(e1 - e2)
-    elif (crit == "poly"):
+    elif crit == "poly":
         for actual, p1, p2 in zip(actual_lst, pred1_lst, pred2_lst):
             e1_lst.append(((actual - p1)) ** (power))
             e2_lst.append(((actual - p2)) ** (power))
         for e1, e2 in zip(e1_lst, e2_lst):
             d_lst.append(e1 - e2)
 
-            # Mean of d
-    mean_d = pd.Series(d_lst).mean()
+    if e_1 is not None and e_2 is not None:
+        d_lst = np.array(e_1) - np.array(e_2)
+
+    # Mean of d
+    mean_d = d_lst.mean()
 
     # Find autocovariance and construct DM test statistics
-    def autocovariance(Xi, N, k, Xs):
-        autoCov = 0
-        T = float(N)
-        for i in np.arange(0, N - k):
-            autoCov += ((Xi[i + k]) - Xs) * (Xi[i] - Xs)
-        return (1 / (T)) * autoCov
 
     gamma = []
     for lag in range(0, h):
         gamma.append(autocovariance(d_lst, len(d_lst), lag, mean_d))  # 0, 1, 2
-    V_d = (gamma[0] + 2 * sum(gamma[1:])) / T
+    V_d = (gamma[0] + 2 * sum(gamma[1:])) / series_length
     DM_stat = V_d ** (-0.5) * mean_d
-    harvey_adj = ((T + 1 - 2 * h + h * (h - 1) / T) / T) ** (0.5)
+    harvey_adj = ((series_length + 1 - 2 * h + h * (h - 1) / series_length) / series_length) ** (0.5)
     DM_stat = harvey_adj * DM_stat
 
     # Find p-value
     p_value = np.nan
     if alternative == 'two_sided':
-        p_value = 2 * t.cdf(-abs(DM_stat), df=T - 1)
+        p_value = 2 * t.cdf(-abs(DM_stat), df=series_length - 1)
     elif alternative == 'greater':
-        p_value = t.cdf(-abs(DM_stat), df=T - 1)
+        p_value = t.cdf(-DM_stat, df=series_length - 1)
     elif alternative == 'less':
-        p_value = t.cdf(abs(DM_stat), df=T - 1)
+        p_value = t.cdf(DM_stat, df=series_length - 1)
 
     # Construct named tuple for return
-    dm_return = collections.namedtuple('dm_return', 'DM p_value')
+    dm_return = collections.namedtuple('dm_return', ['DM', 'p_value'])
 
     rt = dm_return(DM=DM_stat, p_value=p_value)
 
     return rt
+
+
+def autocovariance(Xi, N, k, Xs):
+    autoCov = 0
+    len = float(N)
+    for i in np.arange(0, N - k):
+        autoCov += ((Xi[i + k]) - Xs) * (Xi[i] - Xs)
+    return (1 / (len)) * autoCov

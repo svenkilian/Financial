@@ -1,6 +1,8 @@
 """
 This module implements classes and methods for data analysis
 """
+import datetime
+import itertools
 import json
 import webbrowser
 from typing import Union
@@ -8,11 +10,13 @@ from typing import Union
 import numpy as np
 from colorama import Fore, Style
 from matplotlib import ticker
-import pylab
+from tqdm import tqdm
 
 from config import *
 from core.data_collection import add_constituency_col, to_actual_index, load_full_data
-from core.utils import pretty_print_table
+from core.utils import pretty_print_table, Timer
+from external.dm_test import dm_test
+from textwrap import wrap
 
 
 class StatsReport:
@@ -20,17 +24,25 @@ class StatsReport:
     Implement StatsReport object, which represents a wrapped DataFrame loaded from a json file
     """
 
-    def __init__(self, attrs: list = None):
+    def __init__(self, log_path: str = None, attrs: list = None):
         """
 
         :param attrs: (Optional) Provide list of columns else - if None, infer from headers
         """
+
+        if log_path is None:
+            log_path = os.path.join(ROOT_DIR, 'data', 'training_log.json')
+        else:
+            log_path = os.path.join(ROOT_DIR, 'data', log_path)
+
         try:
-            self.data = pd.read_json(os.path.join(ROOT_DIR, 'data', 'training_log.json'), orient='index',
+            print(log_path)
+            self.data = pd.read_json(log_path, orient='index',
                                      convert_dates=['Experiment Run End', 'Test Set Start Date', 'Test Set End Date',
                                                     'Study Period Start Date', 'Study Period End Date'])
         except ValueError as ve:
             print('Log file does not exist.')
+            print(ve)
             exit(1)
 
         if attrs is None:
@@ -67,10 +79,15 @@ class StatsReport:
     def summary(self, score_list: list = None, index_only: str = None, k: Union[list, int] = None, last_only=True,
                 show_all=False,
                 by_model_type=False, sort_by: str = None, run_id=None,
-                show_std=False, to_html=True, open_window=True) -> pd.DataFrame:
+                show_std=False, to_html=True, open_window=True, compare_errors=False, start_date=None,
+                end_date=None) -> pd.DataFrame:
         """
         Print summary of StatsReport and return as DataFrame
 
+        :param end_date:
+        :param start_date:
+        :param compare_errors:
+        :param run_id:
         :param show_all: Show full training history
         :param to_html: Export summary table to HTML file
         :param open_window: Open created HTML page in new browser window
@@ -84,7 +101,7 @@ class StatsReport:
         :return: Summary as DataFrame
         """
 
-        data = self.split_dict_cols(drop_configs=True)  # Split dict columns
+        data = self.split_dict_cols(drop_configs=False)  # Split dict columns
         index_name = None
         if isinstance(k, int):
             k = [k]
@@ -97,39 +114,20 @@ class StatsReport:
         else:
             columns = data.columns
 
-        if index_only:
-            # Filter by specified index
-            index_name = data.get('Index Name').loc[
-                data['Index Name'].str.contains(index_only, case=False, regex=False)].drop_duplicates().values[0]
+        if compare_errors:
+            columns = ['Prediction Error']
 
-            print(f'Filter by index: {Style.BRIGHT}{Fore.LIGHTBLUE_EX}{index_name}{Style.RESET_ALL}')
-            data = data.loc[data['Index Name'].str.contains(index_name, case=False, regex=False)]
-
-        # JOB: Print summary info
-        if run_id:
-            data = data.loc[data['ID'] == run_id]
-            last_only = False
-
-        if last_only:
-            # Filter by last available index
-            print(f'Summary report for last available run (ID={last_id(data)} of {self.last_id}) and \n'
-                  f'{columns}\n')
-            try:
-                data = data.loc[data['ID'] == last_id(data)]
-            except TypeError as te:
-                print(te)
-                pass
-        else:
-            print(f'Summary report for all runs and \n'
-                  f'{columns}\n')
+        # JOB: Filter data
+        data = filter_df(data, columns=data.columns, index_only=index_only, last_only=last_only, run_id=run_id,
+                         last_run_id=self.last_id, start_date=start_date, end_date=end_date)
 
         n_models = data['Model Type'].nunique()
         if data.shape[0] > n_models and not show_all:
             print(f'Showing last {n_models} out of {data.shape[0]}')
             print('...')
-            pretty_print_table(data.tail(n_models).iloc[:, :15])
+            pretty_print_table(data.tail(n_models).iloc[:, :10])
         else:
-            pretty_print_table(data.iloc[:, :15])
+            pretty_print_table(data.iloc[:, :10])
 
         total_obs = len(data['Test Set Start Date'].unique())
         print(f'\nNumber of unique time periods in filtered observation data: {total_obs}')
@@ -168,6 +166,106 @@ class StatsReport:
 
             return df
 
+    def compare_prediction_errors(self, to_html=True):
+        """
+        Compare prediction errors
+
+        :return:
+        """
+
+        data = filter_df(self.data, columns=['Prediction Error'], index_only=None, last_only=True,
+                         last_run_id=self.last_id)
+
+        model_types = data['Model Type'].unique()
+        model_combinations = list(itertools.permutations(model_types, 2))
+
+        relative_performance_table = pd.DataFrame(columns=model_types, index=model_types)
+        print('Creating relative performance table ...')
+        timer = Timer().start()
+        for combination in tqdm(model_combinations, leave=False):
+            if data.loc[data['Model Type'] == combination[0], 'Prediction Error'].values[0] is None or \
+                    data.loc[data['Model Type'] == combination[1], 'Prediction Error'].values[0] is None:
+                continue
+            error_1 = [errors for error_list in
+                       data.loc[data['Model Type'] == combination[0], 'Prediction Error'].values for
+                       errors in error_list]
+
+            error_2 = [errors for error_list in
+                       data.loc[data['Model Type'] == combination[1], 'Prediction Error'].values for
+                       errors in error_list]
+
+            # print(f'\nTesting H_0: {combination[0]} > {combination[1]}')
+            # print(f'Total errors of {combination[0]}: {sum(error_1)}')
+            # print(f'Total errors of {combination[1]}: {sum(error_2)}')
+            p_value = dm_test(e_1=error_1, e_2=error_2, power=1, alternative="greater").p_value
+            # print(f'p-value: {p_value}\n')
+            relative_performance_table.loc[combination[1], combination[0]] = p_value
+
+        relative_performance_table.fillna('-', inplace=True)
+
+        if to_html:
+            df_to_html(relative_performance_table,
+                       title='Model Prediction Performance Comparison',
+                       open_window=False, file_name='mode_prediction_comparison')
+
+        pretty_print_table(relative_performance_table)
+        timer.stop()
+
+    # noinspection DuplicatedCode
+    def plot_return_series(self, cumulative_only=True):
+        """
+
+        :param cumulative_only:
+        :return:
+        """
+        data = filter_df(self.data, columns=['Prediction Error'], index_only=None, last_only=True,
+                         last_run_id=self.last_id)
+
+        model_types = data['Model Type'].unique()
+
+        market_return_series = pd.Series()
+        for return_period in data.loc[data['Model Type'] == 'Market', 'Return Series'].values:
+            market_return_period_series = pd.Series(return_period)
+            market_return_period_series.index = pd.DatetimeIndex(market_return_period_series.index)
+            market_return_series = pd.concat([market_return_series, market_return_period_series])
+
+        cumulative_market_return = (market_return_series + 1).cumprod().rename('Cumulative Market Return')
+        cumulative_market_return.index.name = 'Time'
+        market_return_series.index.name = 'Time'
+
+        for model in model_types:
+            if model != 'Market':
+                return_series = pd.Series()
+                for return_period in data.loc[data['Model Type'] == model, 'Return Series'].values:
+                    return_period_series = pd.Series(return_period)
+                    return_period_series.index = pd.DatetimeIndex(return_period_series.index)
+                    return_series = pd.concat([return_series, return_period_series])
+
+                cumulative_return = (return_series + 1).cumprod().rename('Cumulative Portfolio Return')
+                cumulative_return.index.name = 'Time'
+                return_series.index.name = 'Time'
+
+                cumulative_returns_merged = pd.concat([cumulative_return, cumulative_market_return], axis=1,
+                                                      join='outer')
+
+                cumulative_returns_merged.plot()
+
+                plt.title(label='\n'.join(wrap(model.replace('_', ' '), 60)), fontsize=10)
+                plt.tight_layout()
+                plt.legend(loc='best')
+                plt.show()
+
+                if not cumulative_only:
+                    returns_merged = pd.concat(
+                        [return_series.rename('Excess Portfolio Return'), market_return_series.rename(
+                            'Excess Market Return')], axis=1, join='outer')
+                    returns_merged = returns_merged.resample('Q').mean()
+                    returns_merged.loc['2005-08':'2019-11', :].plot()
+                    plt.title(label='\n'.join(wrap(model.replace('_', ' '), 60)), fontsize=10)
+                    plt.tight_layout()
+                    plt.legend(loc='best')
+                    plt.show()
+
     def split_dict_cols(self, drop_configs=True):
         """
         Split columns containing dicts into separate columns
@@ -182,7 +280,8 @@ class StatsReport:
                 if isinstance(data[attr][-1], dict) and attr != 'Model Configs':
                     # Split up dict entries into separate columns
                     for key in data[attr][-1].keys():
-                        data[f'{attr}_{key}'] = data[attr].apply(lambda x: x.get(key))
+                        data[f'{attr}_{key}'] = data[attr].apply(
+                            lambda x: x if (isinstance(x, float) or x is None) else x.get(key))
 
                     # Drop original columns
                     data.drop(labels=attr, inplace=True, axis=1)
@@ -261,37 +360,41 @@ class VisTable:
     def grouped_data(self):
         return self.data.loc[self.time_frame[0]:self.time_frame[1]].groupby(self.groups)
 
-    def plot_grouped(self, monthly=False, title=None, legend=True, save_to_file=False):
+    def plot_grouped(self, title=None, legend=True, save_to_file=False, y_limit: float = None):
         """
         Plot data in a grouped fashion
 
+        :param save_to_file:
+        :param legend:
+        :param title:
+        :param y_limit:
         :return:
         """
-        fig, ax = plt.subplots(figsize=(6, 4))
+        fig, ax = plt.subplots(figsize=(8, 5))
 
         # self.data.index = pd.to_datetime(self.data.index)
         # print(self.grouped_data.get_group('Financials'))
 
+        if y_limit is None:
+            y_limit = 0.25
+
         if self.stat in ['count', 'share', 'percentage']:
             ax.yaxis.set_major_formatter(ticker.PercentFormatter(1.0, decimals=0))
-            ax.set_ylim(0, 0.25)
+            ax.set_ylim(0, y_limit)
         if 'return' in self.attrs:
             ax.yaxis.set_major_formatter(ticker.PercentFormatter(1.0, decimals=1))
 
         for key, group in self.grouped_data:
             # print(key)
-            if not monthly:
-                if self.stat not in ['count', 'share', 'percentage']:
-                    ax.plot(group.groupby(pd.Grouper(freq=self.freq))[self.attrs].apply(getattr(np, self.stat)),
-                            label=key)
-                else:
-                    avg_index_len = int(round(self.data.groupby('datadate')['gvkey'].count().mean()))
-                    ax.plot(
-                        group.groupby(pd.Grouper(freq=self.freq))[self.attrs].size().resample('Y', how='mean').divide(
-                            avg_index_len),
+            if self.stat not in ['count', 'share', 'percentage']:
+                ax.plot(group.groupby(pd.Grouper(freq=self.freq))[self.attrs].apply(getattr(np, self.stat)),
                         label=key)
             else:
-                pass
+                avg_index_len = int(round(self.data.groupby('datadate')['gvkey'].count().mean()))
+                ax.plot(
+                    group.groupby(pd.Grouper(freq=self.freq))[self.attrs].size().resample('Y', how='mean').divide(
+                        avg_index_len),
+                    label=key)
 
         if title is not None:
             ax.set_title(title.title(), fontsize=16)
@@ -414,6 +517,59 @@ def resample_month_end(data, columns: list = None):
     return data
 
 
+def filter_df(df, columns=None, index_only: str = None, run_id=None, last_only=True, last_run_id=None, start_date=None,
+              end_date=None):
+    """
+    Filter data frame
+
+    :param df:
+    :param columns:
+    :param index_only:
+    :param run_id:
+    :param last_id:
+    :param last_only:
+    :return:
+    """
+    data_frame = df.copy()
+
+    # JOB: Filter by specified index
+    if index_only:
+        try:
+            index_name = data_frame.get('Index Name').loc[
+                data_frame['Index Name'].str.contains(index_only, case=False, regex=False)].drop_duplicates().values[0]
+        except IndexError as ie:
+            print(f'No records found for {index_only}.\n'
+                  f'Resorting to showing summary statistics for all indices in selected runs.')
+        else:
+            print(f'Filter by index: {Style.BRIGHT}{Fore.LIGHTBLUE_EX}{index_name}{Style.RESET_ALL}')
+            data_frame = data_frame.loc[data_frame['Index Name'].str.contains(index_name, case=False, regex=False)]
+
+    # JOB: Filter by specific run id
+    if run_id:
+        data_frame = data_frame.loc[data_frame['ID'] == run_id]
+        last_only = False
+
+    # JOB: Filter by specific run only
+    if last_only:
+        print(f'Summary report for last available run (ID={last_id(data_frame)} of {last_run_id}) and \n'
+              f'{columns}\n')
+        try:
+            data_frame = data_frame.loc[data_frame['ID'] == last_id(data_frame)]
+        except TypeError as te:
+            print(te)
+            pass
+    else:
+        print(f'Summary report for all runs and \n'
+              f'{columns}\n')
+
+    # JOB: Filter by specific date range
+    if start_date is not None and end_date is not None:
+        data_frame = data_frame.loc[
+            (data_frame['Test Set Start Date'] > start_date) & (data_frame['Test Set End Date'] <= end_date)]
+
+    return data_frame
+
+
 def df_to_html(df, title='Statistics', file_name='table', open_window=True) -> None:
     """
     Export DataFrame to HTML page
@@ -455,10 +611,11 @@ def last_id(data):
     return last
 
 
-def main(full_log=False, index_summary=True, plots_only=False):
+def main(full_log=False, index_summary=True, plots_only=False, compare_models=False):
     """
     Main method of analysis.py module (to be called when module is run stand-alone)
 
+    :param compare_models:
     :param full_log:
     :param index_summary: Whether to include summary of index
     :param plots_only: Whether to only plot index constituency and daily returns over time
@@ -473,21 +630,29 @@ def main(full_log=False, index_summary=True, plots_only=False):
         'SPEURO': '150913',  # S&P Euro Index
         'EURONEXT': '150928',  # Euronext 100 Index
         'STOXX600': '150376',  # Dow Jones STOXX 600 Price Index
+        'Europe350': '150927',
         'DAX': '150095'
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['DAX']
+    index_id = index_dict['Europe350']
 
     # JOB: Create model performance report
-    report = StatsReport()
+    report = StatsReport(log_path=None)
+
+    if compare_models:
+        report.compare_prediction_errors(to_html=True)
+
     if full_log:
         report.to_html(file_name='run_overview', title='Training Log', open_window=False)
-    report.summary(last_only=True, index_only='DAX', show_all=False,
+
+    report.summary(last_only=True, index_only=None, show_all=False,
                    score_list=['Accuracy', 'Sharpe', 'Sortino', 'Return'],
                    k=10, run_id=None,
-                   by_model_type=True, sort_by='Annualized Excess Return', show_std=False, to_html=True,
-                   open_window=True)
+                   by_model_type=True, sort_by='Sharpe', show_std=False, to_html=False,
+                   open_window=False, compare_errors=False, start_date='2002-10', end_date='2005-10')
+
+    # report.plot_return_series(cumulative_only=False)
 
     if index_summary:
         # Load full index data
@@ -501,15 +666,15 @@ def main(full_log=False, index_summary=True, plots_only=False):
         full_data = to_actual_index(full_data)
         full_data.set_index('datadate', inplace=True)
 
-        vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector_name'], freq='D',
+        vis = VisTable(full_data, time_frame=('1998-12', '2019-12'), groups=['gics_sector_name'], freq='D',
                        stat='count',
                        attrs=['gvkey'])
-        vis.plot_grouped(title='Index Composition', save_to_file=True, legend=True)
+        vis.plot_grouped(title='Index Composition', save_to_file=True, legend=False, y_limit=0.2)
 
-        vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector'], freq='M',
-                       stat='mean',
-                       attrs=['daily_return'])
-        vis.plot_grouped()
+        # vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector_name'], freq='Y',
+        #                stat='mean',
+        #                attrs=['daily_return'])
+        # vis.plot_grouped(save_to_file=True, title='legend')
 
         if not plots_only:
             # JOB: Resample to monthly
@@ -525,4 +690,4 @@ def main(full_log=False, index_summary=True, plots_only=False):
 
 
 if __name__ == '__main__':
-    main(full_log=True, index_summary=True, plots_only=True)
+    main(full_log=False, index_summary=False, plots_only=True, compare_models=False)

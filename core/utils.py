@@ -1,22 +1,21 @@
 """
 This utilities module implements helper functions for displaying data frames and plotting data.
 """
-import itertools
-import webbrowser
-
-import config
-from config import *
 import csv
 import datetime
 import datetime as dt
 import glob
+import itertools
 import json
 import sys
 import time
+import webbrowser
 from collections import deque
+from pathlib import Path
 from pydoc import locate
 
 import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from colorama import Fore, Back, Style
@@ -24,12 +23,16 @@ from matplotlib import ticker
 from matplotlib.ticker import MaxNLocator
 from tabulate import tabulate
 
+import config
+from config import *
 
-def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, title='', col_multi_index=False,
-              label_mapping=None, export_as_png=False) -> None:
+
+def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, title=None, col_multi_index=False,
+              label_mapping=None, y_title=None, export_as_png=False) -> None:
     """
     Plot data
 
+    :param y_title:
     :param data: DataFrame containing the data to plot
     :param columns: Columns to plot
     :param index_name: Name of the row index
@@ -48,8 +51,15 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
     # Initialize date locators and formatters
     # if index_name is None:
     #     index_name = list('datadate')
+
+    if columns is None:
+        columns = data.columns
+
+    if y_title is None:
+        y_title = 'Value'
+
     years = mdates.YearLocator(5)
-    months = mdates.MonthLocator()
+    # months = mdates.MonthLocator()
     years_fmt = mdates.DateFormatter('%Y')
     months_fmt = mdates.DateFormatter('%m')
 
@@ -68,7 +78,7 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
 
     ax.xaxis.set_major_locator(ticker.AutoLocator())
     ax.xaxis.set_major_formatter(years_fmt)
-    ax.xaxis.set_minor_locator(months)
+    # ax.xaxis.set_minor_locator(months)
     # ax.xaxis.set_minor_formatter(months_fmt)
 
     # Round to nearest years
@@ -77,7 +87,7 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
     # ax.set_xlim(datemin, datemax)
 
     # Style plot
-    ax.set(title=title, xlabel='Year', ylabel='Value')
+    ax.set(title=title, xlabel='Year', ylabel=y_title)
     ax.grid(True)
     if col_multi_index:
         if label_mapping:
@@ -88,7 +98,7 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
         ax.legend(columns)
 
     if export_as_png:
-        plt.savefig('plot.png', dpi=1200, facecolor='w', bbox_inches='tight')
+        plt.savefig(os.path.join(ROOT_DIR, 'data/plots', 'plot.png'), dpi=1200, facecolor='w', bbox_inches='tight')
 
     plt.show()
 
@@ -293,15 +303,27 @@ def add_to_json(dict_entry: dict, file_path: str):
     """
 
     # Specify path to saved data
-    path_to_data = os.path.join(ROOT_DIR, file_path)
+    path_to_data = Path(os.path.join(file_path))
 
     if not os.path.exists(path_to_data):
         print(f'Creating json file: {path_to_data}')
         with open(path_to_data, 'w') as f:
             json.dump({}, f)
 
-    with open(path_to_data) as f:
-        data = json.load(f)
+    try:
+        with open(path_to_data) as f:
+            data = json.load(f)
+    except json.decoder.JSONDecodeError as jde:
+        print(f'\n{Style.BRIGHT}{Fore.LIGHTRED_EX}JSON log file is corrupted.\n{jde}\n'
+              f'Changing name and logging in new file.{Style.RESET_ALL}\n')
+        os.replace(os.path.join(path_to_data.parent, 'training_log.json'),
+                   os.path.join(path_to_data.parent, 'training_log_corrupted.json'))
+
+        with open(path_to_data, 'w') as f:
+            json.dump({}, f)
+        with open(path_to_data) as f:
+            data = json.load(f)
+        config.run_id = 1
 
     id = int(datetime.datetime.today().timestamp())
     data.update({id: dict_entry})
@@ -339,7 +361,7 @@ def check_directory_for_file(index_name: str = None, index_id=None, folder_path:
                 print(f'Loading data from {index_name} from folder: {folder_path}\n')
     else:
         if create_dir:
-            print(f'Creating folder for {index_name} %s')
+            print(f'Creating folder for {index_name}')
             os.mkdir(os.path.join(ROOT_DIR, folder_path))
         load_from_file = False
 
@@ -353,18 +375,37 @@ def to_combinations(list_of_objs: list):
     :return:
     """
     combinations = []
-    list_of_lists = []
 
     for i in range(2, len(list_of_objs)):
-        combinations.extend(itertools.combinations(range(len(list_of_objs)), i))
+        combinations.extend(itertools.combinations(list_of_objs, i))
 
-    for comb in combinations:
-        item_list = []
-        for item in comb:
-            item_list.append(list_of_objs[item])
-        list_of_lists.append(item_list)
+    return combinations
 
-    return list_of_lists
+
+def write_to_logs(data_record: dict):
+    """
+    Write record to log
+
+    :param data_record: Dictionary of data_record
+    :return:
+    """
+
+    data_record_json = data_record
+
+    # JOB: Log to standard log file
+    logger = CSVWriter(output_path=os.path.join(ROOT_DIR, 'data', 'training_log.csv'),
+                       field_names=list(data_record.keys()))
+    logger.add_line(data_record)
+
+    add_to_json(data_record_json, os.path.join(ROOT_DIR, 'data', 'training_log.json'))
+
+    # JOB: Log to external backup log
+    external_file_path = r'E:\OneDrive - student.kit.edu\[01] Studium\[06] Seminare\[04] Electronic Markets & User Behavior\[04] Live Data'
+    if os.path.exists(external_file_path):
+        logger = CSVWriter(output_path=os.path.join(external_file_path, 'training_log.csv'),
+                           field_names=list(data_record.keys()))
+        logger.add_line(data_record)
+        add_to_json(data_record_json, os.path.join(external_file_path, 'training_log.json'))
 
 
 def get_run_number():
@@ -387,6 +428,12 @@ def get_run_number():
                 max_key = max([val.get('ID', 0) for val in data.values() if val.get('ID') is not None])
                 config.run_id = int(max_key + 1)
     except FileNotFoundError:
+        config.run_id = 1
+    except json.decoder.JSONDecodeError as jde:
+        print(f'\n{Style.BRIGHT}{Fore.LIGHTRED_EX}JSON log file is corrupted.\n{jde}\n'
+              f'Changing name and logging in new file.{Style.RESET_ALL}\n')
+        os.rename(os.path.join(ROOT_DIR, 'data', 'training_log.json'),
+                  os.path.join(ROOT_DIR, 'data', 'training_log_corrupted.json'))
         config.run_id = 1
 
     return config.run_id
@@ -810,3 +857,10 @@ class CSVReader:
 
     def path_exists(self):
         return os.path.exists(os.path.join(ROOT_DIR, self.file_path))
+
+
+if __name__ == '__main__':
+    data = pd.read_json(os.path.join(ROOT_DIR, 'data', 'rf_rate_data.json'), orient='index', convert_dates='datadate')
+    data.rename(columns={'rf_annual_rate': 'Europe', 'rf_rate_pct': 'Germany'}, inplace=True)
+    plot_data(data, title='Long-Term Government Bond Yields', y_title='Yield Curve Spot Rates (10-Year Maturity)',
+              export_as_png=True)
