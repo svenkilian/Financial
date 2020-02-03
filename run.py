@@ -38,9 +38,9 @@ if __name__ == '__main__':
     }
 
     # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['Europe350']
+    index_id = index_dict['STOXX600']
     cols = ['above_cs_med', *configs['data']['columns']]
-    study_period_length = 1500
+    study_period_length = 1000
     verbose = 0
     weighting_criterion = 'Mean Daily Return'
     plotting = False
@@ -82,7 +82,7 @@ if __name__ == '__main__':
 
     # JOB: Iteratively fit model on all study periods
     # list(sorted(study_period_ranges.keys()))
-    for study_period_ix in range(1, len(study_period_ranges) + 1):
+    for study_period_ix in range(18, 24):  # len(study_period_ranges) + 1
         date_range = study_period_ranges.get(study_period_ix)
         config.study_period_id = study_period_ix
         print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')

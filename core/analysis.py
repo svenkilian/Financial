@@ -393,22 +393,31 @@ class VisTable:
         :return:
         """
 
-        fig, ax = plt.subplots(figsize=(10, 6))
+        tf = [True, False]
+        for legend in tf:
+            title = self.attrs[0].replace('_', ' ')
+            fig, ax = plt.subplots(figsize=(10, 6))
 
-        data = self.grouped_data.mean()[self.attrs].unstack().droplevel(level=0, axis=1)
-        data.index = data.index.year
+            data = self.grouped_data.mean()[self.attrs].unstack().droplevel(level=0, axis=1)
+            data.index = data.index.year
+            data.plot(kind='bar', rot=0, ax=ax, fontsize=14, width=0.8, legend=legend)
+            ax.set_xlabel('Year')
+            ax.set_ylabel(title)
+            ax.set_title(title)
 
-        data.plot(kind='bar', rot=0, ax=ax, fontsize=14, width=0.8)
-        ax.set_xlabel('Year')
-        ax.set_ylabel(self.attrs[0].replace('_', ' '))
-        ax.set_title(self.attrs[0].replace('_', ' '))
+            if 'Accuracy' in self.attrs[0]:
+                ax.set_ylim(0.48, 0.58)
 
-        if 'Accuracy' in self.attrs[0]:
-            ax.set_ylim(0.5, 0.58)
+            plt.tight_layout()
 
-        plt.tight_layout()
+            suffix = '_legend' if legend else ''
 
-        plt.show()
+            file_name = '{}__{}_{}{}.png'.format(title, self.time_frame[0].replace('\'', ''),
+                                                 self.time_frame[1].replace('\'', ''), suffix)
+            # JOB: Save figure to file
+            plt.savefig(os.path.join(ROOT_DIR, 'data/plots', file_name), dpi=600, facecolor='w', bbox_inches='tight')
+
+            plt.show()
 
     def plot_grouped(self, title=None, legend=True, save_to_file=False, y_limit: float = None):
         """
@@ -652,9 +661,10 @@ def df_to_html(df, title='Statistics', file_name='table', open_window=True) -> N
         webbrowser.open(os.path.join(ROOT_DIR, 'data', f'{file_name}.html'), new=2)
 
 
-def plot_yearly_metrics(metrics, k):
+def plot_yearly_metrics(metrics, k, top_n=3):
     """
 
+    :param top_n:
     :param k:
     :param metrics:
     :return:
@@ -669,27 +679,35 @@ def plot_yearly_metrics(metrics, k):
             columns = [col for col in columns if (col.endswith(f'_{k}') and 'atc' not in col)]
     print(f'{Style.BRIGHT}{Fore.RED}Printing columns: {Style.RESET_ALL}')
     for metric in columns:
+
+        model_types = [*(StatsReport().summary(last_only=True, index_only=None, show_all=False,
+                                               score_list=metric,
+                                               k=k, run_id=None,
+                                               by_model_type=True,
+                                               sort_by=metric,
+                                               show_std=False,
+                                               to_html=False,
+                                               open_window=False, compare_errors=False,
+                                               start_date='2002-10', end_date='2019-12',
+                                               silent=True).index[
+                         :top_n]), 'LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier',
+                       'GradientBoostingClassifier', 'Market']
+
+        if 'accuracy' in metric.lower():
+            model_types.remove('Market')
+
         print(f'{Style.BRIGHT}{Fore.RED}{metric}{Style.RESET_ALL}')
         report = StatsReport(log_path=None,
-                             model_types=[*(StatsReport().summary(last_only=True, index_only=None, show_all=False,
-                                                                  score_list=metric,
-                                                                  k=10, run_id=None,
-                                                                  by_model_type=True,
-                                                                  sort_by=metric,
-                                                                  show_std=False,
-                                                                  to_html=False,
-                                                                  open_window=False, compare_errors=False,
-                                                                  start_date='2002-10', end_date='2019-12',
-                                                                  silent=True).index[
-                                            :3]), 'LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier',
-                                          'GradientBoostingClassifier', 'Market'])
+                             model_types=model_types)
 
         data = report.split_dict_cols(drop_configs=True)
 
-        VisTable(data, time_frame=('1998-12', '2019-12'),
-                 groups=['Model Type'], freq='Y',
-                 stat=None,
-                 attrs=[metric]).plot_bar()
+        table = VisTable(data, time_frame=('1998-12', '2019-12'),
+                         groups=['Model Type'], freq='Y',
+                         stat=None,
+                         attrs=[metric])
+
+        table.plot_bar()
 
 
 def last_id(data):
@@ -730,7 +748,7 @@ def main(full_log=False, index_summary=True, plots_only=False, compare_models=Fa
     report = StatsReport()
     # JOB: Create model performance report
 
-    plot_yearly_metrics(metrics=['Accuracy', 'Excess Return', 'Sharpe', 'Sortino', 'Daily'], k=10)
+    plot_yearly_metrics(metrics=['Accuracy', 'Excess Return', 'Sharpe', 'Sortino', 'Daily'], k=150, top_n=3)
 
     exit()
 
