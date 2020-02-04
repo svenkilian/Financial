@@ -651,7 +651,7 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         full_portfolio = pd.concat([long_positions, short_positions], axis=0)
 
         if not get_val_score_only:
-            if top_k == 10:
+            if top_k == 5:
                 # Get series of daily portfolio returns
                 top_10_excess_return_series = calc_excess_returns(
                     full_portfolio.groupby(level=['datadate'])['daily_return'].mean()).rename('daily_excess_return')
