@@ -4,6 +4,14 @@ core package
 Submodules
 ----------
 
+core.analysis module
+--------------------
+
+.. automodule:: core.analysis
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 core.data\_collection module
 ----------------------------
 

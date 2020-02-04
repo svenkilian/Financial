@@ -6,4 +6,5 @@ Financial
 
    config
    core
+   external
    run
