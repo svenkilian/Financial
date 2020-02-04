@@ -1,13 +1,12 @@
 """
 This module implements classes and methods for data analysis
 """
+
 import itertools
 import json
 import webbrowser
-from textwrap import wrap
 from typing import Union
 
-import matplotlib.dates as mdates
 import numpy as np
 from colorama import Fore, Style
 from matplotlib import ticker
@@ -19,20 +18,12 @@ from core.data_collection import add_constituency_col, to_actual_index, load_ful
 from core.utils import pretty_print_table, Timer
 from external.dm_test import dm_test
 
-from cycler import cycler
-
 
 # matplotlib.rcParams['axes.prop_cycle'] = (cycler(color=['green', 'red', 'cyan', 'magenta', 'black',
 #                                                         'purple', 'pink', 'brown', 'orange', 'teal',
 #                                                         'coral', 'lightblue', 'lime', 'lavender', 'turquoise',
 #                                                         'darkgreen', 'gold',
 #                                                         'darkred', 'darkblue']) * cycler(linestyle=['-', '--']))
-
-
-# cc = cycler('color',
-#             ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'purple', 'pink', 'brown', 'orange', 'teal',
-#              'coral', 'lightblue', 'lime', 'lavender', 'turquoise', 'darkgreen', 'tan', 'salmon', 'gold',
-#              'darkred', 'darkblue'])
 
 
 class StatsReport:

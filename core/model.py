@@ -1,8 +1,11 @@
+"""
+This module implements the machine learning models used in the study
+"""
+
 import inspect
 
 from scipy.stats import rankdata
 from sklearn import ensemble
-from tqdm import tqdm
 
 from config import ROOT_DIR
 from core import execute

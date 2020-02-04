@@ -1,6 +1,9 @@
+"""
+This module contains the main logic of the approach
+"""
+
 import datetime
 import json
-import random
 from typing import Union, Tuple
 
 import numpy as np
@@ -13,9 +16,9 @@ from config import *
 from core.data_collection import generate_study_period
 from core.data_processor import DataLoader
 from core.model import LSTMModel, TreeEnsemble, WeightedEnsemble, MixedEnsemble
-from core.utils import plot_train_val, get_most_recent_file, CSVWriter, \
-    check_data_conformity, annualize_metric, Timer, calc_sharpe, \
-    calc_excess_returns, calc_sortino, add_to_json, get_model_parent_type, ProgressBar, pretty_print_table, \
+from core.utils import plot_train_val, get_most_recent_file, check_data_conformity, annualize_metric, Timer, \
+    calc_sharpe, \
+    calc_excess_returns, calc_sortino, get_model_parent_type, ProgressBar, pretty_print_table, \
     write_to_logs
 
 

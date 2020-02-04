@@ -15,7 +15,7 @@ import config
 from config import *
 from config import ROOT_DIR
 from core.analysis import StatsReport
-from core.data_collection import load_full_data, calculate_daily_return
+from core.data_collection import load_full_data
 from core.execute import main
 from core.model import WeightedEnsemble, MixedEnsemble
 from core.utils import get_study_period_ranges, Timer, print_study_period_ranges, get_run_number

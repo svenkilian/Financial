@@ -1,6 +1,7 @@
 """
 This utilities module implements helper functions for displaying data frames and plotting data.
 """
+
 import csv
 import datetime
 import datetime as dt
@@ -15,9 +16,7 @@ from pathlib import Path
 from pydoc import locate
 
 import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from colorama import Fore, Back, Style
 from matplotlib import ticker
 from matplotlib.ticker import MaxNLocator
