@@ -738,8 +738,8 @@ def test_model(predictions: np.array, configs: dict, folder_path: str, test_data
         top_k_metrics.loc[top_k, 'Mean Daily Return (Long)_atc'] = mean_daily_long - 2 * t_costs
 
     if get_val_score_only:
-        print(f'{weighting_criterion} score: {round(top_k_metrics.loc[10, weighting_criterion], 4)}')
-        return top_k_metrics.loc[10, weighting_criterion]
+        print(f'{weighting_criterion} score: {round(top_k_metrics.loc[5, weighting_criterion], 4)}')
+        return top_k_metrics.loc[5, weighting_criterion]
 
     top_k_metrics = pd.concat([top_k_metrics, market_metrics.to_frame().T], join='outer', verify_integrity=True)
     top_k_metrics.fillna('-', inplace=True)
@@ -846,13 +846,13 @@ def get_market_metrics(market_portfolio: pd.DataFrame, t_costs: float, index_id:
                        test_data_start_date: datetime.date, test_data_end_date: datetime.date, market_logs=False) -> \
         Tuple[pd.Series, pd.Series, pd.Series]:
     """
-    Get performance metrics for full market portfolio
+    Get performance metrics for full equal-weighted market portfolio
 
-    :param market_logs:
-    :param test_data_end_date:
-    :param test_data_start_date:
-    :param index_name:
-    :param index_id:
+    :param market_logs: Write log data for market portfolio
+    :param test_data_start_date: Start date (with regard to test set)
+    :param test_data_end_date: End date (with regard to test set)
+    :param index_name: Index name
+    :param index_id: Index ID
     :param t_costs: Transaction costs per half-turn
     :param market_portfolio: DataFrame including full test set (market portfolio)
     :return: Tuple of market portfolio metrics (Series) and cumulative returns series (Series)

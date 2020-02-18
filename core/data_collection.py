@@ -775,10 +775,11 @@ def get_data_table(db: wrds.Connection, sql_query=False, query_string='', librar
 def list_tables(db, library, show_n_rows=False):
     """
     List all tables in a given library with optional row count information
+
     :param db: Database connection
     :param library: Queries library
     :param show_n_rows: Show number of rows
-    :return:
+    :return: None
     """
     for table in db.list_tables(library):
         if show_n_rows:
@@ -791,7 +792,7 @@ def generate_index_lookup_dict() -> None:
     """
     Generate dictionary mapping GVKEYX (index identifier) to index name
 
-    :return:
+    :return: None
     """
 
     gvkeyx_lookup = pd.read_csv(os.path.join(ROOT_DIR, 'data', 'Compustat_Global_Indexes.csv'), index_col='GVKEYX')
@@ -805,6 +806,10 @@ def generate_index_lookup_dict() -> None:
 def generate_company_lookup_dict(folder_path: str, data: pd.DataFrame) -> None:
     """
     Generate dictionary mapping GVKEY (stock identifier) to stock name
+
+    :param data: Data
+    :param folder_path: Path to data folder
+
 
     :return:
     """
@@ -826,7 +831,7 @@ def generate_gics_sector(data: pd.DataFrame):
     Append additional column with 2-digit GICS code
 
     :param data: Original Data Frame
-    :return:
+    :return: None
     """
 
     print('Generating gics_sector column ...')
@@ -843,7 +848,7 @@ def append_columns(data: pd.DataFrame, folder_path: str, file_name: str, column_
     :param data: Original DataFrame to append data to
     :param folder_path: Path to index data
     :param file_name: Name of file containing the additional columns
-    :return:
+    :return: None
     """
 
     saved_index_cols = None
@@ -931,31 +936,31 @@ def add_constituency_col(data_orig: pd.DataFrame, folder_path: str) -> pd.DataFr
     return data
 
 
-def quickload_full_data(dax=False):
-    path = r'C:\Users\svenk\PycharmProjects\Financial\data\dow_jones_stoxx_600_price_index'
-    if dax:
-        path = r'C:\Users\svenk\PycharmProjects\Financial\data\deutscher_aktienindex_(dax)_index'
+# def quickload_full_data(dax=False):
+#     path = r'C:\Users\svenk\PycharmProjects\Financial\data\dow_jones_stoxx_600_price_index'
+#     if dax:
+#         path = r'C:\Users\svenk\PycharmProjects\Financial\data\deutscher_aktienindex_(dax)_index'
+#
+#     data = pd.read_csv(os.path.join(path, r'index_data_constituents.csv'),
+#                        index_col='datadate', header=0, parse_dates=True, infer_datetime_format=True,
+#                        dtype={'gvkey': str, 'gsubind': str, 'gics_sector': str})
+#     data = add_constituency_col(data, path)
+#     data = data.loc[data['in_index'] == 1, :]
+#     data.drop(columns=[col for col in data.columns if col.startswith('Unnamed')], inplace=True)
+#     gics_map = pd.read_json(os.path.join('data', 'gics_code_dict.json'), orient='records', typ='series').rename(
+#         'gics_sec')
+#     gics_map = {str(key): val for key, val in gics_map.to_dict().items()}
+#     data['gics_sec'] = data.loc[:, 'gics_sector'].replace(gics_map, inplace=True)
+#
+#     return data
 
-    data = pd.read_csv(os.path.join(path, r'index_data_constituents.csv'),
-                       index_col='datadate', header=0, parse_dates=True, infer_datetime_format=True,
-                       dtype={'gvkey': str, 'gsubind': str, 'gics_sector': str})
-    data = add_constituency_col(data, path)
-    data = data.loc[data['in_index'] == 1, :]
-    data.drop(columns=[col for col in data.columns if col.startswith('Unnamed')], inplace=True)
-    gics_map = pd.read_json(os.path.join('data', 'gics_code_dict.json'), orient='records', typ='series').rename(
-        'gics_sec')
-    gics_map = {str(key): val for key, val in gics_map.to_dict().items()}
-    data['gics_sec'] = data.loc[:, 'gics_sector'].replace(gics_map, inplace=True)
 
-    return data
-
-
-def to_actual_index(data: pd.DataFrame) -> pd.DataFrame:
-    """
-
-    :param data:
-    :return:
-    """
-    data_new = data.loc[data['in_index'] == 1, :]
-    del data
-    return data_new
+# def to_actual_index(data: pd.DataFrame) -> pd.DataFrame:
+#     """
+#
+#     :param data:
+#     :return:
+#     """
+#     data_new = data.loc[data['in_index'] == 1, :]
+#     del data
+#     return data_new

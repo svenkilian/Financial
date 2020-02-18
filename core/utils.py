@@ -31,7 +31,7 @@ def plot_data(data: pd.DataFrame, columns: list = None, index_name: str = None, 
     """
     Plot data
 
-    :param y_title:
+    :param y_title: y-axis title
     :param data: DataFrame containing the data to plot
     :param columns: Columns to plot
     :param index_name: Name of the row index
@@ -110,18 +110,20 @@ def pretty_print_table(df: pd.DataFrame, headers='keys', tablefmt='fancy_grid'):
     :param df: DataFrame to print
     :param headers: Table headers
     :param tablefmt: Table style
-    :return:
+    :return: None
 
     Usage::
             >>> pretty_print_table(db, headers=['col_1', 'col_2'])
     """
-    print(tabulate(df, headers, tablefmt=tablefmt, showindex=True, floatfmt='.4f'))
+    print(tabulate(df, headers, tablefmt=tablefmt, showindex=True, floatfmt='.6f'))
 
 
 def plot_train_val(history, metrics: list, store_png=False, folder_path='') -> None:
     """
     Plot training and validation metrics over epochs.
 
+    :param folder_path: Path to folder
+    :param store_png: Store validation scores from training to .png file
     :param history: Training history
     :param metrics: List of metrics to plot
     :type metrics: list of strings
@@ -162,9 +164,9 @@ def plot_results(predicted_data, true_data):
     """
     Plot predictions vs. true labels.
 
-    :param predicted_data:
-    :param true_data:
-    :return:
+    :param predicted_data: Predicted data
+    :param true_data: True data
+    :return: None
     """
     fig = plt.figure(facecolor='white')
     ax = fig.add_subplot(111)
@@ -252,8 +254,8 @@ def lookup_multiple(dict_of_dicts: dict = None, index_id: str = '', reverse_look
              {'file_path': 'gvkeyx_name_dict_na.json',
               'lookup_table': 'north_america'}}
 
-    :param key_to_lower:
-    :param reverse_lookup:
+    :param key_to_lower: Transform key to lowercase
+    :param reverse_lookup: Reverse lookup
     :param dict_of_dicts: Nested dictionary with lookup dicts
     :param index_id: Index ID
     :return: Tuple of [0] index_name, [1] lookup_table
@@ -371,7 +373,7 @@ def to_combinations(list_of_objs: list):
     """
     Create array of all combinations of a list of length n of the shape (1, 2, ..., n)
     :param list_of_objs:
-    :return:
+    :return: Combinations
     """
     combinations = []
 
@@ -386,7 +388,7 @@ def write_to_logs(data_record: dict):
     Write record to log
 
     :param data_record: Dictionary of data_record
-    :return:
+    :return: None
     """
 
     data_record_json = data_record
@@ -411,7 +413,7 @@ def get_run_number():
     """
     Get number ('ID') of current run from log file.
 
-    :return:
+    :return: Current run number
     """
     try:
         # config.run_id = CSVReader(os.path.join(ROOT_DIR, 'data', 'training_log.csv')).get_last_row_value('ID',
@@ -445,7 +447,7 @@ def apply_batch_directory(directory_path, function=None, **func_args):
     :param directory_path: Path of the parent directory
     :param function: Function to apply to direct subdirectories
     :param func_args: Optional function arguments
-    :return:
+    :return: None
     """
     index_directories = [name for name in os.listdir(os.path.join(ROOT_DIR, directory_path))
                          if os.path.isdir(os.path.join(ROOT_DIR, directory_path, name))]
@@ -465,6 +467,7 @@ def check_data_conformity(x_train: np.array, y_train: np.array, x_test: np.array
     :param x_test: Test data input
     :param y_test: Test data labels
     :param test_data_index: Test data index
+    :return: None
     """
 
     # JOB: Perform data size conformity checks
@@ -495,6 +498,7 @@ def print_study_period_ranges(full_data: pd.DataFrame, study_period_ranges: dict
 
     :param study_period_ranges: Dict containing the study period index and ranges
     :param full_data:
+    :return None
     """
 
     full_date_range = full_data['datadate'].unique()
@@ -513,6 +517,7 @@ def get_model_parent_type(configs: dict = None, model_type: str = None):
 
     :param configs: Configurations dict
     :param model_type: Model type to get parent type for
+    :return: Parent model type
     """
     if configs is None:
         configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
@@ -534,7 +539,7 @@ def annualize_metric(metric: float, holding_periods: int = 1) -> float:
     :return: Annualized metric
     """
 
-    days_per_year = 360
+    days_per_year = 365
     trans_ratio = days_per_year / holding_periods
 
     return (1 + metric) ** trans_ratio - 1
@@ -544,9 +549,9 @@ def to_monthly(metric: float, holding_periods: int = 1):
     """
     Transform metric of arbitrary periodicity to monthly
 
-    :param metric:
-    :param holding_periods:
-    :return:
+    :param metric: Metric to transform
+    :param holding_periods: Number of holding periods
+    :return: Monthly metric
     """
 
     trans_ratio = 30 / holding_periods
@@ -564,8 +569,8 @@ def get_study_period_ranges(data_length: int, test_period_length: int, study_per
     :param test_period_length: Length of test period
     :param study_period_length: Length of study period
     :param index_name: Index name
-    :param reverse:
-    :param verbose:
+    :param reverse: Reverse ranges
+    :param verbose: Verbosity
     :return: Dict of study period ranges
     """
 
@@ -596,7 +601,7 @@ def get_index_name(index_id: str, lookup_dict: dict = None) -> (str, str):
 
     :param index_id: Index ID to look up name and lookup table for
     :param lookup_dict: Optional custom lookup dict. Defaults to standard gvkeyx lookup dict
-    :return:
+    :return: Tuple of (index name, lookup table)
     """
 
     if lookup_dict is None:
@@ -616,9 +621,9 @@ def calc_sharpe(return_series, annualize=True):
     """
     Calculate Sharpe Ratio for series of returns
 
-    :param return_series:
-    :param annualize:
-    :return:
+    :param return_series: Series of returns
+    :param annualize: Annualize ratio
+    :return: Sharpe ratio
     """
 
     days_per_year = 365
@@ -636,9 +641,9 @@ def calc_sortino(return_series, annualize=True):
     """
     Calculate Sortino Ratio for series of returns
 
-    :param return_series:
-    :param annualize:
-    :return:
+    :param return_series: Series of returns
+    :param annualize: Annualize returns
+    :return: Sortino ratio
     """
 
     days_per_year = 365
@@ -658,7 +663,7 @@ def deannualize(return_series, n_periods=365):
 
     :param return_series: Return series to deannualize
     :param n_periods: Target basis (365 for daily)
-    :return:
+    :return: Deannualized metric
     """
     return np.power(1 + return_series, 1.0 / n_periods) - 1
 
@@ -669,7 +674,7 @@ def calc_excess_returns(return_series: pd.DataFrame, rf_rate_series: pd.DataFram
 
     :param return_series: Return series to calculate excess returns for
     :param rf_rate_series: Series with risk-free rate (annual percentage)
-    :return:
+    :return: Excess returns
     """
     if rf_rate_series is None:
         rf_rate_series = (pd.read_csv(os.path.join(ROOT_DIR, 'data', 'rf_rate_germany.csv'), parse_dates=True,
@@ -681,6 +686,12 @@ def calc_excess_returns(return_series: pd.DataFrame, rf_rate_series: pd.DataFram
 
 
 def countdown(seconds: int):
+    """
+    Visual countdown
+
+    :param seconds: Number of seconds
+    :return: None
+    """
     while seconds >= 0:
         sys.stdout.flush()
         mins, secs = divmod(seconds, 60)
@@ -690,11 +701,6 @@ def countdown(seconds: int):
         seconds -= 1
     sys.stdout.write('\r ')
     sys.stdout.flush()
-
-
-def get_run_id(logfile_name: str):
-    file_path = os.path.join(ROOT_DIR, 'data', logfile_name, '.csv')
-    reader = CSVReader(file_path)
 
 
 class ProgressBar:
@@ -778,7 +784,7 @@ class CSVWriter:
         Add data line (dict format) to .csv file.
 
         :param record: Dictionary of records to add to file
-        :return:
+        :return: None
         """
 
         try:

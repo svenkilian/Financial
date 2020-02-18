@@ -56,7 +56,7 @@ class LSTMModel:
         """
         Load model from file
         :param filepath: File name
-        :return:
+        :return: None
         """
         print('[Model] Loading model from file %s' % filepath)
         self.model = load_model(filepath)
@@ -67,7 +67,7 @@ class LSTMModel:
 
         :param verbose: Verbosity of console output
         :param configs:
-        :return:
+        :return: LSTM model
         """
         timer = Timer()
         timer.start()
@@ -119,11 +119,25 @@ class LSTMModel:
         return self
 
     def fit(self, x_train: np.array, y_train: np.array, verbose=1, **fit_args):
+        """
+        Fit LSTM model
+
+        :param x_train: Training data features
+        :param y_train: Training data labels
+        :param verbose: Verbosity
+        :param fit_args: Optional fit arguments
+        :return:
+        """
         validation_data = None
         if fit_args.get('x_val') is not None:
-            # In case classifier is part of mixed ensembe, extract valudation data
+            # In case classifier is part of mixed ensemble, extract validation data
             validation_data = (fit_args['x_val'][fit_args['model_index']], fit_args['y_test'][fit_args['model_index']])
             validation_split = None
+            print('Using given validation data.')
+            print(f'Length of training data: {len(x_train)}')
+            print(f'Length of validation data: {len(validation_data)}')
+            print(f'Length of validation data[0]: {len(validation_data[0])}')
+            print(f'Length of validation data[1]: {len(validation_data[1])}')
         else:
             validation_split = 0.2
 
@@ -151,8 +165,8 @@ class LSTMModel:
         """
         Train model (in-memory)
 
-        :param validation_split:
-        :param validation_data:
+        :param validation_split: Size of validation split (if no validation data is passed)
+        :param validation_data: Data to validate on
         :param x: Input data
         :param y: Target data
         :param epochs: Number of epochs
@@ -263,46 +277,6 @@ class LSTMModel:
 
         return predicted
 
-    def predict_sequences_multiple(self, data, window_size, prediction_len):
-        """
-        Predict sequence of 50 steps before shifting prediction run forward by 50 steps
-
-        :param data:
-        :param window_size:
-        :param prediction_len:
-        :return:
-        """
-
-        print('[Model] Predicting Sequences Multiple ...')
-        prediction_seqs = []
-        for i in range(int(len(data) / prediction_len)):
-            curr_frame = data[i * prediction_len]
-            predicted = []
-            for j in range(prediction_len):
-                predicted.append(self.model.predict(curr_frame[newaxis, :, :])[0, 0])
-                curr_frame = curr_frame[1:]
-                curr_frame = np.insert(curr_frame, [window_size - 2], predicted[-1], axis=0)
-            prediction_seqs.append(predicted)
-        return prediction_seqs
-
-    def predict_sequence_full(self, data, window_size):
-        """
-        Shift the window by 1 new prediction each time, re-run predictions on new window
-
-        :param data:
-        :param window_size:
-        :return:
-        """
-
-        print('[Model] Predicting Sequences Full ...')
-        curr_frame = data[0]
-        predicted = []
-        for i in range(len(data)):
-            predicted.append(self.model.predict(curr_frame[newaxis, :, :])[0, 0])
-            curr_frame = curr_frame[1:]
-            curr_frame = np.insert(curr_frame, [window_size - 2], predicted[-1], axis=0)
-        return predicted
-
 
 def get_optimizer(optimizer_name: str, parameters: dict = None):
     """
@@ -343,6 +317,7 @@ class TreeEnsemble:
     def fit(self, x_train: np.array, y_train: np.array, **fit_args):
         """
         Fit TreeEnsemble to training data
+
         :param x_train: Training data features
         :param y_train: Training data targets
         :param fit_args: Optional fitting arguments for obtaining validation score
@@ -360,10 +335,22 @@ class TreeEnsemble:
             ret_val = self.model.oob_score_
         return ret_val
 
-    def get_params(self):
+    def get_params(self) -> str:
+        """
+        Return string of model parameters
+
+        :return: Model parameters as string
+        """
         return str(self.model.get_params())
 
     def build_model(self, configs: dict, verbose=2):
+        """
+        Build tree-ensemble model
+
+        :param configs: Model configurations
+        :param verbose: Verbosity
+        :return: TreeEnsemle instance
+        """
 
         # Create dictionary of sklearn ensembles
         ensemble_clfs = ensemble.__dict__['__all__']
@@ -433,9 +420,13 @@ class WeightedEnsemble:
 
     def fit(self, x_train: np.array, y_train: np.array, feature_names: List[str] = None, show_importances=True):
         """
-        Fit individual models
+        Fit individual models of weighted ensemble
 
-        :return:
+        :param x_train: Training features
+        :param y_train: Training labels
+        :param feature_names: Feature names
+        :param show_importances: Show variable importances
+        :return: None
         """
 
         for model in self.classifiers:
@@ -459,6 +450,7 @@ class WeightedEnsemble:
 
     def get_params(self):
         """
+        Return list of model parameters for each constituent model
 
         :return:
         """
@@ -545,6 +537,17 @@ class MixedEnsemble:
     @classmethod
     def from_classifier_list(cls, classifiers: list, classifier_types: list, val_scores: list, weighting_criterion,
                              configs, verbose):
+        """
+        Construct mixed ensemble from classifier list
+
+        :param classifiers: List of classifiers
+        :param classifier_types: List of classifier types
+        :param val_scores: Validation scores
+        :param weighting_criterion: Weighting criterion
+        :param configs: Configurations
+        :param verbose: Verbosity
+        :return: MixedEnsemble instance
+        """
         model = cls(configs=configs, weighting_criterion=weighting_criterion, mute=True)
         model.classifier_types = classifier_types
         model.val_scores = val_scores
@@ -594,6 +597,7 @@ class MixedEnsemble:
     def fit(self, x_train: list, y_train: list, feature_names: List[List[str]] = None, **fit_args) -> list:
         """
         Fit model to training data
+
         :param x_train: Training features
         :param y_train: Training target
         :param feature_names: List of feature names
@@ -735,7 +739,7 @@ class MixedEnsemble:
                 print(
                     f'\nPerformance-based weighting with validation scores ({self.weighting_criterion}): [{", ".join([str(np.round(score, 4)) for score in self.val_scores])}]')
                 try:
-                    weights = [max(score, 0) ** alpha / max(sum([max(sc, 0) ** alpha for sc in self.val_scores]), 0) for
+                    weights = [max(score, 0) ** alpha / sum([max(sc, 0) ** alpha for sc in self.val_scores]) for
                                score
                                in
                                self.val_scores]
@@ -781,7 +785,7 @@ class MixedEnsemble:
 
         :param classifier_list: List of classifier candidates
         :param configs: Configurations
-        :return: Is mmixed type
+        :return: Is mixed type
         """
 
         has_tree_based = len(set(classifier_list).intersection(configs['model_hierarchy']['tree_based'])) > 0

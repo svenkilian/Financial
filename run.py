@@ -37,22 +37,21 @@ if __name__ == '__main__':
         'DAX': '150095'
     }
 
-    # JOB: Specify index ID, relevant columns and study period length
-    index_id = index_dict['Europe350']
+    # JOB: Specify index ID, relevant columns study period length and ensemble weighting criterion
+    index_id = index_dict['Europe350']  # Specify index used
     cols = ['above_cs_med', *configs['data']['columns']]
-    study_period_length = 1500
-    verbose = 0
-    weighting_criterion = 'Mean Daily Return'
-    plotting = False
+    study_period_length = 1500  # Specify study period length
+    verbose = 2  # Verbosity
+    weighting_criterion = 'Mean Daily Return'  # Specify weighting criterion for ensemble creation
+    plotting = False  # Specify whether to plot metrics during model training
 
     # Determine ID of current run
     print(f'Logging with run ID = {get_run_number()}')
 
     # JOB: Specify classifier
-
-    # multiple_models = ['RandomForestClassifier']
     multiple_models = [
         ['LSTM', 'RandomForestClassifier', 'ExtraTreesClassifier', 'GradientBoostingClassifier']]
+    # multiple_models = [['LSTM', 'RandomForestClassifier']]
     # ensemble = ['AdaBoostClassifier']
     # multiple_models = [['LSTM', 'RandomForestClassifier']]
     # multiple_models = ['ExtraTreesClassifier', 'RandomForestClassifier', 'GradientBoostingClassifier']
@@ -60,7 +59,7 @@ if __name__ == '__main__':
     # JOB: Calculate test_period_length from split ratio
     test_period_length = round(study_period_length * (1 - configs['data']['train_test_split']))
 
-    # Load full index data
+    # JOB: Load full index data
     constituency_matrix, full_data, index_name, folder_path = load_full_data(index_id=index_id,
                                                                              force_download=False,
                                                                              last_n=None, columns=cols.copy(),
@@ -81,8 +80,7 @@ if __name__ == '__main__':
     total_runtime_timer = Timer().start()
 
     # JOB: Iteratively fit model on all study periods
-    # list(sorted(study_period_ranges.keys()))
-    for study_period_ix in range(1, len(study_period_ranges)):  # len(study_period_ranges) + 1
+    for study_period_ix in range(1, len(study_period_ranges)):
         date_range = study_period_ranges.get(study_period_ix)
         config.study_period_id = study_period_ix
         print(f'\n\n{Fore.YELLOW}{Style.BRIGHT}Fitting on period {study_period_ix}.{Style.RESET_ALL}')
@@ -141,22 +139,3 @@ if __name__ == '__main__':
                                                    open_window=False)
 
     total_runtime_timer.stop()
-
-    """
-    # Out-of memory generative training
-    steps_per_epoch = math.ceil(
-        (data.len_train - configs['data']['sequence_length']) / configs['training']['batch_size'])
-
-    model.train_generator(
-        data_gen=data.generate_train_batch(
-            seq_len=configs['data']['sequence_length'],
-            batch_size=configs['training']['batch_size'],
-            normalize=configs['data']['normalize']
-        ),
-        epochs=configs['training']['epochs'],
-        batch_size=configs['training']['batch_size'],
-        steps_per_epoch=steps_per_epoch,
-        save_dir=configs['model']['save_dir']
-    )
-
-    """

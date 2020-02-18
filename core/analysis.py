@@ -9,7 +9,7 @@ from typing import Union
 
 import numpy as np
 from colorama import Fore, Style
-from matplotlib import ticker
+from matplotlib import ticker, cycler
 from matplotlib.pyplot import gca
 from tqdm import tqdm
 
@@ -18,12 +18,15 @@ from core.data_collection import add_constituency_col, to_actual_index, load_ful
 from core.utils import pretty_print_table, Timer
 from external.dm_test import dm_test
 
-
-# matplotlib.rcParams['axes.prop_cycle'] = (cycler(color=['green', 'red', 'cyan', 'magenta', 'black',
-#                                                         'purple', 'pink', 'brown', 'orange', 'teal',
-#                                                         'coral', 'lightblue', 'lime', 'lavender', 'turquoise',
-#                                                         'darkgreen', 'gold',
-#                                                         'darkred', 'darkblue']) * cycler(linestyle=['-', '--']))
+matplotlib.rcParams['axes.prop_cycle'] = (cycler(color=['tab:blue', 'tab:orange', 'tab:green', 'tab:red',
+                                                        'tab:brown', 'tab:pink', 'tab:gray', 'tab:olive', 'tab:cyan',
+                                                        'lightblue',
+                                                        'lime',
+                                                        'black',
+                                                        'magenta', 'yellow', 'teal', 'tab:purple',
+                                                        'coral', 'lavender', 'turquoise',
+                                                        'darkgreen', 'gold',
+                                                        'darkred', 'darkblue']))  # * cycler(linestyle=['-', '--']))
 
 
 class StatsReport:
@@ -95,14 +98,13 @@ class StatsReport:
         """
         Print summary of StatsReport and return as DataFrame
 
-        :param atc_only:
-        :param atc:
-        :param silent:
-        :param pretty_print:
-        :param end_date:
-        :param start_date:
-        :param compare_errors:
-        :param run_id:
+        :param atc_only: Filter by ATC metrics only
+        :param silent: Suppress info during execution
+        :param pretty_print: Pretty-print summary table
+        :param start_date: Start date of summarized period (with respect to test set start date)
+        :param end_date: End date of summarized period (with respect to test set end date)
+        :param compare_errors: Conduct Diebold-Mariano test to compare model accuracy
+        :param run_id: Filter by specific run ID
         :param show_all: Show full training history
         :param to_html: Export summary table to HTML file
         :param open_window: Open created HTML page in new browser window
@@ -190,10 +192,14 @@ class StatsReport:
 
             return df
 
-    def compare_prediction_errors(self, to_html=True, start_date=None, end_date=None):
+    def compare_prediction_errors(self, to_html=True, start_date=None, end_date=None, open_window=False):
         """
         Compare prediction errors using the Diebold-Mariano Test
 
+        :param to_html: Output summary as html table
+        :param open_window: Open output html in browser
+        :param start_date: Start date for error comparison (with regard to test set)
+        :param end_date: End date for error comparison (with regard to test set)
         :return:
         """
 
@@ -230,7 +236,7 @@ class StatsReport:
         if to_html:
             df_to_html(relative_performance_table,
                        title='Model Prediction Performance Comparison',
-                       open_window=False, file_name=f'model_prediction_comparison_{end_date}')
+                       open_window=open_window, file_name=f'model_prediction_comparison_{end_date}')
 
         pretty_print_table(relative_performance_table)
         timer.stop()
@@ -241,13 +247,11 @@ class StatsReport:
 
         Plot return series
 
-        :param cumulative_only:
+        :param cumulative_only: Only plot cumulative returns
         :return:
         """
         data = filter_df(self.data, columns=['Prediction Error'], index_only=None, last_only=True,
                          last_run_id=self.last_id)
-
-        model_types = data['Model Type'].unique()
 
         market_return_series = pd.Series()
         for return_period in data.loc[data['Model Type'] == 'Market', 'Return Series'].values:
@@ -302,7 +306,7 @@ class StatsReport:
         df_to_html(last_values, title='Total Cumulative Returns', file_name='Total Cumulative Returns')
 
         for legend, legend_string in legend_list:
-            combined.plot(logy=True, legend=False, figsize=(9, 7), linewidth=1.0)
+            combined.plot(logy=True, legend=False, figsize=(9, 7), linewidth=1.0, rot=0)
             gca().set_ylabel('Cumulative Returns')
             plt.tight_layout()
             if legend:
@@ -310,20 +314,21 @@ class StatsReport:
                 for legobj in leg.legendHandles:
                     legobj.set_linewidth(2.0)
             # plt.legend(loc='best')
-            plt.savefig(os.path.join(ROOT_DIR, 'data/plots', f'Cumulative Return Series{legend_string}'), dpi=800,
+            plt.savefig(os.path.join(ROOT_DIR, 'data/plots', f'Cumulative Return Series{legend_string}.pdf'), dpi=800,
                         facecolor='w',
                         bbox_inches='tight')
             plt.show()
 
             # plt.title(label='\n'.join(wrap(model.replace('_', ' '), 60)), fontsize=10)
-            returns_combined.plot(figsize=(9, 7), legend=False, linewidth=1.0)
+            returns_combined.plot(figsize=(9, 7), legend=False, linewidth=1.0, rot=0)
             plt.tight_layout()
             if legend:
                 leg = plt.legend()
                 for legobj in leg.legendHandles:
                     legobj.set_linewidth(2.0)
             # plt.legend(loc='best')
-            plt.savefig(os.path.join(ROOT_DIR, 'data/plots', f'Return Series{legend_string}'), dpi=800, facecolor='w',
+            plt.savefig(os.path.join(ROOT_DIR, 'data/plots', f'Return Series{legend_string}.pdf'), dpi=800,
+                        facecolor='w',
                         bbox_inches='tight')
             plt.show()
 
@@ -342,6 +347,7 @@ class StatsReport:
         """
         Split columns containing dicts into separate columns
 
+        :param drop_configs: Drop irrelevant columns
         :return: DataFrame with split columns
         """
         data = self.data.copy().get(self.attrs)
@@ -456,23 +462,33 @@ class VisTable:
         tf = [True, False]
         for legend in tf:
             title = self.attrs[0].replace('_', ' ')
+            y_label = ' '.join(title.split(' ')[:-1])
             fig, ax = plt.subplots(figsize=(10, 6))
 
             data = self.grouped_data.mean()[self.attrs].unstack().droplevel(level=0, axis=1)
             data.index = data.index.year
             data.plot(kind='bar', rot=0, ax=ax, fontsize=14, width=0.8, legend=legend)
             ax.set_xlabel('Year')
-            ax.set_ylabel(title)
-            ax.set_title(title)
+            ax.set_ylabel(y_label)
+            # ax.set_title(title)
+            ax.set_title('')
 
             if 'Accuracy' in self.attrs[0]:
-                ax.set_ylim(0.50, 0.58)
+                ax.set_ylim(0.48, 0.59)
+            elif 'Annualized Excess Return' in self.attrs[0]:
+                ax.set_ylim(-0.8, 1.2)
+            elif 'Excess Return' in self.attrs[0] and 'Annualized' not in self.attrs[0]:
+                ax.set_ylim(-0.002, 0.0045)
+            elif 'Sortino' in self.attrs[0]:
+                ax.set_ylim(-2.0, 13)
+            elif 'Sharpe' in self.attrs[0]:
+                ax.set_ylim(-2.0, 7.5)
 
             plt.tight_layout()
 
             suffix = '_legend' if legend else ''
 
-            file_name = '{}__{}_{}{}.png'.format(title, self.time_frame[0].replace('\'', ''),
+            file_name = '{}__{}_{}{}.pdf'.format(title, self.time_frame[0].replace('\'', ''),
                                                  self.time_frame[1].replace('\'', ''), suffix)
             # JOB: Save figure to file
             plt.savefig(os.path.join(ROOT_DIR, 'data/plots', file_name), dpi=600, facecolor='w', bbox_inches='tight')
@@ -483,10 +499,10 @@ class VisTable:
         """
         Plot data in a grouped fashion
 
-        :param save_to_file:
-        :param legend:
-        :param title:
-        :param y_limit:
+        :param save_to_file: Save plot to file
+        :param legend: Plot with legend
+        :param title: Plot title
+        :param y_limit: y-axis upper bound
         :return:
         """
         fig, ax = plt.subplots(figsize=(8, 5))
@@ -509,13 +525,13 @@ class VisTable:
                 avg_index_len = int(round(self.data.groupby('datadate')['gvkey'].count().mean()))
                 ax.plot(
                     group.groupby(pd.Grouper(freq=self.freq))[self.attrs].size().resample('Y', how='mean').divide(
-                        avg_index_len),
-                    label=key)
+                        avg_index_len), label=key)
 
         if title is not None:
             ax.set_title(title.title(), fontsize=16)
         else:
-            ax.set_title(', '.join([attr.replace('_', ' ').title() for attr in self.attrs]), fontsize=16)
+            plt.title('')
+            # ax.set_title(', '.join([attr.replace('_', ' ').title() for attr in self.attrs]), fontsize=16)
 
         if legend:
             legend = ax.legend(loc='best', fontsize='large', shadow=False)
@@ -527,7 +543,8 @@ class VisTable:
             if not os.path.exists(path_to_data):
                 print(f'Creating folder for plots ...')
                 os.mkdir(path_to_data)
-
+            if title is None:
+                title = 'Index Composition'
             plt.savefig(os.path.join(path_to_data, f'{title.lower().replace(" ", "_")}.png'), dpi=600)
         plt.show()
 
@@ -608,8 +625,8 @@ def resample_month_end(data, columns: list = None) -> pd.DataFrame:
     """
     Resample data to monthly frequency and take last value in month
 
-    :param data: DataFrame
-    :param columns:
+    :param data: DataFrame containing data to resample
+    :param columns: Relevant columns
     :return:
     """
     data = data.copy()
@@ -633,21 +650,21 @@ def resample_month_end(data, columns: list = None) -> pd.DataFrame:
     return data
 
 
-def filter_df(df: pd.DataFrame, columns=None, index_only: str = None, run_id=None, last_only=True, last_run_id=None,
+def filter_df(df: pd.DataFrame, columns=None, index_only: str = None, run_id: int = None, last_only=True,
+              last_run_id=None,
               start_date=None,
               end_date=None) -> pd.DataFrame:
     """
     Filter data frame
 
-    :param end_date:
-    :param start_date:
-    :param last_run_id:
-    :param df:
-    :param columns:
-    :param index_only:
-    :param run_id:
-    :param last_id:
-    :param last_only:
+    :param df: DataFrame to filter
+    :param start_date: Start date (with regard to test set)
+    :param end_date: End date (with regard to test set)
+    :param last_run_id: Filter by last run ID
+    :param columns: Relevant columns to select
+    :param index_only: Filter by specific stock index
+    :param run_id: Filter by specific run ID
+    :param last_only: Filter by last run ID
     :return:
     """
     data_frame = df.copy()
@@ -726,13 +743,13 @@ def plot_yearly_metrics(metrics: list, k: int, top_n=3, start_date: str = None, 
                         atc_only=False) -> None:
     """
 
-    :param atc_only:
-    :param end_date:
-    :param start_date:
-    :param top_n:
-    :param k:
-    :param metrics:
-    :return:
+    :param atc_only: Restrict to ATC metrics
+    :param end_date: End date (with regard to test set)
+    :param start_date: Start date (with regard to test set)
+    :param top_n: Top n models to consider in addition to base models
+    :param k: Portfolio size
+    :param metrics: Metrics to consider
+    :return: None
     """
 
     if start_date is None and end_date is None:
@@ -786,8 +803,8 @@ def last_id(data: pd.DataFrame):
     """
     Get last id from run log
 
-    :param data:
-    :return:
+    :param data: DataFrame containing data
+    :return: Last run ID in DataFrame
     """
     try:
         last = int(data.get('ID').max())
@@ -802,14 +819,14 @@ def main(full_log=False, index_summary=True, plots_only=False, compare_models=Fa
     """
     Main method of analysis.py module (to be called when module is run stand-alone)
 
-    :param plot_returns:
-    :param plot_yearly:
-    :param compare_models:
-    :param full_log:
-    :param index_summary: Whether to include summary of index
+    :param plot_returns: Plot returns
+    :param plot_yearly: Plot yearly metrics
+    :param compare_models: Compare model errirs
+    :param full_log: Create HTML from full log
+    :param index_summary: Include summary of index
     :param plots_only: Whether to only plot index constituency and daily returns over time
                        (only considered if index_summary is True)
-    :return:
+    :return: None
     """
     configs = json.load(open(os.path.join(ROOT_DIR, 'config.json'), 'r'))
     cols = ['above_cs_med', *configs['data']['columns']]
@@ -834,11 +851,11 @@ def main(full_log=False, index_summary=True, plots_only=False, compare_models=Fa
              ('2011-05', '2011-07'), ('2012-10', '2012-12'), ('2014-03', '2014-05'), ('2015-09', '2015-11'),
              ('2017-02', '2017-04'), ('2018-07', '2018-09')]
 
-    dates = [('2004-02', '2020-09')]
+    # dates = [('2004-02', '2020-09')]
 
     # JOB: Bar plot yearly metrics
     if plot_yearly:
-        plot_yearly_metrics(metrics=['Top-k Annualized Excess Return_atc'], k=5, top_n=3,
+        plot_yearly_metrics(metrics=['Sharpe', 'Sortino'], k=5, top_n=3,
                             start_date=dates[0][0], end_date=dates[0][1], atc_only=True)
 
     # JOB: Plot (cumulative) returns over time
@@ -855,9 +872,9 @@ def main(full_log=False, index_summary=True, plots_only=False, compare_models=Fa
 
     for start_date, end_date in dates:
         report.summary(last_only=True, index_only=None, show_all=False,
-                       score_list=['Top-k Annualized Excess Return', 'Accuracy', 'Sharpe', 'Sortino'],
+                       score_list=['Return', 'Accuracy', 'Sharpe', 'Sortino'],
                        k=5, run_id=None,
-                       by_model_type=True, sort_by='Top-k Annualized Excess Return', show_std=False, to_html=True,
+                       by_model_type=True, sort_by='Top-k Annualized Sharpe', show_std=False, to_html=True,
                        open_window=False, pretty_print=True, compare_errors=False, start_date=start_date,
                        end_date=end_date)
 
@@ -874,10 +891,10 @@ def main(full_log=False, index_summary=True, plots_only=False, compare_models=Fa
         full_data = to_actual_index(full_data)
         full_data.set_index('datadate', inplace=True)
 
-        vis = VisTable(full_data, time_frame=('1998-12', '2019-12'), groups=['gics_sector_name'], freq='D',
+        vis = VisTable(full_data, time_frame=('1998-06-09', '2018-08-22'), groups=['gics_sector_name'], freq='D',
                        stat='count',
                        attrs=['gvkey'])
-        vis.plot_grouped(title='Index Composition', save_to_file=True, legend=False, y_limit=0.2)
+        vis.plot_grouped(title=None, save_to_file=True, legend=True, y_limit=0.2)
 
         # vis = VisTable(full_data, time_frame=('2002-01', '2019-12'), groups=['gics_sector_name'], freq='Y',
         #                stat='mean',
@@ -887,15 +904,16 @@ def main(full_log=False, index_summary=True, plots_only=False, compare_models=Fa
         if not plots_only:
             # JOB: Resample to monthly
             data = resample_month_end(full_data)
-            dt = DataTable(data=data, attrs=['monthly_return'], time_frame=('2002-01', '2019-12'),
+            dt = DataTable(data=data, attrs=['monthly_return'], time_frame=('2002-10', '2018-08'),
                            groups=['gics_sector_name'],
                            freq='M')
 
             stats = dt.get_group_stats()
             print(stats)
 
-            df_to_html(stats, title='Index Stats', file_name='index_stats', open_window=False)
+            df_to_html(stats, title='Index Stats', file_name='index_stats', open_window=True)
 
 
 if __name__ == '__main__':
-    main(full_log=False, index_summary=False, plots_only=True, compare_models=True)
+    main(full_log=False, index_summary=False, plots_only=True, compare_models=False, plot_yearly=False,
+         plot_returns=True)

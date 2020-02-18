@@ -30,7 +30,7 @@ plt_styles = ['seaborn-ticks', 'ggplot', 'dark_background', 'bmh', 'seaborn-post
 matplotlib.style.use('ggplot')
 register_matplotlib_converters()
 
-pd.set_option('precision', 4)
+pd.set_option('precision', 6)
 pd.set_option('display.max_rows', 200)
 pd.set_option('display.max_columns', 40)
 pd.set_option('max_colwidth', 80)
