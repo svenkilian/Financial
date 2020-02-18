@@ -21,9 +21,6 @@ to capitalize on opportunities for arbitrage.
 
 This work extends the previous work by [KRAUSS2018]_ and [KRAUSS2017]_.
 
-.. warning:: This is a admonition of type `warning`.
-.. tip:: This is a tip.
-
 
 
 Overview
